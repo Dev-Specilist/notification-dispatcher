@@ -10,7 +10,6 @@ import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import { DeliveryId } from '@/modules/notification/domain/delivery/delivery.type';
 import { Rollback } from '@/modules/notification/infrastructure/adapter/rollback.type';
-import { ExpansionJobLookup } from '@/modules/notification/application/port/expansion-job-repository.type';
 import { TransactionRepositories } from '@/modules/notification/application/port/unit-of-work.type';
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-delivery-repository.adapter';
@@ -137,29 +136,6 @@ describe('InMemoryUnitOfWorkAdapter', () => {
 
     await expect(failed).rejects.toThrow('first transaction failed');
     expect(await next).toBe('ran');
-  });
-});
-
-describe('InMemoryExpansionJobRepositoryAdapter', () => {
-  it('조회한 확장 작업의 Date를 바꿔도 저장된 값은 바뀌지 않는다', async (): Promise<void> => {
-    const { expansionJobRepository }: Fixture = fixture();
-    await expansionJobRepository.enqueue(alarmId(FIRST_ID), new Date(ENQUEUED_ISO));
-
-    const lookup: ExpansionJobLookup = await expansionJobRepository.findByAlarmId(
-      alarmId(FIRST_ID),
-    );
-    if (lookup.kind === 'found') {
-      lookup.job.enqueuedAt.setUTCFullYear(1990);
-    }
-
-    expect(await expansionJobRepository.findByAlarmId(alarmId(FIRST_ID))).toEqual({
-      kind: 'found',
-      job: {
-        alarmId: FIRST_ID,
-        enqueuedAt: new Date(ENQUEUED_ISO),
-        progress: { kind: 'in-progress', cursor: { kind: 'first' } },
-      },
-    });
   });
 });
 

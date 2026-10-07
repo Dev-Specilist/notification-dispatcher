@@ -15,6 +15,13 @@
       "when": 1791407010481,
       "tag": "0001_create_deliveries",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791408653479,
+      "tag": "0002_create_expansion_jobs",
+      "breakpoints": true
     }
   ]
 }

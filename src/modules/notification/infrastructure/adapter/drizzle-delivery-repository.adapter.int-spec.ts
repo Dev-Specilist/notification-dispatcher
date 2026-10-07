@@ -26,7 +26,7 @@ describe('DrizzleDeliveryRepositoryAdapter', () => {
   });
 
   DeliveryRepositoryContract.verify(async (): Promise<DrizzleRepositories> => {
-    await testDatabase.pool.query('TRUNCATE deliveries, alarms');
+    await testDatabase.pool.query('TRUNCATE alarms CASCADE');
     const database: NotificationDatabase = NotificationDatabaseFactory.create(testDatabase.pool);
     return {
       alarmRepository: new DrizzleAlarmRepositoryAdapter(database),

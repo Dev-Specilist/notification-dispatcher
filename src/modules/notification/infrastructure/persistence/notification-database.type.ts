@@ -4,6 +4,7 @@ import type { notificationSchema } from '@/modules/notification/infrastructure/p
 import type { PgInsertValue, PgUpdateSetSource } from 'drizzle-orm/pg-core';
 import type { alarms } from '@/modules/notification/infrastructure/persistence/alarm.table';
 import type { deliveries } from '@/modules/notification/infrastructure/persistence/delivery.table';
+import type { expansionJobs } from '@/modules/notification/infrastructure/persistence/expansion-job.table';
 
 export type NotificationSchema = typeof notificationSchema;
 
@@ -18,3 +19,5 @@ export type DeliveryRow = typeof deliveries.$inferSelect;
 export type DeliveryInsert = PgInsertValue<typeof deliveries>;
 
 export type DeliveryUpdate = PgUpdateSetSource<typeof deliveries>;
+
+export type ExpansionJobRow = typeof expansionJobs.$inferSelect;

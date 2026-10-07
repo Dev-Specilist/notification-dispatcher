@@ -18,6 +18,9 @@ export class InMemoryExpansionJobRepositoryAdapter implements ExpansionJobReposi
   >();
 
   enqueue(alarmId: AlarmId, now: Readonly<Date>): Promise<void> {
+    if (this.jobsByAlarmId.has(alarmId)) {
+      return Promise.resolve();
+    }
     this.jobsByAlarmId.set(alarmId, {
       kind: 'found',
       job: {
