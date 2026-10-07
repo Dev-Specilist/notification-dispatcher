@@ -51,6 +51,8 @@ const jitter = (value: number): JitterRatio => {
 
 const LEASE_MS: DurationMs = durationMs(60_000);
 const MAX_REQUEST_MS: DurationMs = durationMs(10_000);
+const RECONCILE_DELAY_MS: DurationMs = durationMs(35_000);
+const LEASE_EXPIRED_ISO: string = '2026-10-07T09:01:01.000Z';
 
 const retryPolicy = (maxAttempts: number): RetryPolicy =>
   new RetryPolicy({
@@ -131,6 +133,9 @@ const started = (): Delivery =>
 
 const sent = (): Delivery =>
   transitioned(started().recordAccepted(TOKEN_A(), messageId(), at(SETTLED_ISO)));
+
+const unknownAfterTimeout = (): Delivery =>
+  transitioned(started().recordUnknown(TOKEN_A(), at(SETTLED_ISO), RECONCILE_DELAY_MS));
 
 const failed = (): Delivery =>
   transitioned(started().recordPermanentFailure(TOKEN_A(), 'RECIPIENT_BLOCKED'));
@@ -392,9 +397,92 @@ describe('Delivery', () => {
     });
   });
 
-  it.todo(
-    'DLV-08 IN_FLIGHT Delivery / 응답 타임아웃·연결 오류가 난다 → 재전송하지 않고 UNKNOWN이 되며 reconcile 가능 시각(요청 시작 + RECONCILE_DELAY_MS)이 기록된다',
+  it('DLV-08 IN_FLIGHT Delivery / 응답 타임아웃·연결 오류가 난다 → 재전송하지 않고 UNKNOWN이 되며 reconcile 가능 시각(요청 시작 + RECONCILE_DELAY_MS)이 기록된다', () => {
+    const delivery: Delivery = unknownAfterTimeout();
+
+    expect(delivery.snapshot()).toMatchObject({
+      attempts: 1,
+      state: {
+        status: 'UNKNOWN',
+        unknownSince: at(SETTLED_ISO),
+        reconcileAt: new Date(at(STARTED_ISO).getTime() + RECONCILE_DELAY_MS),
+        lookupFailures: 0,
+      },
+    });
+  });
+
+  it('DLV-08 요청을 시작하지 않았거나 lease가 다르면 UNKNOWN으로 기록할 수 없다', () => {
+    expect(claimed().recordUnknown(TOKEN_A(), at(SETTLED_ISO), RECONCILE_DELAY_MS)).toEqual({
+      kind: 'rejected',
+      reason: 'REQUEST_NOT_STARTED',
+    });
+    expect(started().recordUnknown(TOKEN_B(), at(SETTLED_ISO), RECONCILE_DELAY_MS)).toEqual({
+      kind: 'rejected',
+      reason: 'LEASE_MISMATCH',
+    });
+  });
+
+  it('DLV-11 reconcile 가능 시각 전의 UNKNOWN Delivery / reconcile 대상을 고른다 → 대상에서 빠진다 (이전 요청이 아직 진행 중일 수 있음)', () => {
+    const delivery: Delivery = unknownAfterTimeout();
+    const reconcileAt: number = at(STARTED_ISO).getTime() + RECONCILE_DELAY_MS;
+
+    expect(delivery.isReconcilableAt(new Date(reconcileAt - 1))).toBe(false);
+    expect(delivery.isReconcilableAt(new Date(reconcileAt))).toBe(true);
+  });
+
+  it('DLV-11 UNKNOWN이 아닌 Delivery는 reconcile 대상이 아니다', () => {
+    const farFuture: Date = new Date('2030-01-01T00:00:00.000Z');
+
+    expect(
+      [pending(), started(), sent()].map((delivery: Delivery): boolean =>
+        delivery.isReconcilableAt(farFuture),
+      ),
+    ).toEqual([false, false, false]);
+  });
+
+  it.each<StatusBuildCase>([
+    ['요청 시작 전', (): Delivery => claimed()],
+    ['요청 시작 후', (): Delivery => started()],
+  ])(
+    'DLV-14 lease가 만료된 IN_FLIGHT Delivery (워커 종료, %s) / 복구를 실행한다 → 재전송하지 않고 UNKNOWN으로 넘기며 reconcile 가능 시각(lease 만료 + RECONCILE_DELAY_MS)을 기록한다',
+    (_label: string, build: () => Delivery) => {
+      const delivery: Delivery = transitioned(
+        build().recoverExpiredLease(at(LEASE_EXPIRED_ISO), RECONCILE_DELAY_MS),
+      );
+
+      expect(delivery.snapshot().state).toEqual({
+        status: 'UNKNOWN',
+        unknownSince: at(LEASE_EXPIRED_ISO),
+        reconcileAt: new Date(at(LEASE_EXPIRED_ISO).getTime() + RECONCILE_DELAY_MS),
+        lookupFailures: 0,
+      });
+    },
   );
+
+  it('DLV-14 lease가 아직 유효하면 복구하지 않는다', () => {
+    const beforeExpiry: Date = new Date(at(LEASE_EXPIRED_ISO).getTime() - 1);
+
+    expect(started().recoverExpiredLease(beforeExpiry, RECONCILE_DELAY_MS)).toEqual({
+      kind: 'rejected',
+      reason: 'LEASE_NOT_EXPIRED',
+    });
+  });
+
+  it('UNKNOWN Delivery의 snapshot 시각을 바꿔도 내부 상태는 바뀌지 않는다', () => {
+    const delivery: Delivery = unknownAfterTimeout();
+    const { state }: DeliverySnapshot = delivery.snapshot();
+
+    if (state.status === 'UNKNOWN') {
+      state.unknownSince.setUTCFullYear(1990);
+      state.reconcileAt.setUTCFullYear(1990);
+    }
+
+    expect(delivery.snapshot().state).toMatchObject({
+      unknownSince: at(SETTLED_ISO),
+      reconcileAt: new Date(at(STARTED_ISO).getTime() + RECONCILE_DELAY_MS),
+    });
+  });
+
   it.todo(
     'DLV-09 UNKNOWN Delivery / reconcile에서 같은 clientRef의 발송 내역 1건을 찾는다 → SENT가 되고 messageId가 기록된다',
   );
@@ -402,16 +490,10 @@ describe('Delivery', () => {
     'DLV-10 reconcile 가능 시각이 지난 UNKNOWN Delivery / reconcile에서 발송 내역이 없다 → 최대 시도 횟수 안이면 RETRY_WAIT, 소진했으면 FAILED(RETRY_EXHAUSTED)가 된다',
   );
   it.todo(
-    'DLV-11 reconcile 가능 시각 전의 UNKNOWN Delivery / reconcile 대상을 고른다 → 대상에서 빠진다 (이전 요청이 아직 진행 중일 수 있음)',
-  );
-  it.todo(
     'DLV-12 UNKNOWN Delivery / 발송 내역 조회 자체가 실패한다 → 빈 내역으로 보지 않고 UNKNOWN을 유지하며 백오프 후 다음 조회를 예약한다',
   );
   it.todo(
     'DLV-13 UNKNOWN Delivery / 같은 clientRef의 발송 내역이 2건 이상 나온다 → SENT가 되고 중복 발송 건수가 기록된다',
-  );
-  it.todo(
-    'DLV-14 lease가 만료된 IN_FLIGHT Delivery (워커 종료) / 복구를 실행한다 → 재전송하지 않고 UNKNOWN으로 넘기며 reconcile 가능 시각(lease 만료 + RECONCILE_DELAY_MS)을 기록한다',
   );
   it.todo('DLV-17 PENDING·RETRY_WAIT Delivery / 알림이 취소된다 → CANCELLED가 된다');
   it.todo(

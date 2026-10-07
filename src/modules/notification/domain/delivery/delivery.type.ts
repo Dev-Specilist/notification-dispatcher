@@ -52,6 +52,13 @@ export interface RetryWaitState {
   readonly cause: RetryCause;
 }
 
+export interface UnknownState {
+  readonly status: 'UNKNOWN';
+  readonly unknownSince: Date;
+  readonly reconcileAt: Date;
+  readonly lookupFailures: number;
+}
+
 export interface SentState {
   readonly status: 'SENT';
   readonly messageId: MessageId;
@@ -64,7 +71,8 @@ export interface FailedState {
   readonly reason: FailureReason;
 }
 
-export type DeliveryState = PendingState | InFlightState | RetryWaitState | SentState | FailedState;
+export type DeliveryState =
+  PendingState | InFlightState | RetryWaitState | UnknownState | SentState | FailedState;
 
 export type DeliveryStatus = DeliveryState['status'];
 
@@ -87,7 +95,8 @@ export type DeliveryRejectionReason =
   | 'LEASE_MISMATCH'
   | 'REQUEST_NOT_STARTED'
   | 'REQUEST_ALREADY_STARTED'
-  | 'ALREADY_SETTLED';
+  | 'ALREADY_SETTLED'
+  | 'LEASE_NOT_EXPIRED';
 
 export interface DeliveryTransitioned {
   readonly kind: 'transitioned';

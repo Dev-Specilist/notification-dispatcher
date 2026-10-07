@@ -22,6 +22,13 @@ interface LeaseHeld {
 
 type LeaseCheck = LeaseHeld | DeliveryRejected;
 
+interface RequestInProgress {
+  readonly kind: 'started';
+  readonly startedAt: Date;
+}
+
+type StartedCheck = RequestInProgress | DeliveryRejected;
+
 export class Delivery {
   private constructor(private readonly props: DeliverySnapshot) {}
 
@@ -76,7 +83,7 @@ export class Delivery {
   }
 
   recordAccepted(token: LeaseToken, messageId: MessageId, now: Readonly<Date>): DeliveryTransition {
-    const check: LeaseCheck = this.checkStartedRequest(token);
+    const check: StartedCheck = this.checkStartedRequest(token);
     if (check.kind === 'rejected') {
       return check;
     }
@@ -89,7 +96,7 @@ export class Delivery {
   }
 
   recordPermanentFailure(token: LeaseToken, reason: PermanentFailureCode): DeliveryTransition {
-    const check: LeaseCheck = this.checkStartedRequest(token);
+    const check: StartedCheck = this.checkStartedRequest(token);
     if (check.kind === 'rejected') {
       return check;
     }
@@ -102,7 +109,7 @@ export class Delivery {
     policy: RetryPolicy,
     jitter: JitterRatio,
   ): DeliveryTransition {
-    const check: LeaseCheck = this.checkStartedRequest(token);
+    const check: StartedCheck = this.checkStartedRequest(token);
     if (check.kind === 'rejected') {
       return check;
     }
@@ -122,7 +129,7 @@ export class Delivery {
     now: Readonly<Date>,
     retryAfterMs: DurationMs,
   ): DeliveryTransition {
-    const check: LeaseCheck = this.checkStartedRequest(token);
+    const check: StartedCheck = this.checkStartedRequest(token);
     if (check.kind === 'rejected') {
       return check;
     }
@@ -131,6 +138,45 @@ export class Delivery {
       retryAt: new Date(now.getTime() + retryAfterMs),
       cause: 'RATE_LIMITED',
     });
+  }
+
+  recordUnknown(
+    token: LeaseToken,
+    now: Readonly<Date>,
+    reconcileDelayMs: DurationMs,
+  ): DeliveryTransition {
+    const check: StartedCheck = this.checkStartedRequest(token);
+    if (check.kind === 'rejected') {
+      return check;
+    }
+    return this.transitionTo(this.props.attempts, {
+      status: 'UNKNOWN',
+      unknownSince: Delivery.copyDate(now),
+      reconcileAt: new Date(check.startedAt.getTime() + reconcileDelayMs),
+      lookupFailures: 0,
+    });
+  }
+
+  recoverExpiredLease(now: Readonly<Date>, reconcileDelayMs: DurationMs): DeliveryTransition {
+    const { state }: DeliverySnapshot = this.props;
+    if (state.status !== 'IN_FLIGHT') {
+      return Delivery.reject('NOT_IN_FLIGHT');
+    }
+    const { expiresAt }: InFlightState['lease'] = state.lease;
+    if (expiresAt.getTime() > now.getTime()) {
+      return Delivery.reject('LEASE_NOT_EXPIRED');
+    }
+    return this.transitionTo(this.props.attempts, {
+      status: 'UNKNOWN',
+      unknownSince: Delivery.copyDate(now),
+      reconcileAt: new Date(expiresAt.getTime() + reconcileDelayMs),
+      lookupFailures: 0,
+    });
+  }
+
+  isReconcilableAt(now: Readonly<Date>): boolean {
+    const { state }: DeliverySnapshot = this.props;
+    return state.status === 'UNKNOWN' && state.reconcileAt.getTime() <= now.getTime();
   }
 
   snapshot(): DeliverySnapshot {
@@ -149,12 +195,16 @@ export class Delivery {
     return state.status === 'RETRY_WAIT' && state.retryAt.getTime() <= now.getTime();
   }
 
-  private checkStartedRequest(token: LeaseToken): LeaseCheck {
+  private checkStartedRequest(token: LeaseToken): StartedCheck {
     const check: LeaseCheck = this.checkLease(token);
-    if (check.kind === 'held' && check.state.request.kind === 'NOT_STARTED') {
+    if (check.kind === 'rejected') {
+      return check;
+    }
+    const { request }: InFlightState = check.state;
+    if (request.kind === 'NOT_STARTED') {
       return Delivery.reject('REQUEST_NOT_STARTED');
     }
-    return check;
+    return { kind: 'started', startedAt: request.at };
   }
 
   private checkLease(token: LeaseToken): LeaseCheck {
@@ -190,6 +240,12 @@ export class Delivery {
         };
       case 'RETRY_WAIT':
         return { ...state, retryAt: Delivery.copyDate(state.retryAt) };
+      case 'UNKNOWN':
+        return {
+          ...state,
+          unknownSince: Delivery.copyDate(state.unknownSince),
+          reconcileAt: Delivery.copyDate(state.reconcileAt),
+        };
       case 'SENT':
         return { ...state, sentAt: Delivery.copyDate(state.sentAt) };
       case 'FAILED':
