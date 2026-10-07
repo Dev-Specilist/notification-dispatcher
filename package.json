@@ -5,8 +5,9 @@
   "scripts": {
     "build": "rm -rf dist && swc src -d dist --strip-leading-paths --ignore \"**/*.spec.ts\" --ignore \"**/*.int-spec.ts\"",
     "build:watch": "swc src -d dist --strip-leading-paths --ignore \"**/*.spec.ts\" --ignore \"**/*.int-spec.ts\" --watch",
-    "dev:api": "concurrently -k -n swc,api \"pnpm build:watch\" \"node --watch-path=dist --enable-source-maps dist/main.js\"",
-    "dev:worker": "concurrently -k -n swc,worker \"pnpm build:watch\" \"node --watch-path=dist --enable-source-maps dist/worker.js\"",
+    "dev": "pnpm build && concurrently -k -n swc,api,worker \"pnpm build:watch\" \"node --watch-path=dist --enable-source-maps dist/main.js\" \"node --watch-path=dist --enable-source-maps dist/worker.js\"",
+    "dev:api": "pnpm build && concurrently -k -n swc,api \"pnpm build:watch\" \"node --watch-path=dist --enable-source-maps dist/main.js\"",
+    "dev:worker": "pnpm build && concurrently -k -n swc,worker \"pnpm build:watch\" \"node --watch-path=dist --enable-source-maps dist/worker.js\"",
     "start:api": "node --enable-source-maps dist/main.js",
     "start:worker": "node --enable-source-maps dist/worker.js",
     "typecheck": "tsc --noEmit",

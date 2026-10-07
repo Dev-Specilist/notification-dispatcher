@@ -220,7 +220,13 @@ mise install
 pnpm install
 ```
 
-api와 worker는 각각 다른 터미널에서 실행합니다. 둘 다 SWC watch 빌드 후 `dist/`를 실행합니다.
+api와 worker를 함께 실행합니다. 처음 한 번 빌드한 뒤 SWC watch 하나가 `dist/`를 갱신하고, 두 프로세스가 변경을 감지해 재시작합니다.
+
+```bash
+pnpm dev
+```
+
+하나만 실행할 때는 `dev:api` 또는 `dev:worker`를 씁니다. 둘은 각자 `dist/`를 다시 빌드하므로 동시에 띄우지 않습니다.
 
 ```bash
 pnpm dev:api
