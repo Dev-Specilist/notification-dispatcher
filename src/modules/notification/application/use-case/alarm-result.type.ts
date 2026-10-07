@@ -20,3 +20,10 @@ export interface AlarmDispatched {
 }
 
 export type StartDispatchResult = AlarmDispatched | AlarmNotFound | AlarmConflicted;
+
+export interface AlarmCancelled {
+  readonly kind: 'cancelled';
+  readonly alarm: Alarm;
+}
+
+export type CancelAlarmResult = AlarmCancelled | AlarmNotFound | AlarmConflicted;

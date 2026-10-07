@@ -5,4 +5,6 @@ export abstract class DeliveryRepositoryPort {
   abstract saveAll(deliveries: ReadonlyArray<Delivery>): Promise<void>;
 
   abstract findByAlarmId(alarmId: AlarmId): Promise<ReadonlyArray<Delivery>>;
+
+  abstract cancelWaiting(alarmId: AlarmId, now: Readonly<Date>): Promise<void>;
 }
