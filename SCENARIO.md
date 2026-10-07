@@ -159,7 +159,7 @@ Delivery
 | EXT-01 | mock 사용자 API | cursor로 끝까지 읽는다 | `USER_COUNT`명이 중복 없이 나오고 마지막 페이지는 `{ kind: 'end' }`로 표현된다 |
 | EXT-02 | mock 발송 API | 정상 발송 | `Accepted(messageId)` 결과가 나온다 |
 | EXT-03 | 수신 거부 사용자 | 발송 | `PermanentFailure(RECIPIENT_BLOCKED)` 결과가 나온다 |
-| EXT-04 | `RATE_LIMIT`을 낮춘 mock | 한도를 넘겨 발송 | `RateLimited(retryAfterMs)` 결과가 나온다 |
+| EXT-04 | `RATE_LIMIT`을 낮춘 mock | 한도를 넘겨 발송 | `RateLimited(retryAfterMs)` 결과가 나온다 (`Retry-After`는 초 단위 정수만 받고 1시간에서 자르며, 없거나 형식이 다르면 1초) |
 | EXT-05 | `ERROR_RATE=1` mock | 발송 | `TransientFailure` 결과가 나온다 |
 | EXT-06 | `TIMEOUT_RATE=1` mock | 발송 | 클라이언트 타임아웃 후 `Indeterminate` 결과가 나온다 |
 | EXT-07 | 이미 발송된 clientRef | 발송 내역을 조회한다 | messageId가 담긴 내역이 나온다 |

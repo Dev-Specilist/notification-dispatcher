@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
+import { RetryAfterMs } from '@/modules/notification/domain/delivery/delivery.type';
 import { MessageSenderPort } from '@/modules/notification/application/port/message-sender.port';
 import {
   OutgoingMessage,
@@ -8,6 +9,7 @@ import {
 import {
   acceptedBodySchema,
   rejectedBodySchema,
+  retryAfterSecondsSchema,
 } from '@/modules/notification/infrastructure/adapter/mock-api.schema';
 import { MockApiSettings } from '@/modules/notification/infrastructure/adapter/mock-api.type';
 
@@ -15,10 +17,16 @@ type AcceptedBodyParse = z.ZodSafeParseResult<z.output<typeof acceptedBodySchema
 
 type RejectedBodyParse = z.ZodSafeParseResult<z.output<typeof rejectedBodySchema>>;
 
+type RetryAfterSecondsParse = z.ZodSafeParseResult<z.output<typeof retryAfterSecondsSchema>>;
+
 export class MockMessageSenderAdapter implements MessageSenderPort {
   private static readonly ACCEPTED: number = 202;
 
   private static readonly REJECTED: number = 400;
+
+  private static readonly RATE_LIMITED: number = 429;
+
+  private static readonly DEFAULT_RETRY_AFTER_MS: number = 1_000;
 
   constructor(private readonly settings: Readonly<MockApiSettings>) {}
 
@@ -39,7 +47,26 @@ export class MockMessageSenderAdapter implements MessageSenderPort {
       );
     }
     await MockMessageSenderAdapter.discardBody(response);
+    if (response.status === MockMessageSenderAdapter.RATE_LIMITED) {
+      return {
+        kind: 'rate-limited',
+        retryAfterMs: MockMessageSenderAdapter.retryAfterOf(response.headers),
+      };
+    }
     return { kind: 'indeterminate' };
+  }
+
+  private static retryAfterOf(headers: Headers): RetryAfterMs {
+    const seconds: RetryAfterSecondsParse = retryAfterSecondsSchema.safeParse(
+      headers.get('retry-after'),
+    );
+    const milliseconds: number = seconds.success
+      ? Math.min(seconds.data * 1_000, DeliveryPredicates.MAX_RETRY_AFTER_MS)
+      : MockMessageSenderAdapter.DEFAULT_RETRY_AFTER_MS;
+    if (!DeliveryPredicates.isRetryAfterMs(milliseconds)) {
+      throw new Error(`Retry-After ${milliseconds}ms is outside the allowed range`);
+    }
+    return milliseconds;
   }
 
   private static accepted(body: AcceptedBodyParse): SendOutcome {
