@@ -154,7 +154,7 @@ Delivery
 
 | ID | Given | When | Then |
 | --- | --- | --- | --- |
-| EXT-01 | mock 사용자 API | cursor로 끝까지 읽는다 | `USER_COUNT`명이 중복 없이 나오고 마지막 페이지는 `{ kind: 'last' }`로 표현된다 |
+| EXT-01 | mock 사용자 API | cursor로 끝까지 읽는다 | `USER_COUNT`명이 중복 없이 나오고 마지막 페이지는 `{ kind: 'end' }`로 표현된다 |
 | EXT-02 | mock 발송 API | 정상 발송 | `Accepted(messageId)` 결과가 나온다 |
 | EXT-03 | 수신 거부 사용자 | 발송 | `PermanentFailure(RECIPIENT_BLOCKED)` 결과가 나온다 |
 | EXT-04 | `RATE_LIMIT`을 낮춘 mock | 한도를 넘겨 발송 | `RateLimited(retryAfterMs)` 결과가 나온다 |

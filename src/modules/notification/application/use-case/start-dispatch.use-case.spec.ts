@@ -183,7 +183,11 @@ describe('StartDispatchUseCase', () => {
     expect(await storedStatus(alarmRepository)).toBe('DISPATCHING');
     expect(await expansionJobRepository.findByAlarmId(alarmId(ALARM_ID))).toEqual({
       kind: 'found',
-      job: { alarmId: ALARM_ID, enqueuedAt: new Date(DISPATCHED_ISO) },
+      job: {
+        alarmId: ALARM_ID,
+        enqueuedAt: new Date(DISPATCHED_ISO),
+        progress: { kind: 'in-progress', cursor: { kind: 'first' } },
+      },
     });
     expect(await deliveryRepository.findByAlarmId(alarmId(ALARM_ID))).toEqual([]);
   });

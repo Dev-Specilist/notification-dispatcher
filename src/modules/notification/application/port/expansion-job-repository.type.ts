@@ -1,8 +1,22 @@
 import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
+import { PageCursor } from '@/modules/notification/application/port/recipient-directory.type';
+
+export interface ExpansionInProgress {
+  readonly kind: 'in-progress';
+  readonly cursor: PageCursor;
+}
+
+export interface ExpansionCompleted {
+  readonly kind: 'completed';
+  readonly completedAt: Date;
+}
+
+export type ExpansionProgress = ExpansionInProgress | ExpansionCompleted;
 
 export interface ExpansionJob {
   readonly alarmId: AlarmId;
   readonly enqueuedAt: Date;
+  readonly progress: ExpansionProgress;
 }
 
 export interface ExpansionJobFound {

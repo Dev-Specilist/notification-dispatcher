@@ -125,7 +125,11 @@ describe('InMemoryExpansionJobRepositoryAdapter', () => {
 
     expect(await expansionJobRepository.findByAlarmId(alarmId(FIRST_ID))).toEqual({
       kind: 'found',
-      job: { alarmId: FIRST_ID, enqueuedAt: new Date(ENQUEUED_ISO) },
+      job: {
+        alarmId: FIRST_ID,
+        enqueuedAt: new Date(ENQUEUED_ISO),
+        progress: { kind: 'in-progress', cursor: { kind: 'first' } },
+      },
     });
   });
 });
