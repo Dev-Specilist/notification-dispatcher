@@ -203,6 +203,29 @@ export class Delivery {
     });
   }
 
+  reconcileNotFound(
+    now: Readonly<Date>,
+    policy: RetryPolicy,
+    jitter: JitterRatio,
+  ): DeliveryTransition {
+    const check: UnknownCheck = this.checkUnknown();
+    if (check.kind === 'rejected') {
+      return check;
+    }
+    if (!this.isReconcilableAt(now)) {
+      return Delivery.reject('NOT_RECONCILABLE');
+    }
+    const { attempts }: DeliverySnapshot = this.props;
+    if (policy.isExhausted(attempts)) {
+      return this.transitionTo(attempts, { status: 'FAILED', reason: 'RETRY_EXHAUSTED' });
+    }
+    return this.transitionTo(attempts, {
+      status: 'RETRY_WAIT',
+      retryAt: new Date(now.getTime() + policy.delayFor(attempts, jitter)),
+      cause: 'NOT_DELIVERED',
+    });
+  }
+
   isReconcilableAt(now: Readonly<Date>): boolean {
     const { state }: DeliverySnapshot = this.props;
     return state.status === 'UNKNOWN' && state.reconcileAt.getTime() <= now.getTime();

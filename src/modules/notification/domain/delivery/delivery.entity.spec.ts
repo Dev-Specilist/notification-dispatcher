@@ -55,6 +55,7 @@ const LEASE_MS: DurationMs = durationMs(60_000);
 const MAX_REQUEST_MS: DurationMs = durationMs(10_000);
 const RECONCILE_DELAY_MS: DurationMs = durationMs(35_000);
 const LEASE_EXPIRED_ISO: string = '2026-10-07T09:01:01.000Z';
+const RECONCILABLE_ISO: string = '2026-10-07T09:00:37.000Z';
 
 const retryPolicy = (maxAttempts: number): RetryPolicy => {
   const creation: RetryPolicyCreation = RetryPolicy.create({
@@ -546,8 +547,70 @@ describe('Delivery', () => {
     expect(delivery.snapshot().state).toMatchObject({ sentAt: at(SETTLED_ISO) });
   });
 
-  it.todo(
-    'DLV-10 reconcile 가능 시각이 지난 UNKNOWN Delivery / reconcile에서 발송 내역이 없다 → 최대 시도 횟수 안이면 RETRY_WAIT, 소진했으면 FAILED(RETRY_EXHAUSTED)가 된다',
+  it('DLV-10 reconcile 가능 시각이 지난 UNKNOWN Delivery / reconcile에서 발송 내역이 없다 → 최대 시도 횟수 안이면 RETRY_WAIT가 된다', () => {
+    const delivery: Delivery = transitioned(
+      unknownAfterTimeout().reconcileNotFound(at(RECONCILABLE_ISO), retryPolicy(3), jitter(0)),
+    );
+
+    expect(delivery.snapshot()).toMatchObject({
+      attempts: 1,
+      state: {
+        status: 'RETRY_WAIT',
+        retryAt: new Date(at(RECONCILABLE_ISO).getTime() + 500),
+        cause: 'NOT_DELIVERED',
+      },
+    });
+  });
+
+  it('DLV-10 reconcile 가능 시각이 지난 UNKNOWN Delivery / reconcile에서 발송 내역이 없다 → 시도 횟수를 소진했으면 FAILED(RETRY_EXHAUSTED)가 된다', () => {
+    const delivery: Delivery = transitioned(
+      unknownAfterTimeout().reconcileNotFound(at(RECONCILABLE_ISO), retryPolicy(1), jitter(0)),
+    );
+
+    expect(delivery.snapshot().state).toEqual({ status: 'FAILED', reason: 'RETRY_EXHAUSTED' });
+  });
+
+  it('DLV-10 발송 내역이 없어 RETRY_WAIT가 된 Delivery는 재시도 시각에 다시 claim할 수 있다', () => {
+    const retryAt: Date = new Date(at(RECONCILABLE_ISO).getTime() + 500);
+    const waiting: Delivery = transitioned(
+      unknownAfterTimeout().reconcileNotFound(at(RECONCILABLE_ISO), retryPolicy(3), jitter(0)),
+    );
+
+    expect(waiting.claim(TOKEN_B(), retryAt, LEASE_MS).kind).toBe('transitioned');
+  });
+
+  it('DLV-11 reconcile 가능 시각 전의 UNKNOWN Delivery에는 내역 없음을 반영할 수 없다 (이전 요청이 아직 진행 중일 수 있음)', () => {
+    const beforeReconcilable: Date = new Date(at(RECONCILABLE_ISO).getTime() - 1);
+
+    expect(
+      unknownAfterTimeout().reconcileNotFound(beforeReconcilable, retryPolicy(3), jitter(0)),
+    ).toEqual({ kind: 'rejected', reason: 'NOT_RECONCILABLE' });
+  });
+
+  it.each<StatusBuildCase>([
+    ['PENDING', pending],
+    ['IN_FLIGHT', started],
+  ])(
+    'DLV-10 UNKNOWN이 아닌 %s Delivery에는 내역 없음을 반영할 수 없다',
+    (_status: string, build: () => Delivery) => {
+      expect(build().reconcileNotFound(at(RECONCILABLE_ISO), retryPolicy(3), jitter(0))).toEqual({
+        kind: 'rejected',
+        reason: 'NOT_UNKNOWN',
+      });
+    },
+  );
+
+  it.each<StatusBuildCase>([
+    ['SENT', sent],
+    ['FAILED', failed],
+  ])(
+    'DLV-20 종결된 %s Delivery에는 내역 없음을 반영해도 상태가 바뀌지 않는다',
+    (_status: string, build: () => Delivery) => {
+      expect(build().reconcileNotFound(at(RECONCILABLE_ISO), retryPolicy(3), jitter(0))).toEqual({
+        kind: 'rejected',
+        reason: 'ALREADY_SETTLED',
+      });
+    },
   );
   it.todo(
     'DLV-12 UNKNOWN Delivery / 발송 내역 조회 자체가 실패한다 → 빈 내역으로 보지 않고 UNKNOWN을 유지하며 백오프 후 다음 조회를 예약한다',
