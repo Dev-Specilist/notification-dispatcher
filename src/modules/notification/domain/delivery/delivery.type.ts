@@ -84,6 +84,11 @@ export interface UnconfirmedState {
   readonly unconfirmedAt: Date;
 }
 
+export interface CancelledState {
+  readonly status: 'CANCELLED';
+  readonly cancelledAt: Date;
+}
+
 export type DeliveryState =
   | PendingState
   | InFlightState
@@ -91,7 +96,8 @@ export type DeliveryState =
   | UnknownState
   | SentState
   | FailedState
-  | UnconfirmedState;
+  | UnconfirmedState
+  | CancelledState;
 
 export type DeliveryStatus = DeliveryState['status'];
 
@@ -114,6 +120,7 @@ export type DeliveryRejectionReason =
   | 'NOT_UNKNOWN'
   | 'NOT_RECONCILABLE'
   | 'CONFIRM_WINDOW_OPEN'
+  | 'OUTCOME_PENDING'
   | 'LEASE_MISMATCH'
   | 'REQUEST_NOT_STARTED'
   | 'REQUEST_ALREADY_STARTED'

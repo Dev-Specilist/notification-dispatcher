@@ -58,6 +58,7 @@ const LEASE_EXPIRED_ISO: string = '2026-10-07T09:01:01.000Z';
 const RECONCILABLE_ISO: string = '2026-10-07T09:00:37.000Z';
 const UNCONFIRMED_AFTER_MS: DurationMs = durationMs(600_000);
 const UNCONFIRMED_ISO: string = '2026-10-07T09:10:03.000Z';
+const CANCELLED_ISO: string = '2026-10-07T09:00:05.000Z';
 
 const retryPolicy = (maxAttempts: number): RetryPolicy => {
   const creation: RetryPolicyCreation = RetryPolicy.create({
@@ -156,6 +157,13 @@ const unknownAfterTimeout = (): Delivery =>
 
 const unconfirmed = (): Delivery =>
   transitioned(unknownAfterTimeout().expireUnconfirmed(at(UNCONFIRMED_ISO), UNCONFIRMED_AFTER_MS));
+
+const retryWaiting = (): Delivery =>
+  transitioned(
+    started().recordTransientFailure(TOKEN_A(), at(SETTLED_ISO), retryPolicy(3), jitter(0)),
+  );
+
+const cancelled = (): Delivery => transitioned(pending().cancel(at(CANCELLED_ISO)));
 
 const failed = (): Delivery =>
   transitioned(started().recordPermanentFailure(TOKEN_A(), 'RECIPIENT_BLOCKED'));
@@ -292,6 +300,7 @@ describe('Delivery', () => {
     ['SENT', (): Delivery => sent()],
     ['FAILED', (): Delivery => failed()],
     ['UNCONFIRMED', (): Delivery => unconfirmed()],
+    ['CANCELLED', (): Delivery => cancelled()],
   ])(
     'DLV-20 %s Delivery / 어떤 결과든 다시 기록하려 한다 → 종결 상태는 바뀌지 않는다',
     (_status: string, build: () => Delivery) => {
@@ -531,6 +540,7 @@ describe('Delivery', () => {
     ['SENT', sent],
     ['FAILED', failed],
     ['UNCONFIRMED', unconfirmed],
+    ['CANCELLED', cancelled],
   ])(
     'DLV-20 종결된 %s Delivery에는 발송 내역을 반영해도 상태가 바뀌지 않는다',
     (_status: string, build: () => Delivery) => {
@@ -611,6 +621,7 @@ describe('Delivery', () => {
     ['SENT', sent],
     ['FAILED', failed],
     ['UNCONFIRMED', unconfirmed],
+    ['CANCELLED', cancelled],
   ])(
     'DLV-20 종결된 %s Delivery에는 내역 없음을 반영해도 상태가 바뀌지 않는다',
     (_status: string, build: () => Delivery) => {
@@ -695,6 +706,7 @@ describe('Delivery', () => {
     ['SENT', sent],
     ['FAILED', failed],
     ['UNCONFIRMED', unconfirmed],
+    ['CANCELLED', cancelled],
   ])(
     'DLV-20 종결된 %s Delivery에는 조회 실패를 기록해도 상태가 바뀌지 않는다',
     (_status: string, build: () => Delivery) => {
@@ -721,10 +733,92 @@ describe('Delivery', () => {
     });
   });
 
-  it.todo('DLV-17 PENDING·RETRY_WAIT Delivery / 알림이 취소된다 → CANCELLED가 된다');
-  it.todo(
-    'DLV-18 알림이 취소된 뒤의 IN_FLIGHT Delivery / 늦게 202를 받는다 → 이미 나간 사실대로 SENT가 된다',
+  it.each<StatusBuildCase>([
+    ['PENDING', pending],
+    ['RETRY_WAIT', retryWaiting],
+  ])(
+    'DLV-17 %s Delivery / 알림이 취소된다 → CANCELLED가 된다',
+    (_status: string, build: () => Delivery) => {
+      const delivery: Delivery = transitioned(build().cancel(at(CANCELLED_ISO)));
+
+      expect(delivery.snapshot().state).toEqual({
+        status: 'CANCELLED',
+        cancelledAt: at(CANCELLED_ISO),
+      });
+    },
   );
+
+  it('DLV-17 재시도 시각 전의 RETRY_WAIT Delivery도 바로 CANCELLED가 된다', () => {
+    const beforeRetry: Date = at(SETTLED_ISO);
+
+    expect(transitioned(retryWaiting().cancel(beforeRetry)).snapshot().state).toMatchObject({
+      status: 'CANCELLED',
+    });
+  });
+
+  it.each<StatusBuildCase>([
+    ['IN_FLIGHT', started],
+    ['UNKNOWN', unknownAfterTimeout],
+  ])(
+    'DLV-17 결과가 확정되지 않은 %s Delivery는 취소하지 않고 결과를 먼저 기다린다',
+    (_status: string, build: () => Delivery) => {
+      expect(build().cancel(at(CANCELLED_ISO))).toEqual({
+        kind: 'rejected',
+        reason: 'OUTCOME_PENDING',
+      });
+    },
+  );
+
+  it.each<StatusBuildCase>([
+    ['SENT', sent],
+    ['FAILED', failed],
+    ['UNCONFIRMED', unconfirmed],
+    ['CANCELLED', cancelled],
+  ])(
+    'DLV-20 종결된 %s Delivery는 취소해도 상태가 바뀌지 않는다',
+    (_status: string, build: () => Delivery) => {
+      expect(build().cancel(at(CANCELLED_ISO))).toEqual({
+        kind: 'rejected',
+        reason: 'ALREADY_SETTLED',
+      });
+    },
+  );
+
+  it('DLV-18 알림이 취소된 뒤의 IN_FLIGHT Delivery / 늦게 202를 받는다 → 이미 나간 사실대로 SENT가 된다', () => {
+    const lateAcceptedAt: Date = at('2026-10-07T09:00:30.000Z');
+    const inFlight: Delivery = started();
+
+    expect(inFlight.cancel(at(CANCELLED_ISO))).toEqual({
+      kind: 'rejected',
+      reason: 'OUTCOME_PENDING',
+    });
+
+    const delivery: Delivery = transitioned(
+      inFlight.recordAccepted(TOKEN_A(), messageId(), lateAcceptedAt),
+    );
+
+    expect(delivery.snapshot().state).toEqual({
+      status: 'SENT',
+      messageId: 'm_1',
+      sentAt: lateAcceptedAt,
+      duplicateCount: 0,
+    });
+  });
+
+  it('DLV-17 CANCELLED snapshot으로 받은 Date를 바꿔도 Delivery 내부 상태는 바뀌지 않는다', () => {
+    const delivery: Delivery = cancelled();
+    const { state }: DeliverySnapshot = delivery.snapshot();
+
+    if (state.status === 'CANCELLED') {
+      state.cancelledAt.setUTCFullYear(1990);
+    }
+
+    expect(delivery.snapshot().state).toEqual({
+      status: 'CANCELLED',
+      cancelledAt: at(CANCELLED_ISO),
+    });
+  });
+
   it.todo(
     'DLV-19 UNKNOWN Delivery이고 알림이 취소됐다 / reconcile에서 발송 내역이 없다 → 재시도 대신 CANCELLED가 된다',
   );
@@ -776,6 +870,7 @@ describe('Delivery', () => {
     ['SENT', sent],
     ['FAILED', failed],
     ['UNCONFIRMED', unconfirmed],
+    ['CANCELLED', cancelled],
   ])(
     'DLV-20 종결된 %s Delivery는 다시 UNCONFIRMED로 종결해도 상태가 바뀌지 않는다',
     (_status: string, build: () => Delivery) => {

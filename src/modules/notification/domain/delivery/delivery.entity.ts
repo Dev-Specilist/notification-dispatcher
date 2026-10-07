@@ -259,6 +259,20 @@ export class Delivery {
     });
   }
 
+  cancel(now: Readonly<Date>): DeliveryTransition {
+    const { state }: DeliverySnapshot = this.props;
+    if (Delivery.isSettled(state)) {
+      return Delivery.reject('ALREADY_SETTLED');
+    }
+    if (state.status === 'IN_FLIGHT' || state.status === 'UNKNOWN') {
+      return Delivery.reject('OUTCOME_PENDING');
+    }
+    return this.transitionTo(this.props.attempts, {
+      status: 'CANCELLED',
+      cancelledAt: Delivery.copyDate(now),
+    });
+  }
+
   isReconcilableAt(now: Readonly<Date>): boolean {
     const { state }: DeliverySnapshot = this.props;
     return state.status === 'UNKNOWN' && state.reconcileAt.getTime() <= now.getTime();
@@ -325,7 +339,12 @@ export class Delivery {
   }
 
   private static isSettled(state: DeliveryState): boolean {
-    return state.status === 'SENT' || state.status === 'FAILED' || state.status === 'UNCONFIRMED';
+    return (
+      state.status === 'SENT' ||
+      state.status === 'FAILED' ||
+      state.status === 'UNCONFIRMED' ||
+      state.status === 'CANCELLED'
+    );
   }
 
   private static copyState(state: DeliveryState): DeliveryState {
@@ -354,6 +373,8 @@ export class Delivery {
           unknownSince: Delivery.copyDate(state.unknownSince),
           unconfirmedAt: Delivery.copyDate(state.unconfirmedAt),
         };
+      case 'CANCELLED':
+        return { status: 'CANCELLED', cancelledAt: Delivery.copyDate(state.cancelledAt) };
       case 'FAILED':
         break;
     }
