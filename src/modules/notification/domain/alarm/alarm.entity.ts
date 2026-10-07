@@ -27,7 +27,10 @@ interface AudienceResolved {
 type AudienceResolution = AudienceResolved | AlarmRejected;
 
 export class Alarm {
-  static readonly URGENT_RECIPIENT_RANGE: Readonly<CountRange> = { min: 1, max: 100 };
+  private static readonly URGENT_RECIPIENT_RANGE: Readonly<CountRange> = Object.freeze({
+    min: 1,
+    max: 100,
+  });
 
   private constructor(private readonly props: AlarmSnapshot) {}
 
