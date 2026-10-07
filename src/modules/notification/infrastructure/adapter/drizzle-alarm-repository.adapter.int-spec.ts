@@ -59,11 +59,10 @@ describe('DrizzleAlarmRepositoryAdapter', () => {
     await testDatabase.drop();
   });
 
-  AlarmRepositoryContract.verify((): Promise<DrizzleAlarmRepositoryAdapter> =>
-    Promise.resolve(
-      new DrizzleAlarmRepositoryAdapter(NotificationDatabaseFactory.create(testDatabase.pool)),
-    ),
-  );
+  AlarmRepositoryContract.verify(async (): Promise<DrizzleAlarmRepositoryAdapter> => {
+    await testDatabase.pool.query('TRUNCATE alarms CASCADE');
+    return new DrizzleAlarmRepositoryAdapter(NotificationDatabaseFactory.create(testDatabase.pool));
+  });
 
   it('DB-01 저장할 때마다 updated_at을 DB 시각으로 갱신하고 created_at은 유지한다', async (): Promise<void> => {
     const repository: DrizzleAlarmRepositoryAdapter = new DrizzleAlarmRepositoryAdapter(
@@ -80,11 +79,4 @@ describe('DrizzleAlarmRepositoryAdapter', () => {
     expect(BigInt(second.updated_micros)).toBeGreaterThan(BigInt(first.updated_micros));
     expect(first.updated_at.getTime()).toBeGreaterThan(first.created_at.getTime());
   });
-
-  it.todo(
-    'DB-02 알림 여러 개 / 상태·종류 필터와 cursor로 목록을 조회한다 → 생성 역순으로 페이지가 나뉘고 다음 cursor가 반환된다',
-  );
-  it.todo(
-    'DB-03 생성 시각이 같은 알림 여러 개 / cursor로 끝까지 조회한다 → (생성 시각, id) 복합 cursor로 누락·중복 없이 이어진다',
-  );
 });

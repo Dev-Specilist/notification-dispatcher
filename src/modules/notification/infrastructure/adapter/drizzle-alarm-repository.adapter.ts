@@ -1,8 +1,16 @@
-import { eq, sql } from 'drizzle-orm';
+import { SQL, and, desc, eq, sql } from 'drizzle-orm';
+import { PgColumn } from 'drizzle-orm/pg-core';
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
-import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
+import { AlarmId, AlarmSnapshot } from '@/modules/notification/domain/alarm/alarm.type';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/alarm-repository.port';
-import { AlarmLookup } from '@/modules/notification/application/port/alarm-repository.type';
+import {
+  AlarmLookup,
+  AlarmPage,
+  AlarmPageQuery,
+  AlarmPageStart,
+  AlarmPosition,
+  ValueFilter,
+} from '@/modules/notification/application/port/alarm-repository.type';
 import { alarms } from '@/modules/notification/infrastructure/persistence/alarm.table';
 import { AlarmRowMapper } from '@/modules/notification/infrastructure/persistence/alarm-row.mapper';
 import {
@@ -33,6 +41,46 @@ export class DrizzleAlarmRepositoryAdapter implements AlarmRepositoryPort {
     return DrizzleAlarmRepositoryAdapter.toLookup(
       await this.database.select().from(alarms).where(eq(alarms.id, id)).limit(1).for('update'),
     );
+  }
+
+  async findPage({ status, alarmKind, start, size }: Readonly<AlarmPageQuery>): Promise<AlarmPage> {
+    const conditions: ReadonlyArray<SQL> = [
+      ...DrizzleAlarmRepositoryAdapter.filterOn(alarms.status, status),
+      ...DrizzleAlarmRepositoryAdapter.filterOn(alarms.kind, alarmKind),
+      ...DrizzleAlarmRepositoryAdapter.startingFrom(start),
+    ];
+    const rows: ReadonlyArray<AlarmRow> = await this.database
+      .select()
+      .from(alarms)
+      .where(and(...conditions))
+      .orderBy(desc(alarms.createdAt), desc(alarms.id))
+      .limit(size + 1);
+    const page: ReadonlyArray<Alarm> = rows
+      .slice(0, size)
+      .map((row: AlarmRow): Alarm => AlarmRowMapper.toAlarm(row));
+    const [last]: ReadonlyArray<Alarm> = page.slice(-1);
+    if (rows.length <= size) {
+      return { alarms: page, next: { kind: 'last' } };
+    }
+    const { createdAt, id }: AlarmSnapshot = last.snapshot();
+    return { alarms: page, next: { kind: 'more', after: { createdAt, id } } };
+  }
+
+  private static filterOn<TValue extends string>(
+    column: PgColumn,
+    filter: ValueFilter<TValue>,
+  ): ReadonlyArray<SQL> {
+    return filter.kind === 'any' ? [] : [eq(column, filter.value)];
+  }
+
+  private static startingFrom(start: AlarmPageStart): ReadonlyArray<SQL> {
+    if (start.kind === 'newest') {
+      return [];
+    }
+    const { createdAt, id }: AlarmPosition = start.position;
+    return [
+      sql`(${alarms.createdAt}, ${alarms.id}) < (${createdAt.toISOString()}::timestamptz, ${id}::uuid)`,
+    ];
   }
 
   private static toLookup(rows: ReadonlyArray<AlarmRow>): AlarmLookup {

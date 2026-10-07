@@ -7,12 +7,26 @@ import {
   AlarmCreation,
   AlarmDraft,
   AlarmId,
+  AlarmSnapshot,
   AlarmTransition,
 } from '@/modules/notification/domain/alarm/alarm.type';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/alarm-repository.port';
-import { AlarmLookup } from '@/modules/notification/application/port/alarm-repository.type';
+import { AlarmRepositoryPredicates } from '@/modules/notification/application/port/alarm-repository.predicate';
+import {
+  AlarmLookup,
+  AlarmPage,
+  AlarmPageNext,
+  AlarmPageQuery,
+  AlarmPageStart,
+  PageSize,
+} from '@/modules/notification/application/port/alarm-repository.type';
 
 type AlarmRepositoryFactory = () => Promise<AlarmRepositoryPort>;
+
+interface PageSummary {
+  readonly ids: ReadonlyArray<string>;
+  readonly next: AlarmPageNext;
+}
 
 type StateCase = Readonly<[string, (alarm: Alarm) => Alarm]>;
 
@@ -149,6 +163,242 @@ export class AlarmRepositoryContract {
           .createdAt,
       ).toEqual(new Date(CREATED_ISO));
     });
+
+    it('DB-02 알림 여러 개 / 상태·종류 필터와 cursor로 목록을 조회한다 → 생성 역순으로 페이지가 나뉘고 다음 cursor가 반환된다', async (): Promise<void> => {
+      const repository: AlarmRepositoryPort = await createRepository();
+      const oldestDraftBulk: Alarm = AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 1);
+      const draftUrgent: Alarm = AlarmRepositoryContract.createdAtMinute(URGENT_DRAFT, 2);
+      const middleDraftBulk: Alarm = AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 3);
+      const dispatchingBulk: Alarm = AlarmRepositoryContract.dispatched(
+        AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 4),
+      );
+      const newestDraftBulk: Alarm = AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 5);
+      await Promise.all(
+        [oldestDraftBulk, draftUrgent, middleDraftBulk, dispatchingBulk, newestDraftBulk].map(
+          (alarm: Alarm): Promise<void> => repository.save(alarm),
+        ),
+      );
+      const filtered: Pick<AlarmPageQuery, 'status' | 'alarmKind' | 'size'> = {
+        status: { kind: 'exactly', value: 'DRAFT' },
+        alarmKind: { kind: 'exactly', value: 'BULK' },
+        size: AlarmRepositoryContract.pageSize(2),
+      };
+
+      const first: AlarmPage = await repository.findPage({
+        ...filtered,
+        start: { kind: 'newest' },
+      });
+      const second: AlarmPage = await repository.findPage({
+        ...filtered,
+        start: AlarmRepositoryContract.startAfter(first),
+      });
+
+      expect(AlarmRepositoryContract.summarize(first)).toEqual({
+        ids: [newestDraftBulk.snapshot().id, middleDraftBulk.snapshot().id],
+        next: {
+          kind: 'more',
+          after: {
+            createdAt: middleDraftBulk.snapshot().createdAt,
+            id: middleDraftBulk.snapshot().id,
+          },
+        },
+      });
+      expect(AlarmRepositoryContract.summarize(second)).toEqual({
+        ids: [oldestDraftBulk.snapshot().id],
+        next: { kind: 'last' },
+      });
+      expect(first.alarms.map((alarm: Alarm): AlarmSnapshot => alarm.snapshot())).toEqual([
+        newestDraftBulk.snapshot(),
+        middleDraftBulk.snapshot(),
+      ]);
+    });
+
+    it('DB-02 필터가 없으면 모든 상태와 종류의 알림을 생성 역순으로 돌려준다', async (): Promise<void> => {
+      const repository: AlarmRepositoryPort = await createRepository();
+      const urgent: Alarm = AlarmRepositoryContract.createdAtMinute(URGENT_DRAFT, 1);
+      const cancelledBulk: Alarm = AlarmRepositoryContract.transitioned(
+        AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 2).cancel(new Date(CANCELLED_ISO)),
+      );
+      await repository.save(urgent);
+      await repository.save(cancelledBulk);
+
+      const page: AlarmPage = await repository.findPage({
+        status: { kind: 'any' },
+        alarmKind: { kind: 'any' },
+        start: { kind: 'newest' },
+        size: AlarmRepositoryContract.pageSize(2),
+      });
+
+      expect(AlarmRepositoryContract.summarize(page)).toEqual({
+        ids: [cancelledBulk.snapshot().id, urgent.snapshot().id],
+        next: { kind: 'last' },
+      });
+    });
+
+    it('DB-02 저장된 알림이 없으면 빈 마지막 페이지를 돌려준다', async (): Promise<void> => {
+      const repository: AlarmRepositoryPort = await createRepository();
+
+      const page: AlarmPage = await repository.findPage({
+        status: { kind: 'any' },
+        alarmKind: { kind: 'any' },
+        start: { kind: 'newest' },
+        size: AlarmRepositoryContract.pageSize(1),
+      });
+
+      expect(AlarmRepositoryContract.summarize(page)).toEqual({ ids: [], next: { kind: 'last' } });
+    });
+
+    it('DB-02 필터에 맞는 알림이 없으면 빈 마지막 페이지를 돌려준다', async (): Promise<void> => {
+      const repository: AlarmRepositoryPort = await createRepository();
+      await repository.save(AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 1));
+
+      const page: AlarmPage = await repository.findPage({
+        status: { kind: 'exactly', value: 'COMPLETED' },
+        alarmKind: { kind: 'exactly', value: 'URGENT' },
+        start: { kind: 'newest' },
+        size: AlarmRepositoryContract.pageSize(1),
+      });
+
+      expect(AlarmRepositoryContract.summarize(page)).toEqual({ ids: [], next: { kind: 'last' } });
+    });
+
+    it('DB-02 남은 알림 수가 페이지 크기와 같으면 다음 cursor 없이 마지막 페이지가 된다', async (): Promise<void> => {
+      const repository: AlarmRepositoryPort = await createRepository();
+      const older: Alarm = AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 1);
+      const newer: Alarm = AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 2);
+      await repository.save(older);
+      await repository.save(newer);
+
+      const page: AlarmPage = await repository.findPage({
+        status: { kind: 'any' },
+        alarmKind: { kind: 'any' },
+        start: { kind: 'newest' },
+        size: AlarmRepositoryContract.pageSize(2),
+      });
+
+      expect(AlarmRepositoryContract.summarize(page)).toEqual({
+        ids: [newer.snapshot().id, older.snapshot().id],
+        next: { kind: 'last' },
+      });
+    });
+
+    it('DB-02 페이지 크기가 1이면 한 건씩 나뉘고 가장 오래된 알림 뒤에서는 빈 마지막 페이지가 나온다', async (): Promise<void> => {
+      const repository: AlarmRepositoryPort = await createRepository();
+      const older: Alarm = AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 1);
+      const newer: Alarm = AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 2);
+      await repository.save(older);
+      await repository.save(newer);
+      const unfiltered: Pick<AlarmPageQuery, 'status' | 'alarmKind' | 'size'> = {
+        status: { kind: 'any' },
+        alarmKind: { kind: 'any' },
+        size: AlarmRepositoryContract.pageSize(1),
+      };
+
+      const first: AlarmPage = await repository.findPage({
+        ...unfiltered,
+        start: { kind: 'newest' },
+      });
+      const afterOldest: AlarmPage = await repository.findPage({
+        ...unfiltered,
+        start: {
+          kind: 'after',
+          position: { createdAt: older.snapshot().createdAt, id: older.snapshot().id },
+        },
+      });
+
+      expect(AlarmRepositoryContract.summarize(first)).toEqual({
+        ids: [newer.snapshot().id],
+        next: {
+          kind: 'more',
+          after: { createdAt: newer.snapshot().createdAt, id: newer.snapshot().id },
+        },
+      });
+      expect(AlarmRepositoryContract.summarize(afterOldest)).toEqual({
+        ids: [],
+        next: { kind: 'last' },
+      });
+    });
+
+    it('DB-03 생성 시각이 같은 알림 여러 개 / cursor로 끝까지 조회한다 → (생성 시각, id) 복합 cursor로 누락·중복 없이 이어진다', async (): Promise<void> => {
+      const repository: AlarmRepositoryPort = await createRepository();
+      const older: Alarm = AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 1);
+      const sameInstant: ReadonlyArray<Alarm> = Array.from({ length: 5 }, (): Alarm =>
+        AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 2),
+      );
+      await Promise.all(
+        [older, ...sameInstant].map((alarm: Alarm): Promise<void> => repository.save(alarm)),
+      );
+
+      const visited: ReadonlyArray<string> = await AlarmRepositoryContract.readAll(repository, {
+        kind: 'newest',
+      });
+
+      expect(visited).toEqual([
+        ...sameInstant
+          .map((alarm: Alarm): string => alarm.snapshot().id)
+          .toSorted()
+          .toReversed(),
+        older.snapshot().id,
+      ]);
+    });
+  }
+
+  private static async readAll(
+    repository: AlarmRepositoryPort,
+    start: AlarmPageStart,
+  ): Promise<ReadonlyArray<string>> {
+    const page: AlarmPage = await repository.findPage({
+      status: { kind: 'any' },
+      alarmKind: { kind: 'any' },
+      start,
+      size: AlarmRepositoryContract.pageSize(2),
+    });
+    const ids: ReadonlyArray<string> = page.alarms.map(
+      (alarm: Alarm): string => alarm.snapshot().id,
+    );
+    if (page.next.kind === 'last') {
+      return ids;
+    }
+    return [
+      ...ids,
+      ...(await AlarmRepositoryContract.readAll(
+        repository,
+        AlarmRepositoryContract.startAfter(page),
+      )),
+    ];
+  }
+
+  private static startAfter({ next }: Readonly<AlarmPage>): AlarmPageStart {
+    if (next.kind !== 'more') {
+      throw new Error('expected another page');
+    }
+    return { kind: 'after', position: next.after };
+  }
+
+  private static summarize({ alarms, next }: Readonly<AlarmPage>): PageSummary {
+    return {
+      ids: alarms.map((alarm: Alarm): string => alarm.snapshot().id),
+      next,
+    };
+  }
+
+  private static pageSize(value: number): PageSize {
+    if (!AlarmRepositoryPredicates.isPageSize(value)) {
+      throw new Error(`contract fixture page size ${value} is invalid`);
+    }
+    return value;
+  }
+
+  private static createdAtMinute(draft: Readonly<AlarmDraft>, minute: number): Alarm {
+    const creation: AlarmCreation = Alarm.create(
+      AlarmRepositoryContract.newAlarmId(),
+      draft,
+      new Date(Date.UTC(2026, 9, 8, 8, minute, 0, 123)),
+    );
+    if (creation.kind !== 'created') {
+      throw new Error(`contract fixture alarm is invalid: ${creation.error.code}`);
+    }
+    return creation.alarm;
   }
 
   private static newAlarmId(): AlarmId {
