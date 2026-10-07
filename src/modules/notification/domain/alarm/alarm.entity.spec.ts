@@ -34,6 +34,8 @@ interface UrgentWithAllUsersTarget extends Omit<AlarmSnapshot, 'kind' | 'target'
   readonly target: AllUsersTarget;
 }
 
+type StatusBuildCase = Readonly<[string, () => Alarm]>;
+
 const ALARM_ID: string = '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10';
 const NOW_ISO: string = '2026-10-07T09:00:00.000Z';
 const NOW: Date = new Date(NOW_ISO);
@@ -359,6 +361,44 @@ describe('Alarm', () => {
       status: 'CANCELLED',
       cancelledAt: new Date(LATER_ISO),
       dispatch: { kind: 'STARTED', at: new Date(DISPATCHED_ISO) },
+    });
+  });
+
+  it.each<StatusBuildCase>([
+    ['DRAFT', bulkDraft],
+    ['DISPATCHING', dispatching],
+    ['COMPLETED', completed],
+    ['CANCELLED', cancelledFromDraft],
+  ])(
+    '저장된 %s 알림의 snapshot으로 복원하면 같은 snapshot을 가진 알림이 된다',
+    (_status: string, build: () => Alarm) => {
+      const original: Alarm = build();
+
+      expect(Alarm.reconstitute(original.snapshot()).snapshot()).toEqual(original.snapshot());
+    },
+  );
+
+  it('복원에 넘긴 snapshot을 나중에 바꿔도 복원한 알림은 바뀌지 않는다', () => {
+    const snapshot: AlarmSnapshot = dispatching().snapshot();
+    const alarm: Alarm = Alarm.reconstitute(snapshot);
+
+    snapshot.createdAt.setUTCFullYear(1990);
+    if (snapshot.state.status === 'DISPATCHING') {
+      snapshot.state.dispatchedAt.setUTCFullYear(1990);
+    }
+
+    expect(alarm.snapshot()).toMatchObject({
+      createdAt: NOW,
+      state: { status: 'DISPATCHING', dispatchedAt: new Date(DISPATCHED_ISO) },
+    });
+  });
+
+  it('복원한 알림도 상태 규칙을 그대로 따른다', () => {
+    const alarm: Alarm = Alarm.reconstitute(completed().snapshot());
+
+    expect(alarm.cancel(new Date(LATER_ISO))).toEqual({
+      kind: 'conflict',
+      error: { code: 'ALARM_STATE_CONFLICT', status: 'COMPLETED', action: 'cancel' },
     });
   });
 });

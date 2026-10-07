@@ -59,6 +59,18 @@ export class Alarm {
     };
   }
 
+  static reconstitute(snapshot: Readonly<AlarmSnapshot>): Alarm {
+    const { id, title, body, state, createdAt }: Readonly<AlarmSnapshot> = snapshot;
+    return new Alarm({
+      id,
+      title,
+      body,
+      ...Alarm.copyAudience(snapshot),
+      state: Alarm.copyState(state),
+      createdAt: Alarm.copyDate(createdAt),
+    });
+  }
+
   startDispatch(now: Readonly<Date>): AlarmTransition {
     const { state }: AlarmSnapshot = this.props;
     if (state.status !== 'DRAFT') {
