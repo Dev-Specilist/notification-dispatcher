@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { AlarmLookup } from '@/modules/notification/application/port/alarm-repository.type';
+import {
+  AlarmFound,
+  AlarmLookup,
+} from '@/modules/notification/application/port/alarm-repository.type';
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
 import {
   DeliverySnapshot,
@@ -13,6 +16,7 @@ import {
   LeasedSave,
 } from '@/modules/notification/application/port/delivery-repository.type';
 import { DispatchSettingsPort } from '@/modules/notification/application/port/dispatch-settings.port';
+import { JitterSourcePort } from '@/modules/notification/application/port/jitter-source.port';
 import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/lease-token-generator.port';
 import { MessageSenderPort } from '@/modules/notification/application/port/message-sender.port';
 import { SendOutcome } from '@/modules/notification/application/port/message-sender.type';
@@ -39,6 +43,7 @@ export class SendNextDeliveryUseCase {
     private readonly leaseTokenGenerator: LeaseTokenGeneratorPort,
     private readonly clock: ClockPort,
     private readonly settings: DispatchSettingsPort,
+    private readonly jitterSource: JitterSourcePort,
   ) {}
 
   async execute(): Promise<SendAttempt> {
@@ -76,7 +81,7 @@ export class SendNextDeliveryUseCase {
         const { id, alarmId }: DeliverySnapshot = delivery.snapshot();
         const alarm: AlarmLookup = await alarmRepository.findById(alarmId);
         const claimedAt: Date = this.clock.now();
-        if (alarm.kind === 'missing' || alarm.alarm.snapshot().state.status === 'CANCELLED') {
+        if (!SendNextDeliveryUseCase.isActive(alarm)) {
           await deliveryRepository.saveAll([
             SendNextDeliveryUseCase.transitioned(delivery.cancel(claimedAt)),
           ]);
@@ -101,24 +106,66 @@ export class SendNextDeliveryUseCase {
     );
   }
 
-  private recordOutcome(
+  private async recordOutcome(
     delivery: Delivery,
     token: LeaseToken,
     outcome: SendOutcome,
   ): Promise<SendAttempt> {
+    if (outcome.kind === 'rate-limited') {
+      await this.sendPermit.holdFor(outcome.retryAfterMs);
+    }
     const now: Date = this.clock.now();
-    const { id }: DeliverySnapshot = delivery.snapshot();
     const settled: Delivery = SendNextDeliveryUseCase.transitioned(
-      delivery.recordAccepted(token, outcome.messageId, now),
+      this.applyOutcome(delivery, token, outcome, now),
     );
+    const { id, alarmId }: DeliverySnapshot = delivery.snapshot();
     return this.unitOfWork.run(
-      async ({ deliveryRepository }: TransactionRepositories): Promise<SendAttempt> => {
-        const saved: LeasedSave = await deliveryRepository.saveLeased(settled, token);
+      async ({
+        alarmRepository,
+        deliveryRepository,
+      }: TransactionRepositories): Promise<SendAttempt> => {
+        const alarm: AlarmLookup = await alarmRepository.findById(alarmId);
+        const recorded: Delivery =
+          !SendNextDeliveryUseCase.isActive(alarm) &&
+          settled.snapshot().state.status === 'RETRY_WAIT'
+            ? SendNextDeliveryUseCase.transitioned(settled.cancel(now))
+            : settled;
+        const saved: LeasedSave = await deliveryRepository.saveLeased(recorded, token);
         return saved.kind === 'saved'
-          ? { kind: 'sent', deliveryId: id }
+          ? { kind: 'recorded', deliveryId: id, outcome: outcome.kind }
           : { kind: 'lease-lost', deliveryId: id };
       },
     );
+  }
+
+  private applyOutcome(
+    delivery: Delivery,
+    token: LeaseToken,
+    outcome: SendOutcome,
+    now: Readonly<Date>,
+  ): DeliveryTransition {
+    switch (outcome.kind) {
+      case 'accepted':
+        return delivery.recordAccepted(token, outcome.messageId, now);
+      case 'permanent-failure':
+        return delivery.recordPermanentFailure(token, outcome.code);
+      case 'transient-failure':
+        return delivery.recordTransientFailure(
+          token,
+          now,
+          this.settings.retryPolicy,
+          this.jitterSource.next(),
+        );
+      case 'rate-limited':
+        return delivery.recordRateLimited(token, now, outcome.retryAfterMs);
+      case 'indeterminate':
+        break;
+    }
+    return delivery.recordUnknown(token, now, this.settings.reconcileDelayMs);
+  }
+
+  private static isActive(alarm: AlarmLookup): alarm is AlarmFound {
+    return alarm.kind === 'found' && alarm.alarm.snapshot().state.status !== 'CANCELLED';
   }
 
   private static transitioned(transition: DeliveryTransition): Delivery {

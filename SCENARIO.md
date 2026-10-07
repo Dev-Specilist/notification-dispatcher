@@ -159,7 +159,7 @@ Delivery
 | EXT-03 | 수신 거부 사용자 | 발송 | `PermanentFailure(RECIPIENT_BLOCKED)` 결과가 나온다 |
 | EXT-04 | `RATE_LIMIT`을 낮춘 mock | 한도를 넘겨 발송 | `RateLimited(retryAfterMs)` 결과가 나온다 |
 | EXT-05 | `ERROR_RATE=1` mock | 발송 | `TransientFailure` 결과가 나온다 |
-| EXT-06 | `TIMEOUT_RATE=1` mock | 발송 | 클라이언트 타임아웃 후 `Unknown` 결과가 나온다 |
+| EXT-06 | `TIMEOUT_RATE=1` mock | 발송 | 클라이언트 타임아웃 후 `Indeterminate` 결과가 나온다 |
 | EXT-07 | 이미 발송된 clientRef | 발송 내역을 조회한다 | messageId가 담긴 내역이 나온다 |
 | EXT-08 | 발송하지 않은 clientRef | 발송 내역을 조회한다 | 빈 내역이 나온다 |
 | EXT-09 | 조회 API가 오류를 내거나 스키마와 다른 응답을 준다 | 발송 내역을 조회한다 | 빈 내역이 아니라 `LookupFailed` 결과가 나온다 |

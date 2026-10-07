@@ -1,4 +1,5 @@
 import { DeliveryId } from '@/modules/notification/domain/delivery/delivery.type';
+import { SendOutcomeKind } from '@/modules/notification/application/port/message-sender.type';
 
 export interface NoPermit {
   readonly kind: 'no-permit';
@@ -18,9 +19,10 @@ export interface LeaseReleased {
   readonly deliveryId: DeliveryId;
 }
 
-export interface DeliverySent {
-  readonly kind: 'sent';
+export interface OutcomeRecorded {
+  readonly kind: 'recorded';
   readonly deliveryId: DeliveryId;
+  readonly outcome: SendOutcomeKind;
 }
 
 export interface ResultDiscarded {
@@ -29,4 +31,4 @@ export interface ResultDiscarded {
 }
 
 export type SendAttempt =
-  NoPermit | NothingToSend | DeliverySkipped | LeaseReleased | DeliverySent | ResultDiscarded;
+  NoPermit | NothingToSend | DeliverySkipped | LeaseReleased | OutcomeRecorded | ResultDiscarded;

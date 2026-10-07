@@ -7,7 +7,7 @@ describe('MockMessageSender', () => {
     'EXT-04 RATE_LIMIT을 낮춘 mock / 한도를 넘겨 발송 → RateLimited(retryAfterMs) 결과가 나온다',
   );
   it.todo('EXT-05 ERROR_RATE=1 mock / 발송 → TransientFailure 결과가 나온다');
-  it.todo('EXT-06 TIMEOUT_RATE=1 mock / 발송 → 클라이언트 타임아웃 후 Unknown 결과가 나온다');
+  it.todo('EXT-06 TIMEOUT_RATE=1 mock / 발송 → 클라이언트 타임아웃 후 Indeterminate 결과가 나온다');
   it.todo('EXT-07 이미 발송된 clientRef / 발송 내역을 조회한다 → messageId가 담긴 내역이 나온다');
   it.todo('EXT-08 발송하지 않은 clientRef / 발송 내역을 조회한다 → 빈 내역이 나온다');
   it.todo(

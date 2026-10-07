@@ -9,12 +9,15 @@ import {
   RecipientId,
 } from '@/modules/notification/domain/alarm/alarm.type';
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
+import { RetryPolicy } from '@/modules/notification/domain/delivery/retry-policy';
+import { RetryPolicyCreation } from '@/modules/notification/domain/delivery/retry-policy.type';
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import {
   DeliveryId,
   DeliveryPriority,
   DeliverySnapshot,
   DeliveryTransition,
+  JitterRatio,
   LeaseToken,
   MessageId,
 } from '@/modules/notification/domain/delivery/delivery.type';
@@ -23,6 +26,7 @@ import { DurationMs } from '@/shared/domain/duration.type';
 import { AlarmLookup } from '@/modules/notification/application/port/alarm-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/clock.port';
 import { DispatchSettingsPort } from '@/modules/notification/application/port/dispatch-settings.port';
+import { JitterSourcePort } from '@/modules/notification/application/port/jitter-source.port';
 import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/lease-token-generator.port';
 import { MessageSenderPort } from '@/modules/notification/application/port/message-sender.port';
 import {
@@ -31,6 +35,7 @@ import {
 } from '@/modules/notification/application/port/message-sender.type';
 import { SendPermitPort } from '@/modules/notification/application/port/send-permit.port';
 import { SendPermit } from '@/modules/notification/application/port/send-permit.type';
+import { CancelAlarmUseCase } from '@/modules/notification/application/use-case/cancel-alarm.use-case';
 import { SendAttempt } from '@/modules/notification/application/use-case/send-next-delivery.type';
 import { SendNextDeliveryUseCase } from '@/modules/notification/application/use-case/send-next-delivery.use-case';
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
@@ -42,6 +47,8 @@ import { TransactionWork } from '@/modules/notification/application/port/unit-of
 
 type RecipientStatus = Readonly<[string, string]>;
 
+type CancelDuringSendCase = Readonly<[string, string, Reply]>;
+
 type UnitOfWorkFactory = (repositories: InMemoryRepositories) => InMemoryUnitOfWorkAdapter;
 
 interface Fixture {
@@ -51,9 +58,12 @@ interface Fixture {
   readonly sender: RecordingMessageSender;
   readonly clock: AdjustableClock;
   readonly useCase: SendNextDeliveryUseCase;
+  readonly newWorker: (permit: SendPermitPort) => SendNextDeliveryUseCase;
 }
 
 interface FixtureOptions {
+  readonly clock: AdjustableClock;
+  readonly settings: FixedDispatchSettings;
   readonly alarms: ReadonlyArray<Alarm>;
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
   readonly permit: SendPermitPort;
@@ -214,17 +224,74 @@ class FixedLeaseTokenGenerator implements LeaseTokenGeneratorPort {
   }
 }
 
+const retryPolicy = (maxAttempts: number): RetryPolicy => {
+  if (!DeliveryPredicates.isAttemptLimit(maxAttempts)) {
+    throw new Error(`test fixture ${maxAttempts} is not a valid AttemptLimit`);
+  }
+  const creation: RetryPolicyCreation = RetryPolicy.create({
+    maxAttempts,
+    baseDelayMs: durationMs(1_000),
+    maxDelayMs: durationMs(8_000),
+  });
+  if (creation.kind !== 'created') {
+    throw new Error(`test fixture retry policy is invalid: ${creation.error.code}`);
+  }
+  return creation.policy;
+};
+
 class FixedDispatchSettings implements DispatchSettingsPort {
   readonly leaseMs: DurationMs = durationMs(60_000);
 
   readonly maxRequestMs: DurationMs = durationMs(10_000);
+
+  readonly reconcileDelayMs: DurationMs = durationMs(35_000);
+
+  readonly retryPolicy: RetryPolicy;
+
+  constructor(maxAttempts: number = 3) {
+    this.retryPolicy = retryPolicy(maxAttempts);
+  }
+}
+
+class ZeroJitter implements JitterSourcePort {
+  next(): JitterRatio {
+    const ratio: number = 0;
+    if (!DeliveryPredicates.isJitterRatio(ratio)) {
+      throw new Error('test fixture jitter is invalid');
+    }
+    return ratio;
+  }
 }
 
 class StubSendPermit implements SendPermitPort {
+  readonly holds: Array<number> = [];
+
   constructor(private readonly permit: SendPermit) {}
 
   acquire(): Promise<SendPermit> {
     return Promise.resolve(this.permit);
+  }
+
+  holdFor(retryAfterMs: DurationMs): Promise<void> {
+    this.holds.push(retryAfterMs);
+    return Promise.resolve();
+  }
+}
+
+class SharedSendPermit implements SendPermitPort {
+  private heldUntil: number = 0;
+
+  constructor(private readonly clock: ClockPort) {}
+
+  acquire(): Promise<SendPermit> {
+    return Promise.resolve(
+      this.clock.now().getTime() < this.heldUntil ? { kind: 'denied' } : { kind: 'granted' },
+    );
+  }
+
+  holdFor(retryAfterMs: DurationMs): Promise<void> {
+    this.heldUntil = Math.max(this.heldUntil, this.clock.now().getTime() + retryAfterMs);
+    return Promise.resolve();
   }
 }
 
@@ -238,14 +305,27 @@ class GatedSendPermit implements SendPermitPort {
     await this.granted.opened;
     return { kind: 'granted' };
   }
+
+  holdFor(): Promise<void> {
+    return Promise.resolve();
+  }
 }
+
+type Reply = (sentCount: number) => SendOutcome;
+
+const acceptWithSequentialId: Reply = (sentCount: number): SendOutcome => ({
+  kind: 'accepted',
+  messageId: messageId(`m_${sentCount}`),
+});
 
 class RecordingMessageSender implements MessageSenderPort {
   readonly sent: Array<OutgoingMessage> = [];
 
+  constructor(private readonly reply: Reply = acceptWithSequentialId) {}
+
   send(message: OutgoingMessage): Promise<SendOutcome> {
     this.sent.push(message);
-    return Promise.resolve({ kind: 'accepted', messageId: messageId(`m_${this.sent.length}`) });
+    return Promise.resolve(this.reply(this.sent.length));
   }
 }
 
@@ -293,6 +373,8 @@ class SlowAlarmRepository extends InMemoryAlarmRepositoryAdapter {
 }
 
 const defaultOptions = (): FixtureOptions => ({
+  clock: new AdjustableClock(),
+  settings: new FixedDispatchSettings(),
   alarms: [bulkAlarm(), urgentAlarm()],
   alarmRepository: new InMemoryAlarmRepositoryAdapter(),
   permit: new StubSendPermit({ kind: 'granted' }),
@@ -305,7 +387,15 @@ const fixture = async (
   deliveries: ReadonlyArray<Delivery>,
   overrides: Partial<FixtureOptions> = {},
 ): Promise<Fixture> => {
-  const { alarms, alarmRepository, permit, sender, createUnitOfWork }: FixtureOptions = {
+  const {
+    clock,
+    settings,
+    alarms,
+    alarmRepository,
+    permit,
+    sender,
+    createUnitOfWork,
+  }: FixtureOptions = {
     ...defaultOptions(),
     ...overrides,
   };
@@ -318,20 +408,30 @@ const fixture = async (
     deliveryRepository,
     expansionJobRepository: new InMemoryExpansionJobRepositoryAdapter(),
   });
-  const clock: AdjustableClock = new AdjustableClock();
   return {
     alarmRepository,
     deliveryRepository,
     unitOfWork,
     sender,
     clock,
+    newWorker: (workerPermit: SendPermitPort): SendNextDeliveryUseCase =>
+      new SendNextDeliveryUseCase(
+        unitOfWork,
+        workerPermit,
+        sender,
+        new FixedLeaseTokenGenerator(),
+        clock,
+        settings,
+        new ZeroJitter(),
+      ),
     useCase: new SendNextDeliveryUseCase(
       unitOfWork,
       permit,
       sender,
       new FixedLeaseTokenGenerator(),
       clock,
-      new FixedDispatchSettings(),
+      settings,
+      new ZeroJitter(),
     ),
   };
 };
@@ -347,6 +447,15 @@ const statuses = async (
     },
   );
 
+const storedState = async (
+  deliveryRepository: InMemoryDeliveryRepositoryAdapter,
+): Promise<DeliverySnapshot['state']> => {
+  const [stored]: ReadonlyArray<Delivery> = await deliveryRepository.findByAlarmId(
+    alarmId(BULK_ALARM_ID),
+  );
+  return stored.snapshot().state;
+};
+
 describe('SendNextDeliveryUseCase', () => {
   it('UC-09 대기 중 Delivery 여러 건 / 발송 유스케이스 → 발송 허가를 먼저 얻고, 그 시점에 발송 가능한 건 중 우선순위가 가장 높은 1건을 claim해 바로 보내며 결과를 fencing 조건으로 기록한다', async (): Promise<void> => {
     const { deliveryRepository, sender, useCase }: Fixture = await fixture([
@@ -356,7 +465,7 @@ describe('SendNextDeliveryUseCase', () => {
 
     const attempt: SendAttempt = await useCase.execute();
 
-    expect(attempt).toEqual({ kind: 'sent', deliveryId: deliveryId(2) });
+    expect(attempt).toEqual({ kind: 'recorded', deliveryId: deliveryId(2), outcome: 'accepted' });
     expect(sender.sent).toEqual([
       {
         alarmId: URGENT_ALARM_ID,
@@ -406,7 +515,11 @@ describe('SendNextDeliveryUseCase', () => {
       retryWaitingUntil(pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO), 1_000),
     ]);
 
-    expect(await useCase.execute()).toEqual({ kind: 'sent', deliveryId: deliveryId(1) });
+    expect(await useCase.execute()).toEqual({
+      kind: 'recorded',
+      deliveryId: deliveryId(1),
+      outcome: 'accepted',
+    });
     expect(sender.sent).toHaveLength(1);
   });
 
@@ -452,7 +565,11 @@ describe('SendNextDeliveryUseCase', () => {
     await deliveryRepository.saveAll([pendingDelivery(2, URGENT_ALARM_ID, 'URGENT', NOW_ISO)]);
     permit.granted.open();
 
-    expect(await attempt).toEqual({ kind: 'sent', deliveryId: deliveryId(2) });
+    expect(await attempt).toEqual({
+      kind: 'recorded',
+      deliveryId: deliveryId(2),
+      outcome: 'accepted',
+    });
     expect(sender.sent.map((message: OutgoingMessage): string => message.clientRef)).toEqual([
       deliveryId(2),
     ]);
@@ -494,7 +611,11 @@ describe('SendNextDeliveryUseCase', () => {
       request: { kind: 'STARTED', at: new Date(claimedAt) },
     });
     sender.responded.open();
-    expect(await attempt).toEqual({ kind: 'sent', deliveryId: deliveryId(1) });
+    expect(await attempt).toEqual({
+      kind: 'recorded',
+      deliveryId: deliveryId(1),
+      outcome: 'accepted',
+    });
   });
 
   it('UC-09 claim 트랜잭션 안에서 저장소 조회가 늦어지면 조회가 끝난 시각으로 lease와 요청 시작을 기록한다', async (): Promise<void> => {
@@ -521,7 +642,11 @@ describe('SendNextDeliveryUseCase', () => {
       request: { kind: 'STARTED', at: new Date(claimedAt) },
     });
     sender.responded.open();
-    expect(await attempt).toEqual({ kind: 'sent', deliveryId: deliveryId(1) });
+    expect(await attempt).toEqual({
+      kind: 'recorded',
+      deliveryId: deliveryId(1),
+      outcome: 'accepted',
+    });
   });
 
   it('UC-09 발송 응답을 기다리는 동안 다른 워커가 같은 Delivery를 이어받았으면 늦은 결과를 저장하지 않는다', async (): Promise<void> => {
@@ -553,7 +678,157 @@ describe('SendNextDeliveryUseCase', () => {
     });
   });
 
-  it.todo(
-    'UC-11 429 응답 / 발송 유스케이스 → 공유 처리량 제한기에 Retry-After만큼 정지가 걸려 모든 워커가 함께 멈춘다',
+  it('UC-09 400 응답이면 재시도 없이 사유 코드와 함께 FAILED로 기록한다', async (): Promise<void> => {
+    const { deliveryRepository, useCase }: Fixture = await fixture(
+      [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
+      {
+        sender: new RecordingMessageSender((): SendOutcome => ({
+          kind: 'permanent-failure',
+          code: 'RECIPIENT_BLOCKED',
+        })),
+      },
+    );
+
+    expect(await useCase.execute()).toEqual({
+      kind: 'recorded',
+      deliveryId: deliveryId(1),
+      outcome: 'permanent-failure',
+    });
+    expect(await storedState(deliveryRepository)).toEqual({
+      status: 'FAILED',
+      reason: 'RECIPIENT_BLOCKED',
+    });
+  });
+
+  it('UC-09 500/503 응답이면 지수 백오프 뒤 다시 보내도록 RETRY_WAIT로 기록한다', async (): Promise<void> => {
+    const { deliveryRepository, useCase }: Fixture = await fixture(
+      [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
+      { sender: new RecordingMessageSender((): SendOutcome => ({ kind: 'transient-failure' })) },
+    );
+
+    expect(await useCase.execute()).toMatchObject({ outcome: 'transient-failure' });
+    expect(await storedState(deliveryRepository)).toEqual({
+      status: 'RETRY_WAIT',
+      retryAt: new Date(at(NOW_ISO).getTime() + 500),
+      cause: 'TRANSIENT_FAILURE',
+    });
+  });
+
+  it('UC-09 500/503 응답이 최대 시도 횟수에 도달하면 FAILED(RETRY_EXHAUSTED)로 기록한다', async (): Promise<void> => {
+    const { deliveryRepository, useCase }: Fixture = await fixture(
+      [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
+      {
+        settings: new FixedDispatchSettings(1),
+        sender: new RecordingMessageSender((): SendOutcome => ({ kind: 'transient-failure' })),
+      },
+    );
+
+    await useCase.execute();
+
+    expect(await storedState(deliveryRepository)).toEqual({
+      status: 'FAILED',
+      reason: 'RETRY_EXHAUSTED',
+    });
+  });
+
+  it('UC-09 응답 타임아웃이면 재전송하지 않고 reconcile 가능 시각과 함께 UNKNOWN으로 기록한다', async (): Promise<void> => {
+    const { deliveryRepository, useCase }: Fixture = await fixture(
+      [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
+      { sender: new RecordingMessageSender((): SendOutcome => ({ kind: 'indeterminate' })) },
+    );
+
+    expect(await useCase.execute()).toMatchObject({ outcome: 'indeterminate' });
+    expect(await storedState(deliveryRepository)).toEqual({
+      status: 'UNKNOWN',
+      unknownSince: at(NOW_ISO),
+      reconcileAt: new Date(at(NOW_ISO).getTime() + 35_000),
+      lookupFailures: 0,
+    });
+  });
+
+  it.each<CancelDuringSendCase>([
+    ['500/503', 'CANCELLED', (): SendOutcome => ({ kind: 'transient-failure' })],
+    [
+      '429',
+      'CANCELLED',
+      (): SendOutcome => ({ kind: 'rate-limited', retryAfterMs: durationMs(2_000) }),
+    ],
+    ['202', 'SENT', acceptWithSequentialId],
+  ])(
+    'UC-09 발송 응답을 기다리는 동안 알림이 취소되고 %s 응답이 오면 Delivery는 %s가 된다',
+    async (_label: string, expectedStatus: string, reply: Reply): Promise<void> => {
+      const sender: PausingMessageSender = new PausingMessageSender(reply);
+      const { deliveryRepository, unitOfWork, clock, useCase }: Fixture = await fixture(
+        [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
+        { sender },
+      );
+      const attempt: Promise<SendAttempt> = useCase.execute();
+      await sender.sending.opened;
+
+      await new CancelAlarmUseCase(unitOfWork, clock).execute(alarmId(BULK_ALARM_ID));
+      sender.responded.open();
+      await attempt;
+
+      expect(await statuses(deliveryRepository, BULK_ALARM_ID)).toEqual([
+        ['u_000001', expectedStatus],
+      ]);
+    },
   );
+
+  it('UC-11 429 응답 / 발송 유스케이스 → 공유 처리량 제한기에 Retry-After만큼 정지가 걸려 모든 워커가 함께 멈춘다', async (): Promise<void> => {
+    const clock: AdjustableClock = new AdjustableClock();
+    const sharedPermit: SharedSendPermit = new SharedSendPermit(clock);
+    const { deliveryRepository, useCase, newWorker }: Fixture = await fixture(
+      [
+        pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO),
+        pendingDelivery(2, BULK_ALARM_ID, 'BULK', DISPATCHED_ISO),
+      ],
+      {
+        clock,
+        permit: sharedPermit,
+        sender: new RecordingMessageSender((sentCount: number): SendOutcome =>
+          sentCount === 1
+            ? { kind: 'rate-limited', retryAfterMs: durationMs(2_000) }
+            : acceptWithSequentialId(sentCount),
+        ),
+      },
+    );
+    const otherWorker: SendNextDeliveryUseCase = newWorker(sharedPermit);
+
+    expect(await useCase.execute()).toMatchObject({ outcome: 'rate-limited' });
+    const [limited]: ReadonlyArray<Delivery> = await deliveryRepository.findByAlarmId(
+      alarmId(BULK_ALARM_ID),
+    );
+    expect(limited.snapshot()).toMatchObject({
+      attempts: 0,
+      state: {
+        status: 'RETRY_WAIT',
+        retryAt: new Date(at(NOW_ISO).getTime() + 2_000),
+        cause: 'RATE_LIMITED',
+      },
+    });
+    expect(await otherWorker.execute()).toEqual({ kind: 'no-permit' });
+
+    clock.advanceBy(2_000);
+
+    expect(await otherWorker.execute()).toMatchObject({ outcome: 'accepted' });
+  });
+
+  it('UC-11 429 응답이면 Retry-After 값만큼 공유 제한기를 멈춘다', async (): Promise<void> => {
+    const permit: StubSendPermit = new StubSendPermit({ kind: 'granted' });
+    const { useCase }: Fixture = await fixture(
+      [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
+      {
+        permit,
+        sender: new RecordingMessageSender((): SendOutcome => ({
+          kind: 'rate-limited',
+          retryAfterMs: durationMs(3_000),
+        })),
+      },
+    );
+
+    await useCase.execute();
+
+    expect(permit.holds).toEqual([3_000]);
+  });
 });
