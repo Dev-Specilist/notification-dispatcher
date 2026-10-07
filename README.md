@@ -24,14 +24,14 @@
 │  │ alarms                                                 │  │ GET  /v1/users    │  │
 │  │ deliveries          (work queue, unique alarm+user)    │  │ POST /v1/messages │  │
 │  │ recipient_expansions (cursor checkpoint)               │  │ GET  /v1/messages │  │
-│  │ rate_limit_buckets   (shared 50/s token bucket)        │  │      ?clientRef=  │  │
+│  │ rate_limiters        (shared 50/s GCRA, Retry-After)   │  │      ?clientRef=  │  │
 │  └────────────────────────────────────────────────────────┘  └───────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 - `api`와 `worker`는 같은 Dockerfile의 다른 target으로 빌드한 별도 이미지입니다.
 - 별도 메시지 브로커 없이 **`deliveries` 테이블이 곧 작업 큐**입니다. 알림 상태 변경과 작업 생성이 한 트랜잭션에 들어가서, "상태는 바뀌었는데 작업은 없다" 같은 이중 쓰기 문제가 생기지 않습니다.
-- 워커는 몇 대로 늘려도 `FOR UPDATE SKIP LOCKED`로 서로 다른 Delivery를 가져가고, 처리량은 PostgreSQL의 토큰 버킷 하나를 함께 씁니다.
+- 워커는 몇 대로 늘려도 `FOR UPDATE SKIP LOCKED`로 서로 다른 Delivery를 가져가고, 처리량은 PostgreSQL의 제한기 행 하나를 함께 씁니다.
 
 ## 레이어 구조
 
@@ -180,8 +180,8 @@ Delivery   PENDING ─claim(leaseToken)─▶ IN_FLIGHT ─202──────
 
 ### 처리량 제한과 긴급 알림
 
-- 초당 50건 한도는 모든 워커가 합쳐서 지켜야 하므로, PostgreSQL의 제한기 행 하나를 원자적 `UPDATE … RETURNING`으로 나눠 씁니다.
-- 용량 50, 초당 50개 보충인 일반 토큰 버킷은 첫 1초에 최대 100건이 나갈 수 있습니다. 그래서 burst를 작게 제한하고 요청 간격을 고르게 띄워서 **임의의 1초 구간**에서 50건을 넘지 않게 합니다. mock의 한도 구간 방식은 특성 테스트(EXT-10)로 확인해 맞춥니다.
+- 초당 50건 한도는 모든 워커가 합쳐서 지켜야 하므로, PostgreSQL의 제한기 행 하나를 원자적 `INSERT … ON CONFLICT DO UPDATE … WHERE … RETURNING` 한 문장으로 나눠 씁니다.
+- 용량 50, 초당 50개 보충인 일반 토큰 버킷은 첫 1초에 최대 100건이 나갈 수 있습니다. 그래서 GCRA(Generic Cell Rate Algorithm)로 burst 없이 허가 간격을 20ms로 고르게 띄워서 **임의의 1초 구간**에서 50건을 넘지 않게 합니다. 시각 판정은 워커 간 시계 차이를 피하려고 DB 시계(`clock_timestamp()`)로 합니다. mock의 한도 구간 방식은 특성 테스트(EXT-10)로 확인해 맞춥니다.
 - 429를 받으면 제한기에 `Retry-After`만큼 정지 시각을 기록해서 모든 워커가 함께 멈춥니다. 더 짧은 `Retry-After`가 와도 정지 시각을 앞당기지 않습니다.
 - 긴급 알림의 우선 처리는 "발송 가능한 긴급 Delivery가 있는 동안, 발송 허가를 얻은 요청은 긴급 Delivery를 보낸다"로 정의합니다. 이미 시작된 요청은 되돌릴 수 없으므로 제외하고, 재시도 대기 중인 긴급 건은 대량 발송을 막지 않습니다.
 - 이를 위해 워커는 **발송 허가를 먼저 얻고, 그 시점에 발송 가능한 Delivery 중 우선순위가 가장 높은 1건을 claim해 바로 보냅니다.** 대량 건을 claim해 둔 채 허가를 기다리면, 그사이 생긴 긴급 건을 앞지르기 때문입니다.
