@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
-import { AlarmId, RecipientId } from '@/modules/notification/domain/alarm/alarm.type';
+import {
+  AlarmCreation,
+  AlarmId,
+  AlarmTransition,
+  RecipientId,
+} from '@/modules/notification/domain/alarm/alarm.type';
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import { DeliveryId, DeliverySnapshot } from '@/modules/notification/domain/delivery/delivery.type';
 import { ClockPort } from '@/modules/notification/application/port/clock.port';
+import { CancelAlarmUseCase } from '@/modules/notification/application/use-case/cancel-alarm.use-case';
 import { ExpansionProgress } from '@/modules/notification/application/port/expansion-job-repository.type';
 import { IdGeneratorPort } from '@/modules/notification/application/port/id-generator.port';
 import { RecipientDirectoryPort } from '@/modules/notification/application/port/recipient-directory.port';
@@ -21,6 +28,8 @@ import { InMemoryUnitOfWorkAdapter } from '@/modules/notification/infrastructure
 
 type PageEntry = Readonly<[string, RecipientPage]>;
 
+type RecipientStatus = Readonly<[string, string]>;
+
 interface PageFound {
   readonly kind: 'found';
   readonly page: RecipientPage;
@@ -32,9 +41,13 @@ interface PageMissing {
 
 type PageLookup = PageFound | PageMissing;
 
+type PageIndexEntry = Readonly<[string, PageFound]>;
+
 type DeliverySummary = Pick<DeliverySnapshot, 'recipientId' | 'priority' | 'state' | 'createdAt'>;
 
 interface Fixture {
+  readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
+  readonly unitOfWork: InMemoryUnitOfWorkAdapter;
   readonly deliveryRepository: InMemoryDeliveryRepositoryAdapter;
   readonly expansionJobRepository: InMemoryExpansionJobRepositoryAdapter;
   readonly directory: PagedRecipientDirectory;
@@ -72,10 +85,7 @@ class PagedRecipientDirectory implements RecipientDirectoryPort {
 
   constructor(pages: ReadonlyArray<PageEntry>) {
     this.pagesByKey = new Map<string, PageFound>(
-      pages.map(([key, page]: PageEntry): Readonly<[string, PageFound]> => [
-        key,
-        { kind: 'found', page },
-      ]),
+      pages.map(([key, page]: PageEntry): PageIndexEntry => [key, { kind: 'found', page }]),
     );
   }
 
@@ -145,6 +155,83 @@ class FailingOnceDirectory extends PagedRecipientDirectory {
   }
 }
 
+const CANCELLED_ISO: string = '2026-10-07T09:05:30.000Z';
+
+const transitionedAlarm = (transition: AlarmTransition): Alarm => {
+  if (transition.kind !== 'transitioned') {
+    throw new Error(`test fixture alarm transition failed: ${transition.error.code}`);
+  }
+  return transition.alarm;
+};
+
+const dispatchedBulkAlarm = (): Alarm => {
+  const creation: AlarmCreation = Alarm.create(
+    alarmId(ALARM_ID),
+    { title: '추석 이벤트', body: '쿠폰 도착', kind: 'BULK', recipientIds: [] },
+    new Date('2026-10-07T09:00:00.000Z'),
+  );
+  if (creation.kind !== 'created') {
+    throw new Error(`test fixture alarm is invalid: ${creation.error.code}`);
+  }
+  return transitionedAlarm(creation.alarm.startDispatch(new Date(ENQUEUED_ISO)));
+};
+
+const cancelStoredAlarm = async (alarmRepository: InMemoryAlarmRepositoryAdapter): Promise<void> =>
+  alarmRepository.save(transitionedAlarm(dispatchedBulkAlarm().cancel(new Date(CANCELLED_ISO))));
+
+class CancellingDirectory extends PagedRecipientDirectory {
+  constructor(
+    pages: ReadonlyArray<PageEntry>,
+    private readonly cancellingKey: string,
+    private readonly alarmRepository: InMemoryAlarmRepositoryAdapter,
+  ) {
+    super(pages);
+  }
+
+  override async fetchPage(cursor: PageCursor): Promise<RecipientPage> {
+    if (cursorKey(cursor) === this.cancellingKey) {
+      await cancelStoredAlarm(this.alarmRepository);
+    }
+    return super.fetchPage(cursor);
+  }
+}
+
+interface Gate {
+  readonly opened: Promise<void>;
+  readonly open: () => void;
+}
+
+const NOT_YET_OPENED: () => void = (): void => {};
+
+const createGate = (): Gate => {
+  let release: () => void = NOT_YET_OPENED;
+  const opened: Promise<void> = new Promise<void>((resolve: () => void): void => {
+    release = resolve;
+  });
+  return { opened, open: (): void => release() };
+};
+
+class PausingDirectory extends PagedRecipientDirectory {
+  readonly paused: Gate = createGate();
+
+  readonly resumed: Gate = createGate();
+
+  constructor(
+    pages: ReadonlyArray<PageEntry>,
+    private readonly pausingKey: string,
+  ) {
+    super(pages);
+  }
+
+  override async fetchPage(cursor: PageCursor): Promise<RecipientPage> {
+    if (cursorKey(cursor) === this.pausingKey) {
+      this.paused.open();
+      await this.resumed.opened;
+    }
+    return super.fetchPage(cursor);
+  }
+}
+
 const TWO_PAGES: ReadonlyArray<PageEntry> = [
   [
     'first',
@@ -156,13 +243,15 @@ const TWO_PAGES: ReadonlyArray<PageEntry> = [
 const fixture = async (
   pages: ReadonlyArray<PageEntry>,
   expansionJobRepository: InMemoryExpansionJobRepositoryAdapter = new InMemoryExpansionJobRepositoryAdapter(),
+  alarmRepository: InMemoryAlarmRepositoryAdapter = new InMemoryAlarmRepositoryAdapter(),
   directory: PagedRecipientDirectory = new PagedRecipientDirectory(pages),
 ): Promise<Fixture> => {
   const deliveryRepository: InMemoryDeliveryRepositoryAdapter =
     new InMemoryDeliveryRepositoryAdapter();
+  await alarmRepository.save(dispatchedBulkAlarm());
   await expansionJobRepository.enqueue(alarmId(ALARM_ID), new Date(ENQUEUED_ISO));
   const unitOfWork: InMemoryUnitOfWorkAdapter = new InMemoryUnitOfWorkAdapter({
-    alarmRepository: new InMemoryAlarmRepositoryAdapter(),
+    alarmRepository,
     deliveryRepository,
     expansionJobRepository,
   });
@@ -170,6 +259,8 @@ const fixture = async (
   const newWorker = (): ExpandRecipientsUseCase =>
     new ExpandRecipientsUseCase(unitOfWork, directory, idGenerator, new FixedClock());
   return {
+    alarmRepository,
+    unitOfWork,
     deliveryRepository,
     expansionJobRepository,
     directory,
@@ -274,6 +365,7 @@ describe('ExpandRecipientsUseCase', () => {
     const { deliveryRepository, directory, useCase, newWorker }: Fixture = await fixture(
       TWO_PAGES,
       new InMemoryExpansionJobRepositoryAdapter(),
+      new InMemoryAlarmRepositoryAdapter(),
       new FailingOnceDirectory(TWO_PAGES, 'next:Mw'),
     );
     await expect(useCase.execute(alarmId(ALARM_ID))).rejects.toThrow('user API is unavailable');
@@ -325,7 +417,70 @@ describe('ExpandRecipientsUseCase', () => {
     ]);
   });
 
-  it.todo(
-    'UC-08 확장 중 알림이 취소됐다 / 다음 페이지를 처리한다 → 확장을 멈추고 더 이상 Delivery를 만들지 않는다',
-  );
+  it('UC-08 확장 중 알림이 취소됐다 / 다음 페이지를 처리한다 → 확장을 멈추고 더 이상 Delivery를 만들지 않는다', async (): Promise<void> => {
+    const alarmRepository: InMemoryAlarmRepositoryAdapter = new InMemoryAlarmRepositoryAdapter();
+    const { deliveryRepository, expansionJobRepository, directory, useCase }: Fixture =
+      await fixture(
+        TWO_PAGES,
+        new InMemoryExpansionJobRepositoryAdapter(),
+        alarmRepository,
+        new CancellingDirectory(TWO_PAGES, 'next:Mw', alarmRepository),
+      );
+
+    const result: ExpansionResult = await useCase.execute(alarmId(ALARM_ID));
+
+    expect(result).toEqual({ kind: 'cancelled' });
+    expect(directory.requested).toEqual(['first', 'next:Mw']);
+    expect(await summaries(deliveryRepository)).toEqual([
+      pendingBulk('u_000001'),
+      pendingBulk('u_000002'),
+    ]);
+    expect(await expansionJobRepository.findByAlarmId(alarmId(ALARM_ID))).toMatchObject({
+      job: { progress: { kind: 'stopped', stoppedAt: new Date(EXPANDED_ISO) } },
+    });
+  });
+
+  it('UC-08 페이지 조회 중 취소 유스케이스가 실행되면 이미 만든 Delivery는 취소되고 새 Delivery는 만들어지지 않는다', async (): Promise<void> => {
+    const directory: PausingDirectory = new PausingDirectory(TWO_PAGES, 'next:Mw');
+    const { deliveryRepository, unitOfWork, useCase }: Fixture = await fixture(
+      TWO_PAGES,
+      new InMemoryExpansionJobRepositoryAdapter(),
+      new InMemoryAlarmRepositoryAdapter(),
+      directory,
+    );
+    const expansion: Promise<ExpansionResult> = useCase.execute(alarmId(ALARM_ID));
+    await directory.paused.opened;
+
+    await new CancelAlarmUseCase(unitOfWork, new FixedClock()).execute(alarmId(ALARM_ID));
+    directory.resumed.open();
+
+    expect(await expansion).toEqual({ kind: 'cancelled' });
+    expect(
+      (await summaries(deliveryRepository)).map(
+        ({ recipientId, state }: DeliverySummary): RecipientStatus => [recipientId, state.status],
+      ),
+    ).toEqual([
+      ['u_000001', 'CANCELLED'],
+      ['u_000002', 'CANCELLED'],
+    ]);
+  });
+
+  it('UC-08 이미 취소된 알림은 사용자 API를 호출하지 않고 확장을 멈춘다', async (): Promise<void> => {
+    const { alarmRepository, deliveryRepository, directory, useCase }: Fixture =
+      await fixture(TWO_PAGES);
+    await cancelStoredAlarm(alarmRepository);
+
+    expect(await useCase.execute(alarmId(ALARM_ID))).toEqual({ kind: 'cancelled' });
+    expect(directory.requested).toEqual([]);
+    expect(await summaries(deliveryRepository)).toEqual([]);
+  });
+
+  it('UC-08 멈춘 확장은 다시 실행해도 사용자 API를 호출하지 않는다', async (): Promise<void> => {
+    const { alarmRepository, directory, useCase, newWorker }: Fixture = await fixture(TWO_PAGES);
+    await cancelStoredAlarm(alarmRepository);
+    await useCase.execute(alarmId(ALARM_ID));
+
+    expect(await newWorker().execute(alarmId(ALARM_ID))).toEqual({ kind: 'cancelled' });
+    expect(directory.requested).toEqual([]);
+  });
 });

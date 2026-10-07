@@ -73,12 +73,18 @@ export class InMemoryExpansionJobRepositoryAdapter implements ExpansionJobReposi
   }
 
   private static copyProgress(progress: ExpansionProgress): ExpansionProgress {
-    return progress.kind === 'completed'
-      ? { kind: 'completed', completedAt: new Date(progress.completedAt.getTime()) }
-      : {
-          kind: 'in-progress',
-          cursor: InMemoryExpansionJobRepositoryAdapter.copyCursor(progress.cursor),
-        };
+    switch (progress.kind) {
+      case 'completed':
+        return { kind: 'completed', completedAt: new Date(progress.completedAt.getTime()) };
+      case 'stopped':
+        return { kind: 'stopped', stoppedAt: new Date(progress.stoppedAt.getTime()) };
+      case 'in-progress':
+        break;
+    }
+    return {
+      kind: 'in-progress',
+      cursor: InMemoryExpansionJobRepositoryAdapter.copyCursor(progress.cursor),
+    };
   }
 
   private static copyCursor(cursor: PageCursor): PageCursor {

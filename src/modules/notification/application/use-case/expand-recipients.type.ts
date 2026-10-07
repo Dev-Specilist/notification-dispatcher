@@ -13,4 +13,9 @@ export interface ExpansionSuperseded {
   readonly kind: 'superseded';
 }
 
-export type ExpansionResult = ExpansionFinished | ExpansionJobNotFound | ExpansionSuperseded;
+export interface ExpansionCancelled {
+  readonly kind: 'cancelled';
+}
+
+export type ExpansionResult =
+  ExpansionFinished | ExpansionJobNotFound | ExpansionSuperseded | ExpansionCancelled;

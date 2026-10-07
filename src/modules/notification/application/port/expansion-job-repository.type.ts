@@ -11,7 +11,12 @@ export interface ExpansionCompleted {
   readonly completedAt: Date;
 }
 
-export type ExpansionProgress = ExpansionInProgress | ExpansionCompleted;
+export interface ExpansionStopped {
+  readonly kind: 'stopped';
+  readonly stoppedAt: Date;
+}
+
+export type ExpansionProgress = ExpansionInProgress | ExpansionCompleted | ExpansionStopped;
 
 export interface ExpansionJob {
   readonly alarmId: AlarmId;
