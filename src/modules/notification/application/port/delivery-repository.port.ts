@@ -1,4 +1,4 @@
-import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
+import { AlarmId, DeliveryCount } from '@/modules/notification/domain/alarm/alarm.type';
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
 import { LeaseToken } from '@/modules/notification/domain/delivery/delivery.type';
 import {
@@ -16,6 +16,8 @@ export abstract class DeliveryRepositoryPort {
   abstract findNextClaimable(now: Readonly<Date>): Promise<ClaimableLookup>;
 
   abstract saveLeased(delivery: Delivery, token: LeaseToken): Promise<LeasedSave>;
+
+  abstract countUnsettled(alarmId: AlarmId): Promise<DeliveryCount>;
 
   abstract cancelWaiting(alarmId: AlarmId, now: Readonly<Date>): Promise<void>;
 }

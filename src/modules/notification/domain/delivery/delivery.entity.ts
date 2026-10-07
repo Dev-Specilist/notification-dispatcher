@@ -294,6 +294,10 @@ export class Delivery {
     };
   }
 
+  isSettled(): boolean {
+    return Delivery.isSettled(this.props.state);
+  }
+
   isClaimableAt(now: Readonly<Date>): boolean {
     const { state }: DeliverySnapshot = this.props;
     if (state.status === 'PENDING') {

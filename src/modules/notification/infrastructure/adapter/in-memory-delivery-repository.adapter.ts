@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
+import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
+import { AlarmId, DeliveryCount } from '@/modules/notification/domain/alarm/alarm.type';
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
 import {
   DeliveryId,
@@ -68,6 +69,16 @@ export class InMemoryDeliveryRepositoryAdapter implements DeliveryRepositoryPort
     }
     this.store(delivery);
     return Promise.resolve({ kind: 'saved' });
+  }
+
+  async countUnsettled(alarmId: AlarmId): Promise<DeliveryCount> {
+    const unsettled: number = (await this.findByAlarmId(alarmId)).filter(
+      (delivery: Delivery): boolean => !delivery.isSettled(),
+    ).length;
+    if (!AlarmPredicates.isDeliveryCount(unsettled)) {
+      throw new Error(`unsettled delivery count ${unsettled} is not a valid DeliveryCount`);
+    }
+    return unsettled;
   }
 
   async cancelWaiting(alarmId: AlarmId, now: Readonly<Date>): Promise<void> {

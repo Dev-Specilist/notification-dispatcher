@@ -27,3 +27,14 @@ export interface AlarmCancelled {
 }
 
 export type CancelAlarmResult = AlarmCancelled | AlarmNotFound | AlarmConflicted;
+
+export interface AlarmCompleted {
+  readonly kind: 'completed';
+}
+
+export interface AlarmNotYetSettled {
+  readonly kind: 'not-yet';
+}
+
+export type CompleteAlarmResult =
+  AlarmCompleted | AlarmNotYetSettled | AlarmNotFound | AlarmConflicted;
