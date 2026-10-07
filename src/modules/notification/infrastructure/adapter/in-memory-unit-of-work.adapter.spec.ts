@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
-import { AlarmCreation, AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
+import {
+  AlarmCreation,
+  AlarmId,
+  RecipientId,
+} from '@/modules/notification/domain/alarm/alarm.type';
+import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
+import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
+import { DeliveryId } from '@/modules/notification/domain/delivery/delivery.type';
+import { Rollback } from '@/modules/notification/infrastructure/adapter/rollback.type';
 import { ExpansionJobLookup } from '@/modules/notification/application/port/expansion-job-repository.type';
 import { TransactionRepositories } from '@/modules/notification/application/port/unit-of-work.type';
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
@@ -37,6 +45,34 @@ const bulkAlarm = (id: string): Alarm => {
   }
   return creation.alarm;
 };
+
+const pendingDelivery = (id: number, recipient: string): Delivery => {
+  const deliveryValue: string = `00000000-0000-4000-8000-${String(id).padStart(12, '0')}`;
+  if (!DeliveryPredicates.isDeliveryId(deliveryValue)) {
+    throw new Error(`test fixture ${deliveryValue} is not a valid DeliveryId`);
+  }
+  if (!AlarmPredicates.isRecipientId(recipient)) {
+    throw new Error(`test fixture ${recipient} is not a valid RecipientId`);
+  }
+  const deliveryIdValue: DeliveryId = deliveryValue;
+  const recipientIdValue: RecipientId = recipient;
+  return Delivery.create(
+    {
+      id: deliveryIdValue,
+      alarmId: alarmId(FIRST_ID),
+      recipientId: recipientIdValue,
+      priority: 'BULK',
+    },
+    new Date(ENQUEUED_ISO),
+  );
+};
+
+const recipientsOf = async (
+  repository: InMemoryDeliveryRepositoryAdapter,
+): Promise<ReadonlyArray<string>> =>
+  (await repository.findByAlarmId(alarmId(FIRST_ID))).map(
+    (delivery: Delivery): string => delivery.snapshot().recipientId,
+  );
 
 const fixture = (): Fixture => {
   const alarmRepository: InMemoryAlarmRepositoryAdapter = new InMemoryAlarmRepositoryAdapter();
@@ -131,5 +167,45 @@ describe('InMemoryExpansionJobRepositoryAdapter', () => {
         progress: { kind: 'in-progress', cursor: { kind: 'first' } },
       },
     });
+  });
+});
+
+describe('InMemoryDeliveryRepositoryAdapter', () => {
+  it('insertMissing은 같은 알림·수신자의 Delivery가 이미 있으면 id가 달라도 건너뛴다', async (): Promise<void> => {
+    const repository: InMemoryDeliveryRepositoryAdapter = new InMemoryDeliveryRepositoryAdapter();
+    await repository.insertMissing([pendingDelivery(1, 'u_000001')]);
+
+    await repository.insertMissing([
+      pendingDelivery(2, 'u_000001'),
+      pendingDelivery(3, 'u_000002'),
+    ]);
+
+    expect(await recipientsOf(repository)).toEqual(['u_000001', 'u_000002']);
+  });
+
+  it('insertMissing은 같은 묶음 안의 중복 수신자도 한 번만 저장한다', async (): Promise<void> => {
+    const repository: InMemoryDeliveryRepositoryAdapter = new InMemoryDeliveryRepositoryAdapter();
+
+    await repository.insertMissing([
+      pendingDelivery(1, 'u_000001'),
+      pendingDelivery(2, 'u_000001'),
+    ]);
+
+    expect(await recipientsOf(repository)).toEqual(['u_000001']);
+  });
+
+  it('롤백하면 수신자 색인도 되돌아가 같은 수신자를 다시 저장할 수 있다', async (): Promise<void> => {
+    const repository: InMemoryDeliveryRepositoryAdapter = new InMemoryDeliveryRepositoryAdapter();
+    const rollback: Rollback = repository.checkpoint();
+    await repository.insertMissing([pendingDelivery(1, 'u_000001')]);
+
+    rollback();
+    await repository.insertMissing([pendingDelivery(2, 'u_000001')]);
+
+    expect(
+      (await repository.findByAlarmId(alarmId(FIRST_ID))).map(
+        (delivery: Delivery): string => delivery.snapshot().id,
+      ),
+    ).toEqual(['00000000-0000-4000-8000-000000000002']);
   });
 });

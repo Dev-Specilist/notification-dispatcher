@@ -8,7 +8,10 @@ import {
 } from '@/modules/notification/application/port/expansion-job-repository.type';
 import { IdGeneratorPort } from '@/modules/notification/application/port/id-generator.port';
 import { RecipientDirectoryPort } from '@/modules/notification/application/port/recipient-directory.port';
-import { RecipientPage } from '@/modules/notification/application/port/recipient-directory.type';
+import {
+  PageCursor,
+  RecipientPage,
+} from '@/modules/notification/application/port/recipient-directory.type';
 import { UnitOfWorkPort } from '@/modules/notification/application/port/unit-of-work.port';
 import { TransactionRepositories } from '@/modules/notification/application/port/unit-of-work.type';
 import { ExpansionResult } from '@/modules/notification/application/use-case/expand-recipients.type';
@@ -49,11 +52,12 @@ export class ExpandRecipientsUseCase {
       return { kind: 'completed' };
     }
     const page: RecipientPage = await this.recipientDirectory.fetchPage(progress.cursor);
-    return this.commitPage(alarmId, page);
+    return this.commitPage(alarmId, progress.cursor, page);
   }
 
   private commitPage(
     alarmId: AlarmId,
+    fetchedWith: PageCursor,
     { recipientIds, next }: RecipientPage,
   ): Promise<ExpansionStep> {
     const now: Date = this.clock.now();
@@ -62,7 +66,11 @@ export class ExpandRecipientsUseCase {
         deliveryRepository,
         expansionJobRepository,
       }: TransactionRepositories): Promise<ExpansionStep> => {
-        await deliveryRepository.saveAll(
+        const current: ExpansionJobLookup = await expansionJobRepository.findByAlarmId(alarmId);
+        if (!ExpandRecipientsUseCase.isStillAt(current, fetchedWith)) {
+          return { kind: 'superseded' };
+        }
+        await deliveryRepository.insertMissing(
           recipientIds.map((recipientId: RecipientId): Delivery =>
             Delivery.create(
               { id: this.idGenerator.deliveryId(), alarmId, recipientId, priority: 'BULK' },
@@ -81,5 +89,16 @@ export class ExpandRecipientsUseCase {
         return { kind: 'continued' };
       },
     );
+  }
+
+  private static isStillAt(lookup: ExpansionJobLookup, cursor: PageCursor): boolean {
+    if (lookup.kind === 'missing' || lookup.job.progress.kind === 'completed') {
+      return false;
+    }
+    const current: PageCursor = lookup.job.progress.cursor;
+    if (current.kind === 'first' || cursor.kind === 'first') {
+      return current.kind === cursor.kind;
+    }
+    return current.token === cursor.token;
   }
 }

@@ -9,4 +9,8 @@ export interface ExpansionJobNotFound {
   readonly alarmId: AlarmId;
 }
 
-export type ExpansionResult = ExpansionFinished | ExpansionJobNotFound;
+export interface ExpansionSuperseded {
+  readonly kind: 'superseded';
+}
+
+export type ExpansionResult = ExpansionFinished | ExpansionJobNotFound | ExpansionSuperseded;

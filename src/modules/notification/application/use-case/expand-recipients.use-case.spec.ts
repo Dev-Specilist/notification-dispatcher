@@ -39,6 +39,7 @@ interface Fixture {
   readonly expansionJobRepository: InMemoryExpansionJobRepositoryAdapter;
   readonly directory: PagedRecipientDirectory;
   readonly useCase: ExpandRecipientsUseCase;
+  readonly newWorker: () => ExpandRecipientsUseCase;
 }
 
 const ENQUEUED_ISO: string = '2026-10-07T09:05:00.000Z';
@@ -124,6 +125,26 @@ class FailingOnSecondProgressRepository extends InMemoryExpansionJobRepositoryAd
   }
 }
 
+class FailingOnceDirectory extends PagedRecipientDirectory {
+  private failed: boolean = false;
+
+  constructor(
+    pages: ReadonlyArray<PageEntry>,
+    private readonly failingKey: string,
+  ) {
+    super(pages);
+  }
+
+  override fetchPage(cursor: PageCursor): Promise<RecipientPage> {
+    if (!this.failed && cursorKey(cursor) === this.failingKey) {
+      this.failed = true;
+      this.requested.push(cursorKey(cursor));
+      return Promise.reject(new Error('user API is unavailable'));
+    }
+    return super.fetchPage(cursor);
+  }
+}
+
 const TWO_PAGES: ReadonlyArray<PageEntry> = [
   [
     'first',
@@ -135,6 +156,7 @@ const TWO_PAGES: ReadonlyArray<PageEntry> = [
 const fixture = async (
   pages: ReadonlyArray<PageEntry>,
   expansionJobRepository: InMemoryExpansionJobRepositoryAdapter = new InMemoryExpansionJobRepositoryAdapter(),
+  directory: PagedRecipientDirectory = new PagedRecipientDirectory(pages),
 ): Promise<Fixture> => {
   const deliveryRepository: InMemoryDeliveryRepositoryAdapter =
     new InMemoryDeliveryRepositoryAdapter();
@@ -144,17 +166,15 @@ const fixture = async (
     deliveryRepository,
     expansionJobRepository,
   });
-  const directory: PagedRecipientDirectory = new PagedRecipientDirectory(pages);
+  const idGenerator: SequentialIdGenerator = new SequentialIdGenerator();
+  const newWorker = (): ExpandRecipientsUseCase =>
+    new ExpandRecipientsUseCase(unitOfWork, directory, idGenerator, new FixedClock());
   return {
     deliveryRepository,
     expansionJobRepository,
     directory,
-    useCase: new ExpandRecipientsUseCase(
-      unitOfWork,
-      directory,
-      new SequentialIdGenerator(),
-      new FixedClock(),
-    ),
+    useCase: newWorker(),
+    newWorker,
   };
 };
 
@@ -250,9 +270,61 @@ describe('ExpandRecipientsUseCase', () => {
     expect(directory.requested).toEqual([]);
   });
 
-  it.todo(
-    'UC-07 확장 도중 워커가 멈췄다 / 다른 워커가 확장을 이어받는다 → 저장된 cursor부터 이어서 읽고 같은 수신자의 Delivery는 중복 생성되지 않는다',
-  );
+  it('UC-07 확장 도중 워커가 멈췄다 / 다른 워커가 확장을 이어받는다 → 저장된 cursor부터 이어서 읽고 같은 수신자의 Delivery는 중복 생성되지 않는다', async (): Promise<void> => {
+    const { deliveryRepository, directory, useCase, newWorker }: Fixture = await fixture(
+      TWO_PAGES,
+      new InMemoryExpansionJobRepositoryAdapter(),
+      new FailingOnceDirectory(TWO_PAGES, 'next:Mw'),
+    );
+    await expect(useCase.execute(alarmId(ALARM_ID))).rejects.toThrow('user API is unavailable');
+
+    const result: ExpansionResult = await newWorker().execute(alarmId(ALARM_ID));
+
+    expect(result).toEqual({ kind: 'completed' });
+    expect(directory.requested).toEqual(['first', 'next:Mw', 'next:Mw']);
+    expect(await summaries(deliveryRepository)).toEqual([
+      pendingBulk('u_000001'),
+      pendingBulk('u_000002'),
+      pendingBulk('u_000003'),
+    ]);
+  });
+
+  it('UC-07 cursor 저장에 실패한 뒤 다른 워커가 이어받아도 Delivery는 중복 생성되지 않는다', async (): Promise<void> => {
+    const { deliveryRepository, useCase, newWorker }: Fixture = await fixture(
+      TWO_PAGES,
+      new FailingOnSecondProgressRepository(),
+    );
+    await expect(useCase.execute(alarmId(ALARM_ID))).rejects.toThrow(
+      'expansion progress storage is unavailable',
+    );
+
+    expect(await newWorker().execute(alarmId(ALARM_ID))).toEqual({ kind: 'completed' });
+    expect(await summaries(deliveryRepository)).toEqual([
+      pendingBulk('u_000001'),
+      pendingBulk('u_000002'),
+      pendingBulk('u_000003'),
+    ]);
+  });
+
+  it('UC-07 같은 알림을 두 워커가 동시에 확장하면 한 워커만 진행하고 Delivery는 중복 생성되지 않는다', async (): Promise<void> => {
+    const { deliveryRepository, useCase, newWorker }: Fixture = await fixture(TWO_PAGES);
+
+    const results: ReadonlyArray<ExpansionResult> = await Promise.all([
+      useCase.execute(alarmId(ALARM_ID)),
+      newWorker().execute(alarmId(ALARM_ID)),
+    ]);
+
+    expect(results.map((result: ExpansionResult): string => result.kind).toSorted()).toEqual([
+      'completed',
+      'superseded',
+    ]);
+    expect(await summaries(deliveryRepository)).toEqual([
+      pendingBulk('u_000001'),
+      pendingBulk('u_000002'),
+      pendingBulk('u_000003'),
+    ]);
+  });
+
   it.todo(
     'UC-08 확장 중 알림이 취소됐다 / 다음 페이지를 처리한다 → 확장을 멈추고 더 이상 Delivery를 만들지 않는다',
   );
