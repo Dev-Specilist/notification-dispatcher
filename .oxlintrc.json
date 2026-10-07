@@ -61,6 +61,7 @@
       {
         "assertFunctionNames": ["expect", "expectTypeOf", "spec"]
       }
-    ]
+    ],
+    "vitest/warn-todo": "warn"
   }
 }

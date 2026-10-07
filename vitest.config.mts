@@ -26,10 +26,11 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      exclude: ['src/**/*.spec.ts', 'src/main.ts', 'src/worker.ts'],
+      exclude: ['src/**/*.spec.ts', 'src/**/*.int-spec.ts', 'src/main.ts', 'src/worker.ts'],
     },
     projects: [
       { extends: true, test: { name: 'unit', include: ['src/**/*.spec.ts'] } },
+      { extends: true, test: { name: 'integration', include: ['src/**/*.int-spec.ts'] } },
       {
         extends: true,
         test: {

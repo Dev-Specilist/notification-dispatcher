@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "Bulk notification dispatcher (api + worker)",
   "scripts": {
-    "build": "rm -rf dist && swc src -d dist --strip-leading-paths --ignore \"**/*.spec.ts\"",
-    "build:watch": "swc src -d dist --strip-leading-paths --ignore \"**/*.spec.ts\" --watch",
+    "build": "rm -rf dist && swc src -d dist --strip-leading-paths --ignore \"**/*.spec.ts\" --ignore \"**/*.int-spec.ts\"",
+    "build:watch": "swc src -d dist --strip-leading-paths --ignore \"**/*.spec.ts\" --ignore \"**/*.int-spec.ts\" --watch",
     "dev:api": "concurrently -k -n swc,api \"pnpm build:watch\" \"node --watch-path=dist --enable-source-maps dist/main.js\"",
     "dev:worker": "concurrently -k -n swc,worker \"pnpm build:watch\" \"node --watch-path=dist --enable-source-maps dist/worker.js\"",
     "start:api": "node --enable-source-maps dist/main.js",
@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write src test",
     "test": "vitest run --project unit --passWithNoTests",
+    "test:int": "vitest run --project integration --passWithNoTests",
     "test:e2e": "vitest run --project e2e --passWithNoTests",
     "format:check": "prettier --check src test",
     "test:watch": "vitest",
