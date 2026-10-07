@@ -147,7 +147,7 @@ Alarm      DRAFT ─dispatch─▶ DISPATCHING ─(expanded + 0 unsettled)─▶
 
 Delivery   PENDING ─claim(leaseToken)─▶ IN_FLIGHT ─202──────────────▶ SENT
               ▲                            │ ─400───────────────────▶ FAILED
-              │                            │ ─500/503/429─▶ RETRY_WAIT ─(due)─▶ PENDING
+              │                            │ ─500/503/429─▶ RETRY_WAIT ─(due, claim)─▶ IN_FLIGHT
               │                            │ ─timeout/lease expired─▶ UNKNOWN
               └────────────────────────────┘
            UNKNOWN ─(after reconcileAt) found──▶ SENT

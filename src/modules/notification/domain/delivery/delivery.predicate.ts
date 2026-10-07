@@ -1,5 +1,7 @@
 import {
+  AttemptLimit,
   DeliveryId,
+  JitterRatio,
   LeaseToken,
   MessageId,
 } from '@/modules/notification/domain/delivery/delivery.type';
@@ -20,5 +22,13 @@ export class DeliveryPredicates {
 
   static isMessageId(value: string): value is MessageId {
     return DeliveryPredicates.NON_BLANK.test(value);
+  }
+
+  static isAttemptLimit(value: number): value is AttemptLimit {
+    return Number.isSafeInteger(value) && value >= 1;
+  }
+
+  static isJitterRatio(value: number): value is JitterRatio {
+    return Number.isFinite(value) && value >= 0 && value < 1;
   }
 }

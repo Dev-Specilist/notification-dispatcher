@@ -5,10 +5,13 @@ import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
+import { RetryPolicy } from '@/modules/notification/domain/delivery/retry-policy';
 import {
+  AttemptLimit,
   DeliveryId,
   DeliverySnapshot,
   DeliveryTransition,
+  JitterRatio,
   LeaseToken,
   MessageId,
   PermanentFailureCode,
@@ -17,6 +20,8 @@ import {
 type StatusBuildCase = Readonly<[string, () => Delivery]>;
 
 type InvalidDurationCase = Readonly<[string, number]>;
+
+type RetryStep = 'TRANSIENT' | 'RATE_LIMITED';
 
 const T0_ISO: string = '2026-10-07T09:00:00.000Z';
 const CLAIMED_ISO: string = '2026-10-07T09:00:01.000Z';
@@ -30,8 +35,29 @@ const durationMs = (value: number): DurationMs => {
   return value;
 };
 
+const attemptLimit = (value: number): AttemptLimit => {
+  if (!DeliveryPredicates.isAttemptLimit(value)) {
+    throw new Error(`test fixture ${value} is not a valid AttemptLimit`);
+  }
+  return value;
+};
+
+const jitter = (value: number): JitterRatio => {
+  if (!DeliveryPredicates.isJitterRatio(value)) {
+    throw new Error(`test fixture ${value} is not a valid JitterRatio`);
+  }
+  return value;
+};
+
 const LEASE_MS: DurationMs = durationMs(60_000);
 const MAX_REQUEST_MS: DurationMs = durationMs(10_000);
+
+const retryPolicy = (maxAttempts: number): RetryPolicy =>
+  new RetryPolicy({
+    maxAttempts: attemptLimit(maxAttempts),
+    baseDelayMs: durationMs(1_000),
+    maxDelayMs: durationMs(8_000),
+  });
 
 const at = (iso: string): Date => new Date(iso);
 
@@ -278,9 +304,94 @@ describe('Delivery', () => {
     });
   });
 
-  it.todo(
-    'DLV-07 IN_FLIGHT Delivery / 429와 Retry-After: n을 받는다 → RETRY_WAIT가 되고 n초 뒤로 미뤄지며 시도 횟수는 되돌린다',
-  );
+  it('DLV-05 IN_FLIGHT Delivery / 500/503을 받는다 → RETRY_WAIT가 되고 지수 백오프(+jitter)로 다음 시도 시각이 정해진다', () => {
+    const delivery: Delivery = transitioned(
+      started().recordTransientFailure(TOKEN_A(), at(SETTLED_ISO), retryPolicy(5), jitter(0)),
+    );
+
+    expect(delivery.snapshot()).toMatchObject({
+      attempts: 1,
+      state: {
+        status: 'RETRY_WAIT',
+        cause: 'TRANSIENT_FAILURE',
+        retryAt: new Date(at(SETTLED_ISO).getTime() + 500),
+      },
+    });
+  });
+
+  it('DLV-06 최대 시도 횟수에 도달한 Delivery / 500/503을 받는다 → FAILED(RETRY_EXHAUSTED)가 된다', () => {
+    const delivery: Delivery = transitioned(
+      started().recordTransientFailure(TOKEN_A(), at(SETTLED_ISO), retryPolicy(1), jitter(0)),
+    );
+
+    expect(delivery.snapshot().state).toEqual({ status: 'FAILED', reason: 'RETRY_EXHAUSTED' });
+  });
+
+  it('DLV-07 IN_FLIGHT Delivery / 429와 Retry-After: n을 받는다 → RETRY_WAIT가 되고 n초 뒤로 미뤄지며 시도 횟수는 되돌린다', () => {
+    const delivery: Delivery = transitioned(
+      started().recordRateLimited(TOKEN_A(), at(SETTLED_ISO), durationMs(3_000)),
+    );
+
+    expect(delivery.snapshot()).toMatchObject({
+      attempts: 0,
+      state: {
+        status: 'RETRY_WAIT',
+        cause: 'RATE_LIMITED',
+        retryAt: new Date(at(SETTLED_ISO).getTime() + 3_000),
+      },
+    });
+  });
+
+  it('DLV-06 실패와 재시도를 반복하면 429는 횟수에 넣지 않고, 최대 시도 횟수에서 정확히 FAILED가 된다', () => {
+    const policy: RetryPolicy = retryPolicy(3);
+    const steps: ReadonlyArray<RetryStep> = ['TRANSIENT', 'RATE_LIMITED', 'TRANSIENT', 'TRANSIENT'];
+    const history: string[] = [];
+    let current: Delivery = pending();
+
+    steps.forEach((step: RetryStep, index: number): void => {
+      const now: Date = new Date(at(CLAIMED_ISO).getTime() + (index + 1) * 60_000);
+      const token: LeaseToken = leaseToken(String(index).padStart(2, '0'));
+      const inFlight: Delivery = transitioned(
+        transitioned(current.claim(token, now, LEASE_MS)).startRequest(token, now, MAX_REQUEST_MS),
+      );
+      current = transitioned(
+        step === 'TRANSIENT'
+          ? inFlight.recordTransientFailure(token, now, policy, jitter(0))
+          : inFlight.recordRateLimited(token, now, durationMs(1_000)),
+      );
+      const { attempts, state }: DeliverySnapshot = current.snapshot();
+      history.push(`${attempts}:${state.status}`);
+    });
+
+    expect(history).toEqual(['1:RETRY_WAIT', '1:RETRY_WAIT', '2:RETRY_WAIT', '3:FAILED']);
+  });
+
+  it('재시도 시각 전의 RETRY_WAIT Delivery는 claim할 수 없고, 시각이 지나면 claim할 수 있다', () => {
+    const waiting: Delivery = transitioned(
+      started().recordRateLimited(TOKEN_A(), at(SETTLED_ISO), durationMs(3_000)),
+    );
+    const due: Date = new Date(at(SETTLED_ISO).getTime() + 3_000);
+
+    expect(waiting.claim(TOKEN_B(), new Date(due.getTime() - 1), LEASE_MS)).toEqual({
+      kind: 'rejected',
+      reason: 'NOT_CLAIMABLE',
+    });
+    expect(transitioned(waiting.claim(TOKEN_B(), due, LEASE_MS)).snapshot().state).toMatchObject({
+      status: 'IN_FLIGHT',
+      lease: { token: TOKEN_B() },
+    });
+  });
+
+  it('요청을 시작하지 않았거나 lease가 다르면 재시도 결과도 기록할 수 없다', () => {
+    expect(
+      claimed().recordTransientFailure(TOKEN_A(), at(SETTLED_ISO), retryPolicy(5), jitter(0)),
+    ).toEqual({ kind: 'rejected', reason: 'REQUEST_NOT_STARTED' });
+    expect(started().recordRateLimited(TOKEN_B(), at(SETTLED_ISO), durationMs(3_000))).toEqual({
+      kind: 'rejected',
+      reason: 'LEASE_MISMATCH',
+    });
+  });
+
   it.todo(
     'DLV-08 IN_FLIGHT Delivery / 응답 타임아웃·연결 오류가 난다 → 재전송하지 않고 UNKNOWN이 되며 reconcile 가능 시각(요청 시작 + RECONCILE_DELAY_MS)이 기록된다',
   );

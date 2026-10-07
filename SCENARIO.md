@@ -41,7 +41,7 @@ Alarm
 Delivery
   PENDING ──claim(leaseToken)──▶ IN_FLIGHT ──202──────────────────────▶ SENT
      ▲                              │ ──400 (영구 실패)────────────────▶ FAILED
-     │                              │ ──500/503/429─▶ RETRY_WAIT ─(재시도 시각 도래)─▶ PENDING
+     │                              │ ──500/503/429─▶ RETRY_WAIT ─(재시도 시각 이후 바로 claim)─▶ IN_FLIGHT
      │                              │ ──타임아웃·연결 오류·lease 만료─▶ UNKNOWN
      └──────────────────────────────┘
   UNKNOWN ──(reconcile 가능 시각 이후) 내역 있음──▶ SENT

@@ -1,3 +1,4 @@
+import { RetryPolicy } from '@/modules/notification/domain/delivery/retry-policy';
 import {
   DeliveryRejected,
   DeliveryRejectionReason,
@@ -5,6 +6,7 @@ import {
   DeliveryState,
   DeliveryTransition,
   InFlightState,
+  JitterRatio,
   LeaseToken,
   MessageId,
   NewDelivery,
@@ -37,7 +39,7 @@ export class Delivery {
   }
 
   claim(token: LeaseToken, now: Readonly<Date>, leaseMs: DurationMs): DeliveryTransition {
-    if (this.props.state.status !== 'PENDING') {
+    if (!this.isClaimableAt(now)) {
       return Delivery.reject('NOT_CLAIMABLE');
     }
     return this.transitionTo(this.props.attempts, {
@@ -94,12 +96,57 @@ export class Delivery {
     return this.transitionTo(this.props.attempts, { status: 'FAILED', reason });
   }
 
+  recordTransientFailure(
+    token: LeaseToken,
+    now: Readonly<Date>,
+    policy: RetryPolicy,
+    jitter: JitterRatio,
+  ): DeliveryTransition {
+    const check: LeaseCheck = this.checkStartedRequest(token);
+    if (check.kind === 'rejected') {
+      return check;
+    }
+    const { attempts }: DeliverySnapshot = this.props;
+    if (policy.isExhausted(attempts)) {
+      return this.transitionTo(attempts, { status: 'FAILED', reason: 'RETRY_EXHAUSTED' });
+    }
+    return this.transitionTo(attempts, {
+      status: 'RETRY_WAIT',
+      retryAt: new Date(now.getTime() + policy.delayFor(attempts, jitter)),
+      cause: 'TRANSIENT_FAILURE',
+    });
+  }
+
+  recordRateLimited(
+    token: LeaseToken,
+    now: Readonly<Date>,
+    retryAfterMs: DurationMs,
+  ): DeliveryTransition {
+    const check: LeaseCheck = this.checkStartedRequest(token);
+    if (check.kind === 'rejected') {
+      return check;
+    }
+    return this.transitionTo(Math.max(0, this.props.attempts - 1), {
+      status: 'RETRY_WAIT',
+      retryAt: new Date(now.getTime() + retryAfterMs),
+      cause: 'RATE_LIMITED',
+    });
+  }
+
   snapshot(): DeliverySnapshot {
     return {
       ...this.props,
       state: Delivery.copyState(this.props.state),
       createdAt: Delivery.copyDate(this.props.createdAt),
     };
+  }
+
+  private isClaimableAt(now: Readonly<Date>): boolean {
+    const { state }: DeliverySnapshot = this.props;
+    if (state.status === 'PENDING') {
+      return true;
+    }
+    return state.status === 'RETRY_WAIT' && state.retryAt.getTime() <= now.getTime();
   }
 
   private checkStartedRequest(token: LeaseToken): LeaseCheck {
@@ -141,6 +188,8 @@ export class Delivery {
           lease: { token: state.lease.token, expiresAt: Delivery.copyDate(state.lease.expiresAt) },
           request: Delivery.copyRequest(state.request),
         };
+      case 'RETRY_WAIT':
+        return { ...state, retryAt: Delivery.copyDate(state.retryAt) };
       case 'SENT':
         return { ...state, sentAt: Delivery.copyDate(state.sentAt) };
       case 'FAILED':

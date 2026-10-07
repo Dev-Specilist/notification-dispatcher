@@ -8,9 +8,17 @@ export type LeaseToken = string & Brand<'LeaseToken'>;
 
 export type MessageId = string & Brand<'MessageId'>;
 
+export type AttemptLimit = number & Brand<'AttemptLimit'>;
+
+export type JitterRatio = number & Brand<'JitterRatio'>;
+
 export type DeliveryPriority = 'URGENT' | 'BULK';
 
 export type PermanentFailureCode = 'RECIPIENT_BLOCKED' | 'UNKNOWN_RECIPIENT' | 'INVALID_REQUEST';
+
+export type FailureReason = PermanentFailureCode | 'RETRY_EXHAUSTED';
+
+export type RetryCause = 'TRANSIENT_FAILURE' | 'RATE_LIMITED';
 
 export interface Lease {
   readonly token: LeaseToken;
@@ -38,6 +46,12 @@ export interface InFlightState {
   readonly request: RequestRecord;
 }
 
+export interface RetryWaitState {
+  readonly status: 'RETRY_WAIT';
+  readonly retryAt: Date;
+  readonly cause: RetryCause;
+}
+
 export interface SentState {
   readonly status: 'SENT';
   readonly messageId: MessageId;
@@ -47,10 +61,10 @@ export interface SentState {
 
 export interface FailedState {
   readonly status: 'FAILED';
-  readonly reason: PermanentFailureCode;
+  readonly reason: FailureReason;
 }
 
-export type DeliveryState = PendingState | InFlightState | SentState | FailedState;
+export type DeliveryState = PendingState | InFlightState | RetryWaitState | SentState | FailedState;
 
 export type DeliveryStatus = DeliveryState['status'];
 
