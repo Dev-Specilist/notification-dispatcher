@@ -55,6 +55,7 @@
     "oxlint-tsgolint": "^7.0.2003",
     "pactum": "^3.9.1",
     "prettier": "^3.9.9",
+    "testcontainers": "^12.2.0",
     "typescript": "^7.0.2",
     "unplugin-swc": "^2.0.0",
     "vitest": "^5.0.3"
