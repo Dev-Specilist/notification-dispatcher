@@ -298,6 +298,11 @@ export class Delivery {
     return Delivery.isSettled(this.props.state);
   }
 
+  hasExpiredLeaseAt(now: Readonly<Date>): boolean {
+    const { state }: DeliverySnapshot = this.props;
+    return state.status === 'IN_FLIGHT' && state.lease.expiresAt.getTime() <= now.getTime();
+  }
+
   isClaimableAt(now: Readonly<Date>): boolean {
     const { state }: DeliverySnapshot = this.props;
     if (state.status === 'PENDING') {

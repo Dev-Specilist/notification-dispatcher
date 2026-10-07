@@ -459,8 +459,4 @@ describe('ReconcileNextDeliveryUseCase', () => {
     });
     expect((await stateOf(deliveryRepository)).status).toBe('CANCELLED');
   });
-
-  it.todo(
-    'UC-15 외부 발송이 성공한 직후 결과 저장 전에 워커가 멈췄다 / lease 만료 후 복구와 reconcile을 실행한다 → 재전송 없이 SENT로 확정된다',
-  );
 });

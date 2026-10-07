@@ -16,6 +16,8 @@ export abstract class DeliveryRepositoryPort {
 
   abstract findNextClaimable(now: Readonly<Date>): Promise<DeliveryCandidate>;
 
+  abstract findNextExpiredLease(now: Readonly<Date>): Promise<DeliveryCandidate>;
+
   abstract findNextReconcilable(now: Readonly<Date>): Promise<DeliveryCandidate>;
 
   abstract saveReconciled(delivery: Delivery, previous: Delivery): Promise<ReconciledSave>;

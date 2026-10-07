@@ -64,6 +64,25 @@ export class InMemoryDeliveryRepositoryAdapter implements DeliveryRepositoryPort
     return Promise.resolve({ kind: 'found', delivery: next });
   }
 
+  findNextExpiredLease(now: Readonly<Date>): Promise<DeliveryCandidate> {
+    const expired: ReadonlyArray<Delivery> = [...this.deliveriesById.values()].filter(
+      (delivery: Delivery): boolean => delivery.hasExpiredLeaseAt(now),
+    );
+    if (expired.length === 0) {
+      return Promise.resolve({ kind: 'none' });
+    }
+    const [first, ...rest]: ReadonlyArray<Delivery> = expired;
+    const next: Delivery = rest.reduce(
+      (earliest: Delivery, candidate: Delivery): Delivery =>
+        InMemoryDeliveryRepositoryAdapter.leaseExpiryOf(candidate) <
+        InMemoryDeliveryRepositoryAdapter.leaseExpiryOf(earliest)
+          ? candidate
+          : earliest,
+      first,
+    );
+    return Promise.resolve({ kind: 'found', delivery: next });
+  }
+
   findNextReconcilable(now: Readonly<Date>): Promise<DeliveryCandidate> {
     const reconcilable: ReadonlyArray<Delivery> = [...this.deliveriesById.values()].filter(
       (delivery: Delivery): boolean => delivery.isReconcilableAt(now),
@@ -174,6 +193,13 @@ export class InMemoryDeliveryRepositoryAdapter implements DeliveryRepositoryPort
       InMemoryDeliveryRepositoryAdapter.reconcileAtOf(left) -
       InMemoryDeliveryRepositoryAdapter.reconcileAtOf(right);
     return gap === 0 ? left.snapshot().id.localeCompare(right.snapshot().id) : gap;
+  }
+
+  private static leaseExpiryOf(delivery: Delivery): number {
+    const { state }: DeliverySnapshot = delivery.snapshot();
+    return state.status === 'IN_FLIGHT'
+      ? state.lease.expiresAt.getTime()
+      : Number.POSITIVE_INFINITY;
   }
 
   private static reconcileAtOf(delivery: Delivery): number {
