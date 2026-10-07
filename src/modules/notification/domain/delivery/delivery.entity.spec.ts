@@ -6,6 +6,7 @@ import { DeliveryPredicates } from '@/modules/notification/domain/delivery/deliv
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
 import { RetryPolicy } from '@/modules/notification/domain/delivery/retry-policy';
+import { RetryPolicyCreation } from '@/modules/notification/domain/delivery/retry-policy.type';
 import {
   AttemptLimit,
   DeliveryId,
@@ -54,12 +55,17 @@ const MAX_REQUEST_MS: DurationMs = durationMs(10_000);
 const RECONCILE_DELAY_MS: DurationMs = durationMs(35_000);
 const LEASE_EXPIRED_ISO: string = '2026-10-07T09:01:01.000Z';
 
-const retryPolicy = (maxAttempts: number): RetryPolicy =>
-  new RetryPolicy({
+const retryPolicy = (maxAttempts: number): RetryPolicy => {
+  const creation: RetryPolicyCreation = RetryPolicy.create({
     maxAttempts: attemptLimit(maxAttempts),
     baseDelayMs: durationMs(1_000),
     maxDelayMs: durationMs(8_000),
   });
+  if (creation.kind !== 'created') {
+    throw new Error(`test fixture policy is invalid: ${creation.error.code}`);
+  }
+  return creation.policy;
+};
 
 const at = (iso: string): Date => new Date(iso);
 

@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import { AttemptLimit, JitterRatio } from '@/modules/notification/domain/delivery/delivery.type';
 import { RetryPolicy } from '@/modules/notification/domain/delivery/retry-policy';
+import {
+  RetryPolicyCreation,
+  RetryPolicyOptions,
+} from '@/modules/notification/domain/delivery/retry-policy.type';
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
 
@@ -30,12 +34,20 @@ const jitter = (value: number): JitterRatio => {
   return value;
 };
 
-const policy = (): RetryPolicy =>
-  new RetryPolicy({
-    maxAttempts: attemptLimit(5),
-    baseDelayMs: durationMs(1_000),
-    maxDelayMs: durationMs(8_000),
-  });
+const options = (baseMs: number, maxMs: number): RetryPolicyOptions => ({
+  maxAttempts: attemptLimit(5),
+  baseDelayMs: durationMs(baseMs),
+  maxDelayMs: durationMs(maxMs),
+});
+
+const created = (creation: RetryPolicyCreation): RetryPolicy => {
+  if (creation.kind !== 'created') {
+    throw new Error(`expected created but got ${creation.error.code}`);
+  }
+  return creation.policy;
+};
+
+const policy = (): RetryPolicy => created(RetryPolicy.create(options(1_000, 8_000)));
 
 describe('RetryPolicy', () => {
   it.each<DelayCase>([
@@ -52,6 +64,30 @@ describe('RetryPolicy', () => {
       expect(policy().delayFor(attempts, jitter(ratio))).toBe(expectedMs);
     },
   );
+
+  it('기본 지연이 최대 지연보다 크면 정책을 만들 수 없다', () => {
+    expect(RetryPolicy.create(options(9_000, 8_000))).toEqual({
+      kind: 'rejected',
+      error: { code: 'BASE_DELAY_EXCEEDS_MAX', baseDelayMs: 9_000, maxDelayMs: 8_000 },
+    });
+  });
+
+  it('기본 지연과 최대 지연이 같으면 정책을 만들 수 있다', () => {
+    expect(RetryPolicy.create(options(8_000, 8_000)).kind).toBe('created');
+  });
+
+  it('정책을 만든 뒤 넘긴 옵션 객체가 바뀌어도 정책은 바뀌지 않는다', () => {
+    const given: RetryPolicyOptions = options(1_000, 8_000);
+    const retryPolicy: RetryPolicy = created(RetryPolicy.create(given));
+
+    Object.assign(given, { baseDelayMs: durationMs(4_000) });
+
+    expect(retryPolicy.delayFor(1, jitter(0))).toBe(500);
+  });
+
+  it('지연 계산 결과의 타입은 검증된 시간 값(DurationMs)이다', () => {
+    expectTypeOf(policy().delayFor(1, jitter(0))).toEqualTypeOf<DurationMs>();
+  });
 
   it('DLV-05 계산된 지연은 항상 유효한 시간 값이다', () => {
     const delayMs: number = policy().delayFor(1, jitter(0));
