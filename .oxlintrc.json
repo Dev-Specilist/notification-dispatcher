@@ -1,0 +1,66 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "oxc", "unicorn", "import", "vitest"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error"
+  },
+  "ignorePatterns": ["dist", "coverage", "node_modules"],
+  "rules": {
+    "typescript/consistent-type-assertions": [
+      "error",
+      {
+        "assertionStyle": "never"
+      }
+    ],
+    "typescript/no-non-null-assertion": "error",
+    "oxc/no-optional-chaining": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-empty-object-type": "error",
+    "typescript/explicit-function-return-type": [
+      "error",
+      {
+        "allowExpressions": true,
+        "allowTypedFunctionExpressions": true
+      }
+    ],
+    "typescript/no-restricted-types": [
+      "error",
+      {
+        "types": {
+          "unknown": "unknown 대신 구체 타입이나 타입 가드(is)를 쓴다",
+          "null": "null 대신 기본값이나 discriminated union을 쓴다",
+          "undefined": "undefined 대신 기본값이나 discriminated union을 쓴다"
+        }
+      }
+    ],
+    "typescript/no-floating-promises": "error",
+    "typescript/switch-exhaustiveness-check": "error",
+    "eslint/no-console": "error",
+    "eslint/no-inline-comments": "error",
+    "eslint/no-warning-comments": "error",
+    "typescript/ban-ts-comment": "error",
+    "eslint/no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }
+    ],
+    "import/no-relative-parent-imports": "error",
+    "import/no-cycle": "error",
+    "typescript/no-extraneous-class": [
+      "error",
+      {
+        "allowWithDecorator": true,
+        "allowStaticOnly": true
+      }
+    ],
+    "vitest/expect-expect": [
+      "error",
+      {
+        "assertFunctionNames": ["expect", "expectTypeOf", "spec"]
+      }
+    ]
+  }
+}
