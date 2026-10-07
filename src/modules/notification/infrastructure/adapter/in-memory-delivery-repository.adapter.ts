@@ -23,6 +23,11 @@ export class InMemoryDeliveryRepositoryAdapter implements DeliveryRepositoryPort
   private readonly deliveryIdsByRecipient: Map<string, DeliveryId> = new Map<string, DeliveryId>();
 
   saveAll(deliveries: ReadonlyArray<Delivery>): Promise<void> {
+    if (!this.keepsOneDeliveryPerRecipient(deliveries)) {
+      return Promise.reject(
+        new Error('a delivery for the same alarm and recipient already exists with another id'),
+      );
+    }
     deliveries.forEach((delivery: Delivery): void => this.store(delivery));
     return Promise.resolve();
   }
@@ -40,9 +45,11 @@ export class InMemoryDeliveryRepositoryAdapter implements DeliveryRepositoryPort
 
   findByAlarmId(alarmId: AlarmId): Promise<ReadonlyArray<Delivery>> {
     return Promise.resolve(
-      [...this.deliveriesById.values()].filter(
-        (delivery: Delivery): boolean => delivery.snapshot().alarmId === alarmId,
-      ),
+      [...this.deliveriesById.values()]
+        .filter((delivery: Delivery): boolean => delivery.snapshot().alarmId === alarmId)
+        .toSorted((left: Delivery, right: Delivery): number =>
+          InMemoryDeliveryRepositoryAdapter.byCreation(left, right),
+        ),
     );
   }
 
@@ -164,6 +171,21 @@ export class InMemoryDeliveryRepositoryAdapter implements DeliveryRepositoryPort
     );
   }
 
+  private keepsOneDeliveryPerRecipient(deliveries: ReadonlyArray<Delivery>): boolean {
+    const idsByRecipient: Map<string, DeliveryId> = new Map<string, DeliveryId>(
+      this.deliveryIdsByRecipient,
+    );
+    return deliveries.every((delivery: Delivery): boolean => {
+      const { id }: DeliverySnapshot = delivery.snapshot();
+      const recipientKey: string = InMemoryDeliveryRepositoryAdapter.recipientKeyOf(delivery);
+      if (idsByRecipient.has(recipientKey) && idsByRecipient.get(recipientKey) !== id) {
+        return false;
+      }
+      idsByRecipient.set(recipientKey, id);
+      return true;
+    });
+  }
+
   private store(delivery: Delivery): void {
     const { id }: DeliverySnapshot = delivery.snapshot();
     this.deliveriesById.set(id, delivery);
@@ -212,6 +234,13 @@ export class InMemoryDeliveryRepositoryAdapter implements DeliveryRepositoryPort
     return state.status === 'UNKNOWN'
       ? `UNKNOWN:${state.reconcileAt.toISOString()}:${state.lookupFailures}`
       : state.status;
+  }
+
+  private static byCreation(left: Delivery, right: Delivery): number {
+    const first: DeliverySnapshot = left.snapshot();
+    const second: DeliverySnapshot = right.snapshot();
+    const ageGap: number = first.createdAt.getTime() - second.createdAt.getTime();
+    return ageGap === 0 ? first.id.localeCompare(second.id) : ageGap;
   }
 
   private static priorityRank({ priority }: DeliverySnapshot): number {

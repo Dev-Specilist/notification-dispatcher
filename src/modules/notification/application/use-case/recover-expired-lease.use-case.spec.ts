@@ -69,10 +69,10 @@ const alarmId = (): AlarmId => {
   return ALARM_ID;
 };
 
-const recipientId = (): RecipientId => {
-  const value: string = 'u_000001';
+const recipientId = (index: number): RecipientId => {
+  const value: string = `u_${String(index).padStart(6, '0')}`;
   if (!AlarmPredicates.isRecipientId(value)) {
-    throw new Error('test fixture is not a valid RecipientId');
+    throw new Error(`test fixture ${value} is not a valid RecipientId`);
   }
   return value;
 };
@@ -151,7 +151,12 @@ const dispatchedAlarm = (): Alarm => {
 
 const requestStarted = (index: number = 1, startedIso: string = STARTED_ISO): Delivery => {
   const pending: Delivery = Delivery.create(
-    { id: deliveryId(index), alarmId: alarmId(), recipientId: recipientId(), priority: 'BULK' },
+    {
+      id: deliveryId(index),
+      alarmId: alarmId(),
+      recipientId: recipientId(index),
+      priority: 'BULK',
+    },
     at(CREATED_ISO),
   );
   const claimed: Delivery = transitioned(

@@ -55,6 +55,27 @@ export class Delivery {
     });
   }
 
+  static reconstitute(snapshot: Readonly<DeliverySnapshot>): Delivery {
+    const {
+      id,
+      alarmId,
+      recipientId,
+      priority,
+      attempts,
+      state,
+      createdAt,
+    }: Readonly<DeliverySnapshot> = snapshot;
+    return new Delivery({
+      id,
+      alarmId,
+      recipientId,
+      priority,
+      attempts,
+      state: Delivery.copyState(state),
+      createdAt: Delivery.copyDate(createdAt),
+    });
+  }
+
   claim(token: LeaseToken, now: Readonly<Date>, leaseMs: DurationMs): DeliveryTransition {
     if (!this.isClaimableAt(now)) {
       return Delivery.reject('NOT_CLAIMABLE');

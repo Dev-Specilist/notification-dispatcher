@@ -939,4 +939,44 @@ describe('Delivery', () => {
       unconfirmedAt: at(UNCONFIRMED_ISO),
     });
   });
+
+  it.each<StatusBuildCase>([
+    ['PENDING', pending],
+    ['IN_FLIGHT(요청 전)', claimed],
+    ['IN_FLIGHT(요청 후)', started],
+    ['RETRY_WAIT', retryWaiting],
+    ['UNKNOWN', unknownAfterTimeout],
+    ['SENT', sent],
+    ['FAILED', failed],
+    ['UNCONFIRMED', unconfirmed],
+    ['CANCELLED', cancelled],
+  ])(
+    '저장된 %s Delivery의 snapshot으로 복원하면 같은 snapshot을 가진 Delivery가 된다',
+    (_status: string, build: () => Delivery) => {
+      const original: Delivery = build();
+
+      expect(Delivery.reconstitute(original.snapshot()).snapshot()).toEqual(original.snapshot());
+    },
+  );
+
+  it('복원에 넘긴 snapshot을 나중에 바꿔도 복원한 Delivery는 바뀌지 않는다', () => {
+    const snapshot: DeliverySnapshot = started().snapshot();
+    const delivery: Delivery = Delivery.reconstitute(snapshot);
+
+    snapshot.createdAt.setUTCFullYear(1990);
+    if (snapshot.state.status === 'IN_FLIGHT') {
+      snapshot.state.lease.expiresAt.setUTCFullYear(1990);
+    }
+
+    expect(delivery.snapshot()).toEqual(started().snapshot());
+  });
+
+  it('복원한 Delivery도 lease fencing 규칙을 그대로 따른다', () => {
+    const delivery: Delivery = Delivery.reconstitute(started().snapshot());
+
+    expect(delivery.recordAccepted(TOKEN_B(), messageId(), at(SETTLED_ISO))).toEqual({
+      kind: 'rejected',
+      reason: 'LEASE_MISMATCH',
+    });
+  });
 });

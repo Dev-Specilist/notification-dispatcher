@@ -1,7 +1,9 @@
 import type { NodePgQueryResultHKT } from 'drizzle-orm/node-postgres';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { notificationSchema } from '@/modules/notification/infrastructure/persistence/notification.schema';
+import type { PgInsertValue, PgUpdateSetSource } from 'drizzle-orm/pg-core';
 import type { alarms } from '@/modules/notification/infrastructure/persistence/alarm.table';
+import type { deliveries } from '@/modules/notification/infrastructure/persistence/delivery.table';
 
 export type NotificationSchema = typeof notificationSchema;
 
@@ -10,3 +12,9 @@ export type NotificationDatabase = PgDatabase<NodePgQueryResultHKT, Notification
 export type AlarmRow = typeof alarms.$inferSelect;
 
 export type AlarmInsert = typeof alarms.$inferInsert;
+
+export type DeliveryRow = typeof deliveries.$inferSelect;
+
+export type DeliveryInsert = PgInsertValue<typeof deliveries>;
+
+export type DeliveryUpdate = PgUpdateSetSource<typeof deliveries>;

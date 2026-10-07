@@ -1,0 +1,45 @@
+CREATE TABLE "deliveries" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"alarm_id" uuid NOT NULL,
+	"recipient_id" text NOT NULL,
+	"priority" text NOT NULL,
+	"priority_rank" smallint GENERATED ALWAYS AS (CASE priority WHEN 'URGENT' THEN 0 ELSE 1 END) STORED,
+	"attempts" integer NOT NULL,
+	"status" text NOT NULL,
+	"lease_token" uuid,
+	"lease_expires_at" timestamp with time zone,
+	"request_started_at" timestamp with time zone,
+	"retry_at" timestamp with time zone,
+	"retry_cause" text,
+	"unknown_since" timestamp with time zone,
+	"reconcile_at" timestamp with time zone,
+	"lookup_failures" integer,
+	"message_id" text,
+	"sent_at" timestamp with time zone,
+	"duplicate_count" integer,
+	"failure_reason" text,
+	"unconfirmed_at" timestamp with time zone,
+	"cancelled_at" timestamp with time zone,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "deliveries_alarm_recipient_unique" UNIQUE("alarm_id","recipient_id"),
+	CONSTRAINT "deliveries_priority_check" CHECK ("deliveries"."priority" IN ('URGENT', 'BULK')),
+	CONSTRAINT "deliveries_status_check" CHECK ("deliveries"."status" IN ('PENDING', 'IN_FLIGHT', 'RETRY_WAIT', 'UNKNOWN', 'SENT', 'FAILED', 'UNCONFIRMED', 'CANCELLED')),
+	CONSTRAINT "deliveries_attempts_check" CHECK ("deliveries"."attempts" >= 0),
+	CONSTRAINT "deliveries_retry_cause_check" CHECK ("deliveries"."retry_cause" IN ('TRANSIENT_FAILURE', 'RATE_LIMITED', 'NOT_DELIVERED')),
+	CONSTRAINT "deliveries_failure_reason_check" CHECK ("deliveries"."failure_reason" IN ('RECIPIENT_BLOCKED', 'UNKNOWN_RECIPIENT', 'INVALID_REQUEST', 'RETRY_EXHAUSTED')),
+	CONSTRAINT "deliveries_lookup_failures_check" CHECK ("deliveries"."lookup_failures" >= 0),
+	CONSTRAINT "deliveries_duplicate_count_check" CHECK ("deliveries"."duplicate_count" >= 0),
+	CONSTRAINT "deliveries_in_flight_columns_check" CHECK ("deliveries"."status" <> 'IN_FLIGHT' OR ("deliveries"."lease_token" IS NOT NULL AND "deliveries"."lease_expires_at" IS NOT NULL)),
+	CONSTRAINT "deliveries_retry_wait_columns_check" CHECK ("deliveries"."status" <> 'RETRY_WAIT' OR ("deliveries"."retry_at" IS NOT NULL AND "deliveries"."retry_cause" IS NOT NULL)),
+	CONSTRAINT "deliveries_unknown_columns_check" CHECK ("deliveries"."status" <> 'UNKNOWN' OR ("deliveries"."unknown_since" IS NOT NULL AND "deliveries"."reconcile_at" IS NOT NULL AND "deliveries"."lookup_failures" IS NOT NULL)),
+	CONSTRAINT "deliveries_sent_columns_check" CHECK ("deliveries"."status" <> 'SENT' OR ("deliveries"."message_id" IS NOT NULL AND "deliveries"."sent_at" IS NOT NULL AND "deliveries"."duplicate_count" IS NOT NULL)),
+	CONSTRAINT "deliveries_failed_columns_check" CHECK ("deliveries"."status" <> 'FAILED' OR "deliveries"."failure_reason" IS NOT NULL),
+	CONSTRAINT "deliveries_unconfirmed_columns_check" CHECK ("deliveries"."status" <> 'UNCONFIRMED' OR ("deliveries"."unknown_since" IS NOT NULL AND "deliveries"."unconfirmed_at" IS NOT NULL)),
+	CONSTRAINT "deliveries_cancelled_columns_check" CHECK ("deliveries"."status" <> 'CANCELLED' OR "deliveries"."cancelled_at" IS NOT NULL)
+);
+--> statement-breakpoint
+ALTER TABLE "deliveries" ADD CONSTRAINT "deliveries_alarm_id_alarms_id_fk" FOREIGN KEY ("alarm_id") REFERENCES "public"."alarms"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "deliveries_claimable_idx" ON "deliveries" USING btree ("priority_rank","created_at","id") WHERE "deliveries"."status" IN ('PENDING', 'RETRY_WAIT');--> statement-breakpoint
+CREATE INDEX "deliveries_reconcilable_idx" ON "deliveries" USING btree ("reconcile_at","id") WHERE "deliveries"."status" = 'UNKNOWN';--> statement-breakpoint
+CREATE INDEX "deliveries_leased_idx" ON "deliveries" USING btree ("lease_expires_at","id") WHERE "deliveries"."status" = 'IN_FLIGHT';
