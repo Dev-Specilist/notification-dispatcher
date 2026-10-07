@@ -26,15 +26,29 @@ export class MockMessageSenderAdapter implements MessageSenderPort {
 
   private static readonly RATE_LIMITED: number = 429;
 
+  private static readonly NOT_SENT_FAILURES: ReadonlyArray<number> = [500, 503];
+
   private static readonly DEFAULT_RETRY_AFTER_MS: number = 1_000;
 
   constructor(private readonly settings: Readonly<MockApiSettings>) {}
 
   async send(message: OutgoingMessage): Promise<SendOutcome> {
+    try {
+      return await this.request(message);
+    } catch (error) {
+      if (error instanceof TypeError || error instanceof DOMException) {
+        return { kind: 'indeterminate' };
+      }
+      throw error;
+    }
+  }
+
+  private async request(message: OutgoingMessage): Promise<SendOutcome> {
     const response: Response = await fetch(new URL('/v1/messages', this.settings.baseUrl), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(message),
+      signal: AbortSignal.timeout(this.settings.requestTimeoutMs),
     });
     if (response.status === MockMessageSenderAdapter.ACCEPTED) {
       return MockMessageSenderAdapter.accepted(
@@ -47,6 +61,9 @@ export class MockMessageSenderAdapter implements MessageSenderPort {
       );
     }
     await MockMessageSenderAdapter.discardBody(response);
+    if (MockMessageSenderAdapter.NOT_SENT_FAILURES.includes(response.status)) {
+      return { kind: 'transient-failure' };
+    }
     if (response.status === MockMessageSenderAdapter.RATE_LIMITED) {
       return {
         kind: 'rate-limited',
