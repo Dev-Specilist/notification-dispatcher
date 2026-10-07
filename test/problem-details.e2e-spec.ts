@@ -1,5 +1,14 @@
 import { afterAll, beforeAll, describe, it } from 'vitest';
-import { Body, Controller, Get, INestApplication, NotFoundException, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  INestApplication,
+  InternalServerErrorException,
+  NotFoundException,
+  Post,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { request, spec } from 'pactum';
 import { z } from 'zod';
@@ -28,6 +37,16 @@ class SampleController {
   @Get('boom')
   boom(): never {
     throw new Error('database password leaked in message');
+  }
+
+  @Get('boom-http')
+  boomHttp(): never {
+    throw new InternalServerErrorException('internal diagnostic leaked in message');
+  }
+
+  @Get('unavailable')
+  unavailable(): never {
+    throw new ServiceUnavailableException('db host 10.0.0.3 is down');
   }
 }
 
@@ -73,6 +92,18 @@ const INTERNAL_ERROR: ProblemDetails = {
   detail: '서버 내부 오류가 발생했습니다',
   instance: '/samples/boom',
   code: 'INTERNAL_SERVER_ERROR',
+  errors: [],
+};
+
+const INTERNAL_HTTP_ERROR: ProblemDetails = { ...INTERNAL_ERROR, instance: '/samples/boom-http' };
+
+const SERVICE_UNAVAILABLE: ProblemDetails = {
+  type: 'about:blank',
+  title: 'Service Unavailable',
+  status: 503,
+  detail: '서버 내부 오류가 발생했습니다',
+  instance: '/samples/unavailable',
+  code: 'SERVICE_UNAVAILABLE',
   errors: [],
 };
 
@@ -128,5 +159,21 @@ describe('RFC 9457 Problem Details 응답', () => {
       .expectStatus(500)
       .expectHeader('content-type', PROBLEM_JSON)
       .expectJson(INTERNAL_ERROR);
+  });
+
+  it('5xx HttpException도 내부 메시지를 숨기고 500을 반환한다', async (): Promise<void> => {
+    await spec()
+      .get('/samples/boom-http')
+      .expectStatus(500)
+      .expectHeader('content-type', PROBLEM_JSON)
+      .expectJson(INTERNAL_HTTP_ERROR);
+  });
+
+  it('5xx HttpException은 상태 코드는 유지하고 내부 메시지는 숨긴다', async (): Promise<void> => {
+    await spec()
+      .get('/samples/unavailable')
+      .expectStatus(503)
+      .expectHeader('content-type', PROBLEM_JSON)
+      .expectJson(SERVICE_UNAVAILABLE);
   });
 });

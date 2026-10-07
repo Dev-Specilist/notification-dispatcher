@@ -20,6 +20,7 @@ type HttpContext = ReturnType<ArgumentsHost['switchToHttp']>;
 export class ProblemDetailsFilter implements ExceptionFilter<ThrownValue> {
   private static readonly CONTENT_TYPE: string = 'application/problem+json; charset=utf-8';
   private static readonly SERVER_ERROR_FLOOR: number = 500;
+  private static readonly SERVER_ERROR_DETAIL: string = '서버 내부 오류가 발생했습니다';
 
   private readonly logger: Logger = new Logger('ProblemDetails');
 
@@ -54,13 +55,16 @@ export class ProblemDetailsFilter implements ExceptionFilter<ThrownValue> {
     if (exception instanceof HttpException) {
       const status: number = exception.getStatus();
       return ProblemDetailsFilter.problem(status, instance, {
-        detail: exception.message,
+        detail:
+          status >= ProblemDetailsFilter.SERVER_ERROR_FLOOR
+            ? ProblemDetailsFilter.SERVER_ERROR_DETAIL
+            : exception.message,
         code: ProblemDetailsFilter.codeOf(status),
         errors: [],
       });
     }
     return ProblemDetailsFilter.problem(HttpStatus.INTERNAL_SERVER_ERROR, instance, {
-      detail: '서버 내부 오류가 발생했습니다',
+      detail: ProblemDetailsFilter.SERVER_ERROR_DETAIL,
       code: 'INTERNAL_SERVER_ERROR',
       errors: [],
     });
