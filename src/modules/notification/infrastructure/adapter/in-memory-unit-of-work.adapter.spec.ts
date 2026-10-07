@@ -8,7 +8,13 @@ import {
 } from '@/modules/notification/domain/alarm/alarm.type';
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
-import { DeliveryId } from '@/modules/notification/domain/delivery/delivery.type';
+import {
+  DeliveryId,
+  DeliveryTransition,
+  LeaseToken,
+} from '@/modules/notification/domain/delivery/delivery.type';
+import { DurationPredicates } from '@/shared/domain/duration.predicate';
+import { DurationMs } from '@/shared/domain/duration.type';
 import { Rollback } from '@/modules/notification/infrastructure/adapter/rollback.type';
 import { ExpansionJobLookup } from '@/modules/notification/application/port/expansion-job-repository.type';
 import { TransactionRepositories } from '@/modules/notification/application/port/unit-of-work.type';
@@ -66,6 +72,32 @@ const pendingDelivery = (id: number, recipient: string): Delivery => {
     new Date(ENQUEUED_ISO),
   );
 };
+
+const leaseToken = (value: string): LeaseToken => {
+  if (!DeliveryPredicates.isLeaseToken(value)) {
+    throw new Error(`test fixture ${value} is not a valid LeaseToken`);
+  }
+  return value;
+};
+
+const LEASE_MS: number = 60_000;
+
+const leaseDuration = (): DurationMs => {
+  if (!DurationPredicates.isDurationMs(LEASE_MS)) {
+    throw new Error('test fixture lease is not a valid DurationMs');
+  }
+  return LEASE_MS;
+};
+
+const deliveryAfter = (transition: DeliveryTransition): Delivery => {
+  if (transition.kind !== 'transitioned') {
+    throw new Error(`test fixture delivery transition failed: ${transition.kind}`);
+  }
+  return transition.delivery;
+};
+
+const TOKEN_A: string = '9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7caa';
+const TOKEN_B: string = '9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7cbb';
 
 const recipientsOf = async (
   repository: InMemoryDeliveryRepositoryAdapter,
@@ -207,5 +239,53 @@ describe('InMemoryDeliveryRepositoryAdapter', () => {
         (delivery: Delivery): string => delivery.snapshot().id,
       ),
     ).toEqual(['00000000-0000-4000-8000-000000000002']);
+  });
+});
+
+describe('InMemoryDeliveryRepositoryAdapter.saveLeased', () => {
+  it('저장된 Delivery가 같은 leaseToken의 IN_FLIGHT일 때만 저장한다', async (): Promise<void> => {
+    const repository: InMemoryDeliveryRepositoryAdapter = new InMemoryDeliveryRepositoryAdapter();
+    const claimed: Delivery = deliveryAfter(
+      pendingDelivery(1, 'u_000001').claim(
+        leaseToken(TOKEN_A),
+        new Date(ENQUEUED_ISO),
+        leaseDuration(),
+      ),
+    );
+    await repository.saveAll([claimed]);
+
+    expect(
+      await repository.saveLeased(pendingDelivery(1, 'u_000001'), leaseToken(TOKEN_A)),
+    ).toEqual({ kind: 'saved' });
+  });
+
+  it('다른 워커가 같은 Delivery를 다시 claim했으면 이전 워커의 결과를 저장하지 않는다', async (): Promise<void> => {
+    const repository: InMemoryDeliveryRepositoryAdapter = new InMemoryDeliveryRepositoryAdapter();
+    const reclaimed: Delivery = deliveryAfter(
+      pendingDelivery(1, 'u_000001').claim(
+        leaseToken(TOKEN_B),
+        new Date(ENQUEUED_ISO),
+        leaseDuration(),
+      ),
+    );
+    await repository.saveAll([reclaimed]);
+
+    expect(
+      await repository.saveLeased(pendingDelivery(1, 'u_000001'), leaseToken(TOKEN_A)),
+    ).toEqual({ kind: 'lease-lost' });
+    expect(
+      (await repository.findByAlarmId(alarmId(FIRST_ID))).map(
+        (delivery: Delivery): string => delivery.snapshot().state.status,
+      ),
+    ).toEqual(['IN_FLIGHT']);
+  });
+
+  it('저장소에 없는 Delivery의 결과는 저장하지 않는다', async (): Promise<void> => {
+    const repository: InMemoryDeliveryRepositoryAdapter = new InMemoryDeliveryRepositoryAdapter();
+
+    expect(
+      await repository.saveLeased(pendingDelivery(1, 'u_000001'), leaseToken(TOKEN_A)),
+    ).toEqual({ kind: 'lease-lost' });
+    expect(await recipientsOf(repository)).toEqual([]);
   });
 });

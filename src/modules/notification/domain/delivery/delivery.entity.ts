@@ -294,7 +294,7 @@ export class Delivery {
     };
   }
 
-  private isClaimableAt(now: Readonly<Date>): boolean {
+  isClaimableAt(now: Readonly<Date>): boolean {
     const { state }: DeliverySnapshot = this.props;
     if (state.status === 'PENDING') {
       return true;
