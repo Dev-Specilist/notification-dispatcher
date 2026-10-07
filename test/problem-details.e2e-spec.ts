@@ -1,12 +1,25 @@
 import { afterAll, beforeAll, describe, it } from 'vitest';
-import { Controller, Get, INestApplication, NotFoundException } from '@nestjs/common';
+import { Body, Controller, Get, INestApplication, NotFoundException, Post } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { request, spec } from 'pactum';
+import { z } from 'zod';
 import { ApiStandardModule } from '@/shared/http/api-standard.module';
 import { ProblemDetails } from '@/shared/http/problem-details.type';
 
+const createSampleSchema = z.object({
+  title: z.string().min(1),
+  count: z.number().int().positive(),
+});
+
+type CreateSample = z.infer<typeof createSampleSchema>;
+
 @Controller('samples')
 class SampleController {
+  @Post()
+  create(@Body({ schema: createSampleSchema }) body: CreateSample): CreateSample {
+    return body;
+  }
+
   @Get('missing')
   missing(): never {
     throw new NotFoundException('sample 42 not found');
@@ -40,6 +53,19 @@ const ROUTE_NOT_FOUND: ProblemDetails = {
   errors: [],
 };
 
+const VALIDATION_FAILED: ProblemDetails = {
+  type: 'about:blank',
+  title: 'Bad Request',
+  status: 400,
+  detail: '요청 값이 올바르지 않습니다',
+  instance: '/samples',
+  code: 'VALIDATION_FAILED',
+  errors: [
+    { field: 'title', message: 'Too small: expected string to have >=1 characters' },
+    { field: 'count', message: 'Too small: expected number to be >0' },
+  ],
+};
+
 const INTERNAL_ERROR: ProblemDetails = {
   type: 'about:blank',
   title: 'Internal Server Error',
@@ -65,6 +91,23 @@ describe('RFC 9457 Problem Details 응답', () => {
 
   afterAll(async (): Promise<void> => {
     await app.close();
+  });
+
+  it('검증을 통과한 요청 본문은 스키마 결과 그대로 컨트롤러에 전달된다', async (): Promise<void> => {
+    await spec()
+      .post('/samples')
+      .withJson({ title: '추석 이벤트', count: 3, extra: 'dropped' })
+      .expectStatus(201)
+      .expectJson({ title: '추석 이벤트', count: 3 });
+  });
+
+  it('요청 본문 검증에 실패하면 400과 필드별 오류를 반환한다', async (): Promise<void> => {
+    await spec()
+      .post('/samples')
+      .withJson({ title: '', count: 0 })
+      .expectStatus(400)
+      .expectHeader('content-type', PROBLEM_JSON)
+      .expectJson(VALIDATION_FAILED);
   });
 
   it('HttpException은 상태 코드와 메시지를 유지한 Problem Details로 반환한다', async (): Promise<void> => {

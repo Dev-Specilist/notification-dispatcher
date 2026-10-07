@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import { ProblemDetails } from '@/shared/http/problem-details.type';
+import { RequestValidationException } from '@/shared/http/request-validation.exception';
 
 type ThrownValue = object | string | number | boolean | bigint | symbol;
 
@@ -41,6 +42,13 @@ export class ProblemDetailsFilter implements ExceptionFilter<ThrownValue> {
   }
 
   private static toProblem(exception: ThrownValue, instance: string): ProblemDetails {
+    if (exception instanceof RequestValidationException) {
+      return ProblemDetailsFilter.problem(HttpStatus.BAD_REQUEST, instance, {
+        detail: exception.message,
+        code: 'VALIDATION_FAILED',
+        errors: exception.violations,
+      });
+    }
     if (exception instanceof HttpException) {
       const status: number = exception.getStatus();
       return ProblemDetailsFilter.problem(status, instance, {
