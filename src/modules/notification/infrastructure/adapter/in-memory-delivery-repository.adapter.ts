@@ -9,8 +9,9 @@ import {
   LeaseToken,
 } from '@/modules/notification/domain/delivery/delivery.type';
 import {
-  ClaimableLookup,
+  DeliveryCandidate,
   LeasedSave,
+  ReconciledSave,
 } from '@/modules/notification/application/port/delivery-repository.type';
 import { DeliveryRepositoryPort } from '@/modules/notification/application/port/delivery-repository.port';
 import { Rollback } from '@/modules/notification/infrastructure/adapter/rollback.type';
@@ -45,7 +46,7 @@ export class InMemoryDeliveryRepositoryAdapter implements DeliveryRepositoryPort
     );
   }
 
-  findNextClaimable(now: Readonly<Date>): Promise<ClaimableLookup> {
+  findNextClaimable(now: Readonly<Date>): Promise<DeliveryCandidate> {
     const claimable: ReadonlyArray<Delivery> = [...this.deliveriesById.values()].filter(
       (delivery: Delivery): boolean => delivery.isClaimableAt(now),
     );
@@ -61,6 +62,38 @@ export class InMemoryDeliveryRepositoryAdapter implements DeliveryRepositoryPort
       first,
     );
     return Promise.resolve({ kind: 'found', delivery: next });
+  }
+
+  findNextReconcilable(now: Readonly<Date>): Promise<DeliveryCandidate> {
+    const reconcilable: ReadonlyArray<Delivery> = [...this.deliveriesById.values()].filter(
+      (delivery: Delivery): boolean => delivery.isReconcilableAt(now),
+    );
+    if (reconcilable.length === 0) {
+      return Promise.resolve({ kind: 'none' });
+    }
+    const [first, ...rest]: ReadonlyArray<Delivery> = reconcilable;
+    const next: Delivery = rest.reduce(
+      (earliest: Delivery, candidate: Delivery): Delivery =>
+        InMemoryDeliveryRepositoryAdapter.byReconcileOrder(candidate, earliest) < 0
+          ? candidate
+          : earliest,
+      first,
+    );
+    return Promise.resolve({ kind: 'found', delivery: next });
+  }
+
+  saveReconciled(delivery: Delivery, previous: Delivery): Promise<ReconciledSave> {
+    const { id }: DeliverySnapshot = delivery.snapshot();
+    const current: Delivery = this.deliveriesById.get(id) ?? delivery;
+    const unchanged: boolean =
+      this.deliveriesById.has(id) &&
+      InMemoryDeliveryRepositoryAdapter.reconcileVersionOf(current) ===
+        InMemoryDeliveryRepositoryAdapter.reconcileVersionOf(previous);
+    if (!unchanged) {
+      return Promise.resolve({ kind: 'superseded' });
+    }
+    this.store(delivery);
+    return Promise.resolve({ kind: 'saved' });
   }
 
   saveLeased(delivery: Delivery, token: LeaseToken): Promise<LeasedSave> {
@@ -134,6 +167,25 @@ export class InMemoryDeliveryRepositoryAdapter implements DeliveryRepositoryPort
     }
     const ageGap: number = first.createdAt.getTime() - second.createdAt.getTime();
     return ageGap === 0 ? first.id.localeCompare(second.id) : ageGap;
+  }
+
+  private static byReconcileOrder(left: Delivery, right: Delivery): number {
+    const gap: number =
+      InMemoryDeliveryRepositoryAdapter.reconcileAtOf(left) -
+      InMemoryDeliveryRepositoryAdapter.reconcileAtOf(right);
+    return gap === 0 ? left.snapshot().id.localeCompare(right.snapshot().id) : gap;
+  }
+
+  private static reconcileAtOf(delivery: Delivery): number {
+    const { state }: DeliverySnapshot = delivery.snapshot();
+    return state.status === 'UNKNOWN' ? state.reconcileAt.getTime() : Number.POSITIVE_INFINITY;
+  }
+
+  private static reconcileVersionOf(delivery: Delivery): string {
+    const { state }: DeliverySnapshot = delivery.snapshot();
+    return state.status === 'UNKNOWN'
+      ? `UNKNOWN:${state.reconcileAt.toISOString()}:${state.lookupFailures}`
+      : state.status;
   }
 
   private static priorityRank({ priority }: DeliverySnapshot): number {

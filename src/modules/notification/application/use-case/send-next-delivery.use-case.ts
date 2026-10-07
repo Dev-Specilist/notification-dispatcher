@@ -11,8 +11,8 @@ import {
 } from '@/modules/notification/domain/delivery/delivery.type';
 import { ClockPort } from '@/modules/notification/application/port/clock.port';
 import {
-  ClaimableFound,
-  ClaimableLookup,
+  CandidateFound,
+  DeliveryCandidate,
   LeasedSave,
 } from '@/modules/notification/application/port/delivery-repository.type';
 import { DispatchSettingsPort } from '@/modules/notification/application/port/dispatch-settings.port';
@@ -73,11 +73,11 @@ export class SendNextDeliveryUseCase {
         deliveryRepository,
       }: TransactionRepositories): Promise<ClaimStep> => {
         const lookupAt: Date = this.clock.now();
-        const next: ClaimableLookup = await deliveryRepository.findNextClaimable(lookupAt);
+        const next: DeliveryCandidate = await deliveryRepository.findNextClaimable(lookupAt);
         if (next.kind === 'none') {
           return { kind: 'idle' };
         }
-        const { delivery }: ClaimableFound = next;
+        const { delivery }: CandidateFound = next;
         const { id, alarmId }: DeliverySnapshot = delivery.snapshot();
         const alarm: AlarmLookup = await alarmRepository.findById(alarmId);
         const claimedAt: Date = this.clock.now();
