@@ -4,9 +4,12 @@ import {
   JitterRatio,
   LeaseToken,
   MessageId,
+  RetryAfterMs,
 } from '@/modules/notification/domain/delivery/delivery.type';
 
 export class DeliveryPredicates {
+  static readonly MAX_RETRY_AFTER_MS: number = 3_600_000;
+
   private static readonly UUID: RegExp =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -22,6 +25,12 @@ export class DeliveryPredicates {
 
   static isMessageId(value: string): value is MessageId {
     return DeliveryPredicates.NON_BLANK.test(value);
+  }
+
+  static isRetryAfterMs(value: number): value is RetryAfterMs {
+    return (
+      Number.isSafeInteger(value) && value >= 0 && value <= DeliveryPredicates.MAX_RETRY_AFTER_MS
+    );
   }
 
   static isAttemptLimit(value: number): value is AttemptLimit {

@@ -18,6 +18,7 @@ import {
   JitterRatio,
   LeaseToken,
   MessageId,
+  RetryAfterMs,
 } from '@/modules/notification/domain/delivery/delivery.type';
 import { RetryPolicy } from '@/modules/notification/domain/delivery/retry-policy';
 import { RetryPolicyCreation } from '@/modules/notification/domain/delivery/retry-policy.type';
@@ -115,7 +116,7 @@ export class DeliveryRepositoryContract {
             DeliveryRepositoryContract.start(delivery).recordRateLimited(
               DeliveryRepositoryContract.token(TOKEN),
               new Date(SETTLED_ISO),
-              DeliveryRepositoryContract.duration(2_000),
+              DeliveryRepositoryContract.retryAfter(2_000),
             ),
           ),
       ],
@@ -183,7 +184,7 @@ export class DeliveryRepositoryContract {
         started.recordRateLimited(
           DeliveryRepositoryContract.token(TOKEN),
           new Date(SETTLED_ISO),
-          DeliveryRepositoryContract.duration(1_000),
+          DeliveryRepositoryContract.retryAfter(1_000),
         ),
       );
       const reclaimed: Delivery = DeliveryRepositoryContract.transitioned(
@@ -255,7 +256,7 @@ export class DeliveryRepositoryContract {
           ).recordRateLimited(
             DeliveryRepositoryContract.token(TOKEN),
             new Date(SETTLED_ISO),
-            DeliveryRepositoryContract.duration(1_000),
+            DeliveryRepositoryContract.retryAfter(1_000),
           ),
         ),
         DeliveryRepositoryContract.pending(other, 'u_000003'),
@@ -320,7 +321,7 @@ export class DeliveryRepositoryContract {
         ).recordRateLimited(
           DeliveryRepositoryContract.token(TOKEN),
           new Date(SETTLED_ISO),
-          DeliveryRepositoryContract.duration(60_000),
+          DeliveryRepositoryContract.retryAfter(60_000),
         ),
       );
       const bulk: Delivery = DeliveryRepositoryContract.pending(
@@ -680,6 +681,13 @@ export class DeliveryRepositoryContract {
   private static messageId(value: string): MessageId {
     if (!DeliveryPredicates.isMessageId(value)) {
       throw new Error(`contract fixture ${value} is not a valid MessageId`);
+    }
+    return value;
+  }
+
+  private static retryAfter(value: number): RetryAfterMs {
+    if (!DeliveryPredicates.isRetryAfterMs(value)) {
+      throw new Error(`contract fixture ${value} is not a valid RetryAfterMs`);
     }
     return value;
   }

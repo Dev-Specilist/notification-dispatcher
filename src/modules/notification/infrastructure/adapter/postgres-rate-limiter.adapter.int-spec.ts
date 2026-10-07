@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { SQL, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
+import { RetryAfterMs } from '@/modules/notification/domain/delivery/delivery.type';
 import { SendPermit } from '@/modules/notification/application/port/send-permit.type';
 import { PostgresRateLimiterAdapter } from '@/modules/notification/infrastructure/adapter/postgres-rate-limiter.adapter';
 import {
@@ -31,6 +33,13 @@ class FixedDatabaseClock implements DatabaseClock {
     return sql`${this.instant.toISOString()}::timestamptz`;
   }
 }
+
+const retryAfterMs = (value: number): RetryAfterMs => {
+  if (!DeliveryPredicates.isRetryAfterMs(value)) {
+    throw new Error(`test fixture ${value} is not a valid RetryAfterMs`);
+  }
+  return value;
+};
 
 const durationMs = (value: number): DurationMs => {
   if (!DurationPredicates.isDurationMs(value)) {
@@ -140,7 +149,7 @@ describe('PostgresRateLimiterAdapter', () => {
 
   it('DB-12 제한기가 Retry-After로 정지됐다 / 정지 시각 전에 토큰을 요청한다 → 0개를 받는다', async (): Promise<void> => {
     const settings: RateLimiterSettings = newSettings();
-    await limiterAt(settings, 0).holdFor(durationMs(5_000));
+    await limiterAt(settings, 0).holdFor(retryAfterMs(5_000));
 
     expect(await acquireAt(settings, 0)).toBe('denied');
     expect(await acquireAt(settings, 4_999)).toBe('denied');
@@ -151,7 +160,7 @@ describe('PostgresRateLimiterAdapter', () => {
     const settings: RateLimiterSettings = newSettings();
     expect(await acquireAt(settings, 0)).toBe('granted');
 
-    await limiterAt(settings, 100).holdFor(durationMs(2_000));
+    await limiterAt(settings, 100).holdFor(retryAfterMs(2_000));
 
     expect(await acquireAt(settings, 100)).toBe('denied');
     expect(await acquireAt(settings, 2_099)).toBe('denied');
@@ -160,31 +169,53 @@ describe('PostgresRateLimiterAdapter', () => {
 
   it('DB-13 정지 중인 제한기 / 더 짧은 Retry-After가 들어온다 → 정지 시각이 앞당겨지지 않는다', async (): Promise<void> => {
     const settings: RateLimiterSettings = newSettings();
-    await limiterAt(settings, 0).holdFor(durationMs(5_000));
+    await limiterAt(settings, 0).holdFor(retryAfterMs(5_000));
 
-    await limiterAt(settings, 1_000).holdFor(durationMs(1_000));
+    await limiterAt(settings, 1_000).holdFor(retryAfterMs(1_000));
 
     expect(await acquireAt(settings, 2_000)).toBe('denied');
     expect(await acquireAt(settings, 4_999)).toBe('denied');
     expect(await acquireAt(settings, 5_000)).toBe('granted');
   });
 
+  it('DB-13 정지 중인 제한기 / Retry-After: 0이 들어온다 → 정지 시각이 앞당겨지지 않는다', async (): Promise<void> => {
+    const settings: RateLimiterSettings = newSettings();
+    await limiterAt(settings, 0).holdFor(retryAfterMs(5_000));
+
+    await limiterAt(settings, 1_000).holdFor(retryAfterMs(0));
+
+    expect(await acquireAt(settings, 4_999)).toBe('denied');
+    expect(await acquireAt(settings, 5_000)).toBe('granted');
+  });
+
   it('DB-13 더 긴 Retry-After가 들어오면 정지 시각을 늦춘다', async (): Promise<void> => {
     const settings: RateLimiterSettings = newSettings();
-    await limiterAt(settings, 0).holdFor(durationMs(1_000));
+    await limiterAt(settings, 0).holdFor(retryAfterMs(1_000));
 
-    await limiterAt(settings, 500).holdFor(durationMs(3_000));
+    await limiterAt(settings, 500).holdFor(retryAfterMs(3_000));
 
     expect(await acquireAt(settings, 3_499)).toBe('denied');
     expect(await acquireAt(settings, 3_500)).toBe('granted');
   });
 
-  it('DB-12 32비트 정수 범위를 넘는 Retry-After도 그대로 정지 시각에 반영한다', async (): Promise<void> => {
+  it('DB-12 상한(1시간)인 Retry-After도 그대로 정지 시각에 반영한다', async (): Promise<void> => {
     const settings: RateLimiterSettings = newSettings();
+    const oneHourMs: number = 3_600_000;
+
+    await limiterAt(settings, 0).holdFor(retryAfterMs(oneHourMs));
+
+    expect(await acquireAt(settings, oneHourMs - 1)).toBe('denied');
+    expect(await acquireAt(settings, oneHourMs)).toBe('granted');
+  });
+
+  it('DB-11 32비트 정수 범위를 넘는 발급 간격도 SQL 시각 계산에 그대로 반영한다', async (): Promise<void> => {
     const beyondInt32Ms: number = 2_500_000_000;
+    const settings: RateLimiterSettings = {
+      name: `limiter-${randomUUID()}`,
+      emissionIntervalMs: durationMs(beyondInt32Ms),
+    };
 
-    await limiterAt(settings, 0).holdFor(durationMs(beyondInt32Ms));
-
+    expect(await acquireAt(settings, 0)).toBe('granted');
     expect(await acquireAt(settings, beyondInt32Ms - 1)).toBe('denied');
     expect(await acquireAt(settings, beyondInt32Ms)).toBe('granted');
   });
@@ -199,10 +230,10 @@ describe('PostgresRateLimiterAdapter', () => {
       rounds.map((settings: RateLimiterSettings): Promise<ReadonlyArray<void | PermitKind>> =>
         Promise.all([
           acquireAt(settings, 0),
-          limiterAt(settings, 0).holdFor(durationMs(1_000)),
+          limiterAt(settings, 0).holdFor(retryAfterMs(1_000)),
           acquireAt(settings, 0),
-          limiterAt(settings, 0).holdFor(durationMs(5_000)),
-          limiterAt(settings, 0).holdFor(durationMs(2_000)),
+          limiterAt(settings, 0).holdFor(retryAfterMs(5_000)),
+          limiterAt(settings, 0).holdFor(retryAfterMs(2_000)),
           acquireAt(settings, 0),
         ]),
       ),

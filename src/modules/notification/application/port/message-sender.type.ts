@@ -3,8 +3,8 @@ import {
   DeliveryId,
   MessageId,
   PermanentFailureCode,
+  RetryAfterMs,
 } from '@/modules/notification/domain/delivery/delivery.type';
-import { DurationMs } from '@/shared/domain/duration.type';
 
 export interface OutgoingMessage {
   readonly alarmId: AlarmId;
@@ -29,7 +29,7 @@ export interface SendTransientlyFailed {
 
 export interface SendRateLimited {
   readonly kind: 'rate-limited';
-  readonly retryAfterMs: DurationMs;
+  readonly retryAfterMs: RetryAfterMs;
 }
 
 export interface SendOutcomeIndeterminate {

@@ -8,6 +8,8 @@ export type LeaseToken = string & Brand<'LeaseToken'>;
 
 export type MessageId = string & Brand<'MessageId'>;
 
+export type RetryAfterMs = number & Brand<'RetryAfterMs'>;
+
 export type AttemptLimit = number & Brand<'AttemptLimit'>;
 
 export type JitterRatio = number & Brand<'JitterRatio'>;

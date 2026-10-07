@@ -20,6 +20,7 @@ import {
   JitterRatio,
   LeaseToken,
   MessageId,
+  RetryAfterMs,
 } from '@/modules/notification/domain/delivery/delivery.type';
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
@@ -122,6 +123,13 @@ const messageId = (value: string): MessageId => {
   return value;
 };
 
+const retryAfterMs = (value: number): RetryAfterMs => {
+  if (!DeliveryPredicates.isRetryAfterMs(value)) {
+    throw new Error(`test fixture ${value} is not a valid RetryAfterMs`);
+  }
+  return value;
+};
+
 const durationMs = (value: number): DurationMs => {
   if (!DurationPredicates.isDurationMs(value)) {
     throw new Error(`test fixture ${value} is not a valid DurationMs`);
@@ -183,7 +191,7 @@ const pendingDelivery = (
     at(createdIso),
   );
 
-const retryWaitingUntil = (delivery: Delivery, retryAfterMs: number): Delivery => {
+const retryWaitingUntil = (delivery: Delivery, waitMs: number): Delivery => {
   const token: LeaseToken = leaseToken(PREVIOUS_TOKEN);
   const claimed: Delivery = transitionedDelivery(
     delivery.claim(token, at(DISPATCHED_ISO), durationMs(60_000)),
@@ -192,7 +200,7 @@ const retryWaitingUntil = (delivery: Delivery, retryAfterMs: number): Delivery =
     claimed.startRequest(token, at(DISPATCHED_ISO), durationMs(10_000)),
   );
   return transitionedDelivery(
-    started.recordRateLimited(token, at(DISPATCHED_ISO), durationMs(retryAfterMs)),
+    started.recordRateLimited(token, at(DISPATCHED_ISO), retryAfterMs(waitMs)),
   );
 };
 
@@ -273,8 +281,8 @@ class StubSendPermit implements SendPermitPort {
     return Promise.resolve(this.permit);
   }
 
-  holdFor(retryAfterMs: DurationMs): Promise<void> {
-    this.holds.push(retryAfterMs);
+  holdFor(holdMs: RetryAfterMs): Promise<void> {
+    this.holds.push(holdMs);
     return Promise.resolve();
   }
 }
@@ -290,8 +298,8 @@ class SharedSendPermit implements SendPermitPort {
     );
   }
 
-  holdFor(retryAfterMs: DurationMs): Promise<void> {
-    this.heldUntil = Math.max(this.heldUntil, this.clock.now().getTime() + retryAfterMs);
+  holdFor(holdMs: RetryAfterMs): Promise<void> {
+    this.heldUntil = Math.max(this.heldUntil, this.clock.now().getTime() + holdMs);
     return Promise.resolve();
   }
 }
@@ -752,7 +760,7 @@ describe('SendNextDeliveryUseCase', () => {
     [
       '429',
       'CANCELLED',
-      (): SendOutcome => ({ kind: 'rate-limited', retryAfterMs: durationMs(2_000) }),
+      (): SendOutcome => ({ kind: 'rate-limited', retryAfterMs: retryAfterMs(2_000) }),
     ],
     ['202', 'SENT', acceptWithSequentialId],
   ])(
@@ -803,7 +811,7 @@ describe('SendNextDeliveryUseCase', () => {
         permit: sharedPermit,
         sender: new RecordingMessageSender((sentCount: number): SendOutcome =>
           sentCount === 1
-            ? { kind: 'rate-limited', retryAfterMs: durationMs(2_000) }
+            ? { kind: 'rate-limited', retryAfterMs: retryAfterMs(2_000) }
             : acceptWithSequentialId(sentCount),
         ),
       },
@@ -837,7 +845,7 @@ describe('SendNextDeliveryUseCase', () => {
         permit,
         sender: new RecordingMessageSender((): SendOutcome => ({
           kind: 'rate-limited',
-          retryAfterMs: durationMs(3_000),
+          retryAfterMs: retryAfterMs(3_000),
         })),
       },
     );

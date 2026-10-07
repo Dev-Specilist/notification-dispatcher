@@ -7,6 +7,7 @@ import {
 } from '@/modules/notification/infrastructure/adapter/postgres-rate-limiter.type';
 import { NotificationDatabase } from '@/modules/notification/infrastructure/persistence/notification-database.type';
 import { rateLimiters } from '@/modules/notification/infrastructure/persistence/rate-limiter.table';
+import { RetryAfterMs } from '@/modules/notification/domain/delivery/delivery.type';
 import { DurationMs } from '@/shared/domain/duration.type';
 
 interface GrantedRow {
@@ -42,7 +43,7 @@ export class PostgresRateLimiterAdapter implements SendPermitPort {
     return granted.length === 0 ? { kind: 'denied' } : { kind: 'granted' };
   }
 
-  async holdFor(retryAfterMs: DurationMs): Promise<void> {
+  async holdFor(retryAfterMs: RetryAfterMs): Promise<void> {
     const heldUntil: SQL = this.after(retryAfterMs);
     await this.database
       .insert(rateLimiters)
@@ -57,7 +58,7 @@ export class PostgresRateLimiterAdapter implements SendPermitPort {
       });
   }
 
-  private after(durationMs: DurationMs): SQL {
-    return sql`${this.clock.now()} + ${durationMs}::bigint * interval '1 millisecond'`;
+  private after(milliseconds: DurationMs | RetryAfterMs): SQL {
+    return sql`${this.clock.now()} + ${milliseconds}::bigint * interval '1 millisecond'`;
   }
 }

@@ -1,8 +1,8 @@
 import { SendPermit } from '@/modules/notification/application/port/send-permit.type';
-import { DurationMs } from '@/shared/domain/duration.type';
+import { RetryAfterMs } from '@/modules/notification/domain/delivery/delivery.type';
 
 export abstract class SendPermitPort {
   abstract acquire(): Promise<SendPermit>;
 
-  abstract holdFor(retryAfterMs: DurationMs): Promise<void>;
+  abstract holdFor(retryAfterMs: RetryAfterMs): Promise<void>;
 }

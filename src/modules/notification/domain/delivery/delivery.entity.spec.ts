@@ -17,11 +17,14 @@ import {
   LeaseToken,
   MessageId,
   PermanentFailureCode,
+  RetryAfterMs,
 } from '@/modules/notification/domain/delivery/delivery.type';
 
 type StatusBuildCase = Readonly<[string, () => Delivery]>;
 
 type InvalidDurationCase = Readonly<[string, number]>;
+
+type RetryAfterCase = Readonly<[string, number]>;
 
 type RetryStep = 'TRANSIENT' | 'RATE_LIMITED';
 
@@ -33,6 +36,13 @@ const SETTLED_ISO: string = '2026-10-07T09:00:03.000Z';
 const durationMs = (value: number): DurationMs => {
   if (!DurationPredicates.isDurationMs(value)) {
     throw new Error(`test fixture ${value} is not a valid DurationMs`);
+  }
+  return value;
+};
+
+const retryAfterMs = (value: number): RetryAfterMs => {
+  if (!DeliveryPredicates.isRetryAfterMs(value)) {
+    throw new Error(`test fixture ${value} is not a valid RetryAfterMs`);
   }
   return value;
 };
@@ -364,7 +374,7 @@ describe('Delivery', () => {
 
   it('DLV-07 IN_FLIGHT Delivery / 429와 Retry-After: n을 받는다 → RETRY_WAIT가 되고 n초 뒤로 미뤄지며 시도 횟수는 되돌린다', () => {
     const delivery: Delivery = transitioned(
-      started().recordRateLimited(TOKEN_A(), at(SETTLED_ISO), durationMs(3_000)),
+      started().recordRateLimited(TOKEN_A(), at(SETTLED_ISO), retryAfterMs(3_000)),
     );
 
     expect(delivery.snapshot()).toMatchObject({
@@ -374,6 +384,40 @@ describe('Delivery', () => {
         cause: 'RATE_LIMITED',
         retryAt: new Date(at(SETTLED_ISO).getTime() + 3_000),
       },
+    });
+  });
+
+  it.each<RetryAfterCase>([
+    ['0', 0],
+    ['1초', 1_000],
+    ['상한 1시간', 3_600_000],
+  ])(
+    'DLV-07 Retry-After 대기 시간은 %s(%s ms)를 허용한다',
+    (_label: string, value: number): void => {
+      expect(DeliveryPredicates.isRetryAfterMs(value)).toBe(true);
+    },
+  );
+
+  it.each<RetryAfterCase>([
+    ['음수', -1],
+    ['소수', 1.5],
+    ['1시간 초과', 3_600_001],
+    ['NaN', Number.NaN],
+  ])(
+    'DLV-07 Retry-After 대기 시간은 %s(%s)을 허용하지 않는다 (0 이상 1시간 이하 정수)',
+    (_label: string, value: number): void => {
+      expect(DeliveryPredicates.isRetryAfterMs(value)).toBe(false);
+    },
+  );
+
+  it('DLV-07 Retry-After: 0이면 재시도 시각을 지금으로 기록하고 시도 횟수는 되돌린다', (): void => {
+    const delivery: Delivery = transitioned(
+      started().recordRateLimited(TOKEN_A(), at(SETTLED_ISO), retryAfterMs(0)),
+    );
+
+    expect(delivery.snapshot()).toMatchObject({
+      attempts: 0,
+      state: { status: 'RETRY_WAIT', cause: 'RATE_LIMITED', retryAt: at(SETTLED_ISO) },
     });
   });
 
@@ -392,7 +436,7 @@ describe('Delivery', () => {
       current = transitioned(
         step === 'TRANSIENT'
           ? inFlight.recordTransientFailure(token, now, policy, jitter(0))
-          : inFlight.recordRateLimited(token, now, durationMs(1_000)),
+          : inFlight.recordRateLimited(token, now, retryAfterMs(1_000)),
       );
       const { attempts, state }: DeliverySnapshot = current.snapshot();
       history.push(`${attempts}:${state.status}`);
@@ -403,7 +447,7 @@ describe('Delivery', () => {
 
   it('재시도 시각 전의 RETRY_WAIT Delivery는 claim할 수 없고, 시각이 지나면 claim할 수 있다', () => {
     const waiting: Delivery = transitioned(
-      started().recordRateLimited(TOKEN_A(), at(SETTLED_ISO), durationMs(3_000)),
+      started().recordRateLimited(TOKEN_A(), at(SETTLED_ISO), retryAfterMs(3_000)),
     );
     const due: Date = new Date(at(SETTLED_ISO).getTime() + 3_000);
 
@@ -421,7 +465,7 @@ describe('Delivery', () => {
     expect(
       claimed().recordTransientFailure(TOKEN_A(), at(SETTLED_ISO), retryPolicy(5), jitter(0)),
     ).toEqual({ kind: 'rejected', reason: 'REQUEST_NOT_STARTED' });
-    expect(started().recordRateLimited(TOKEN_B(), at(SETTLED_ISO), durationMs(3_000))).toEqual({
+    expect(started().recordRateLimited(TOKEN_B(), at(SETTLED_ISO), retryAfterMs(3_000))).toEqual({
       kind: 'rejected',
       reason: 'LEASE_MISMATCH',
     });

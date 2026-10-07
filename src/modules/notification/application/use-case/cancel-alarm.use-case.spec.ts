@@ -16,6 +16,7 @@ import {
   DeliveryTransition,
   LeaseToken,
   MessageId,
+  RetryAfterMs,
 } from '@/modules/notification/domain/delivery/delivery.type';
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
@@ -84,6 +85,13 @@ const messageId = (): MessageId => {
   return value;
 };
 
+const retryAfterMs = (value: number): RetryAfterMs => {
+  if (!DeliveryPredicates.isRetryAfterMs(value)) {
+    throw new Error(`test fixture ${value} is not a valid RetryAfterMs`);
+  }
+  return value;
+};
+
 const durationMs = (value: number): DurationMs => {
   if (!DurationPredicates.isDurationMs(value)) {
     throw new Error(`test fixture ${value} is not a valid DurationMs`);
@@ -123,7 +131,7 @@ const started: DeliveryBuilder = (index: number): Delivery =>
 
 const retryWaiting: DeliveryBuilder = (index: number): Delivery =>
   transitioned(
-    started(index).recordRateLimited(leaseToken(), at(DISPATCHED_ISO), durationMs(1_000)),
+    started(index).recordRateLimited(leaseToken(), at(DISPATCHED_ISO), retryAfterMs(1_000)),
   );
 
 const sent: DeliveryBuilder = (index: number): Delivery =>

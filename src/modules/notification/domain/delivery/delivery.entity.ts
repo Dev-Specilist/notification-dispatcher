@@ -14,6 +14,7 @@ import {
   PermanentFailureCode,
   RecordedMessage,
   RequestRecord,
+  RetryAfterMs,
   UnknownState,
 } from '@/modules/notification/domain/delivery/delivery.type';
 import { DurationMs } from '@/shared/domain/duration.type';
@@ -158,7 +159,7 @@ export class Delivery {
   recordRateLimited(
     token: LeaseToken,
     now: Readonly<Date>,
-    retryAfterMs: DurationMs,
+    retryAfterMs: RetryAfterMs,
   ): DeliveryTransition {
     const check: StartedCheck = this.checkStartedRequest(token);
     if (check.kind === 'rejected') {
