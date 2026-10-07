@@ -1,4 +1,8 @@
-import { AlarmId, RecipientId } from '@/modules/notification/domain/alarm/alarm.type';
+import {
+  AlarmId,
+  DeliveryCount,
+  RecipientId,
+} from '@/modules/notification/domain/alarm/alarm.type';
 
 export class AlarmPredicates {
   private static readonly UUID: RegExp =
@@ -12,5 +16,9 @@ export class AlarmPredicates {
 
   static isRecipientId(value: string): value is RecipientId {
     return AlarmPredicates.RECIPIENT_ID.test(value);
+  }
+
+  static isDeliveryCount(value: number): value is DeliveryCount {
+    return Number.isSafeInteger(value) && value >= 0;
   }
 }

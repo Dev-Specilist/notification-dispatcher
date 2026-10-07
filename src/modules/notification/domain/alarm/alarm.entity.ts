@@ -1,14 +1,21 @@
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import {
+  AlarmAction,
   AlarmAudience,
+  AlarmCompletion,
+  AlarmConflicted,
   AlarmCreation,
   AlarmDraft,
   AlarmId,
   AlarmRejected,
   AlarmSnapshot,
   AlarmState,
+  AlarmTransition,
   AlarmValidationError,
+  CancellableState,
+  CompletionEvidence,
   CountRange,
+  DispatchRecord,
   RecipientId,
 } from '@/modules/notification/domain/alarm/alarm.type';
 
@@ -49,6 +56,44 @@ export class Alarm {
     };
   }
 
+  startDispatch(now: Readonly<Date>): AlarmTransition {
+    const { state }: AlarmSnapshot = this.props;
+    if (state.status !== 'DRAFT') {
+      return Alarm.conflict(state, 'dispatch');
+    }
+    return this.transitionTo({ status: 'DISPATCHING', dispatchedAt: Alarm.copyDate(now) });
+  }
+
+  cancel(now: Readonly<Date>): AlarmTransition {
+    const { state }: AlarmSnapshot = this.props;
+    if (!Alarm.isCancellable(state)) {
+      return Alarm.conflict(state, 'cancel');
+    }
+    return this.transitionTo({
+      status: 'CANCELLED',
+      cancelledAt: Alarm.copyDate(now),
+      dispatch: Alarm.dispatchRecordOf(state),
+    });
+  }
+
+  complete(
+    { expansionCompleted, unsettledDeliveries }: Readonly<CompletionEvidence>,
+    now: Readonly<Date>,
+  ): AlarmCompletion {
+    const { state }: AlarmSnapshot = this.props;
+    if (state.status !== 'DISPATCHING') {
+      return Alarm.conflict(state, 'complete');
+    }
+    if (!expansionCompleted || unsettledDeliveries !== 0) {
+      return { kind: 'unchanged', alarm: this };
+    }
+    return this.transitionTo({
+      status: 'COMPLETED',
+      dispatchedAt: Alarm.copyDate(state.dispatchedAt),
+      completedAt: Alarm.copyDate(now),
+    });
+  }
+
   snapshot(): AlarmSnapshot {
     const { id, title, body, state, createdAt }: AlarmSnapshot = this.props;
     return {
@@ -59,6 +104,14 @@ export class Alarm {
       state: Alarm.copyState(state),
       createdAt: Alarm.copyDate(createdAt),
     };
+  }
+
+  private transitionTo(state: AlarmState): AlarmTransition {
+    return { kind: 'transitioned', alarm: new Alarm({ ...this.snapshot(), state }) };
+  }
+
+  private static conflict({ status }: Readonly<AlarmState>, action: AlarmAction): AlarmConflicted {
+    return { kind: 'conflict', error: { code: 'ALARM_STATE_CONFLICT', status, action } };
   }
 
   private static resolveAudience({ kind, recipientIds }: Readonly<AlarmDraft>): AudienceResolution {
@@ -119,11 +172,24 @@ export class Alarm {
     return {
       status: 'CANCELLED',
       cancelledAt: Alarm.copyDate(state.cancelledAt),
-      dispatch:
-        state.dispatch.kind === 'NEVER'
-          ? { kind: 'NEVER' }
-          : { kind: 'STARTED', at: Alarm.copyDate(state.dispatch.at) },
+      dispatch: Alarm.copyDispatchRecord(state.dispatch),
     };
+  }
+
+  private static isCancellable(state: AlarmState): state is CancellableState {
+    return state.status === 'DRAFT' || state.status === 'DISPATCHING';
+  }
+
+  private static dispatchRecordOf(state: CancellableState): DispatchRecord {
+    return state.status === 'DRAFT'
+      ? { kind: 'NEVER' }
+      : { kind: 'STARTED', at: Alarm.copyDate(state.dispatchedAt) };
+  }
+
+  private static copyDispatchRecord(record: DispatchRecord): DispatchRecord {
+    return record.kind === 'NEVER'
+      ? { kind: 'NEVER' }
+      : { kind: 'STARTED', at: Alarm.copyDate(record.at) };
   }
 
   private static copyDate(date: Readonly<Date>): Date {

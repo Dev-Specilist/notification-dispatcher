@@ -5,6 +5,8 @@ export type AlarmId = string & Brand<'AlarmId'>;
 
 export type RecipientId = string & Brand<'RecipientId'>;
 
+export type DeliveryCount = number & Brand<'DeliveryCount'>;
+
 export type AlarmKind = 'BULK' | 'URGENT';
 
 export interface AllUsersTarget {
@@ -40,15 +42,19 @@ export interface DispatchStarted {
   readonly at: Date;
 }
 
+export type DispatchRecord = NeverDispatched | DispatchStarted;
+
 export interface CancelledState {
   readonly status: 'CANCELLED';
   readonly cancelledAt: Date;
-  readonly dispatch: NeverDispatched | DispatchStarted;
+  readonly dispatch: DispatchRecord;
 }
 
 export type AlarmState = DraftState | DispatchingState | CompletedState | CancelledState;
 
 export type AlarmStatus = AlarmState['status'];
+
+export type CancellableState = DraftState | DispatchingState;
 
 export interface AlarmDraft {
   readonly title: string;
@@ -125,3 +131,35 @@ export interface AlarmRejected {
 }
 
 export type AlarmCreation = AlarmCreated | AlarmRejected;
+
+export type AlarmAction = 'dispatch' | 'cancel' | 'complete';
+
+export interface AlarmStateConflict {
+  readonly code: 'ALARM_STATE_CONFLICT';
+  readonly status: AlarmStatus;
+  readonly action: AlarmAction;
+}
+
+export interface AlarmTransitioned {
+  readonly kind: 'transitioned';
+  readonly alarm: Alarm;
+}
+
+export interface AlarmConflicted {
+  readonly kind: 'conflict';
+  readonly error: AlarmStateConflict;
+}
+
+export interface AlarmUnchanged {
+  readonly kind: 'unchanged';
+  readonly alarm: Alarm;
+}
+
+export type AlarmTransition = AlarmTransitioned | AlarmConflicted;
+
+export type AlarmCompletion = AlarmTransitioned | AlarmUnchanged | AlarmConflicted;
+
+export interface CompletionEvidence {
+  readonly expansionCompleted: boolean;
+  readonly unsettledDeliveries: DeliveryCount;
+}

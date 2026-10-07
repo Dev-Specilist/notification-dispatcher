@@ -71,10 +71,11 @@ Delivery
 | ALM-05 | 대량 알림에 수신자를 지정했다 | 알림을 만든다 | 생성이 거부된다 (대량 알림은 전체 사용자 대상) |
 | ALM-06 | `DRAFT` 알림 | 발송을 시작한다 | `DISPATCHING`이 되고 시작 시각이 기록된다 |
 | ALM-07 | `DISPATCHING`·`COMPLETED`·`CANCELLED` 알림 | 발송을 시작한다 | 상태 충돌로 거부되고 상태는 바뀌지 않는다 |
-| ALM-08 | `DRAFT` 또는 `DISPATCHING` 알림 | 취소한다 | `CANCELLED`가 되고 취소 시각이 기록된다 |
+| ALM-08 | `DRAFT` 또는 `DISPATCHING` 알림 | 취소한다 | `CANCELLED`가 되고 취소 시각과 함께 발송 시작 여부(발송 전 취소면 없음, 발송 중 취소면 시작 시각)가 기록된다 |
 | ALM-09 | `COMPLETED`·`CANCELLED` 알림 | 취소한다 | 상태 충돌로 거부된다 |
 | ALM-10 | `DISPATCHING` 알림 | 확장 완료이고 미종결 Delivery가 0건이라는 판정 근거를 받는다 | `COMPLETED`가 된다 |
 | ALM-11 | `DISPATCHING` 알림 | 확장 미완료이거나 미종결 Delivery가 남아 있다는 판정 근거를 받는다 | `DISPATCHING`을 유지한다 |
+| ALM-12 | `DRAFT`·`COMPLETED`·`CANCELLED` 알림 | 완료를 판정한다 | 상태 충돌로 거부된다 |
 
 ## DLV · 발송 도메인
 
