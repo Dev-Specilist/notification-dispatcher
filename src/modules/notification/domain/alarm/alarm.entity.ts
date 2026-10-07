@@ -32,7 +32,7 @@ export class Alarm {
   private constructor(private readonly props: AlarmSnapshot) {}
 
   static create(id: AlarmId, draft: Readonly<AlarmDraft>, now: Readonly<Date>): AlarmCreation {
-    const { title, body } = draft;
+    const { title, body }: Readonly<AlarmDraft> = draft;
     if (title.trim().length === 0) {
       return Alarm.reject({ code: 'EMPTY_TITLE' });
     }

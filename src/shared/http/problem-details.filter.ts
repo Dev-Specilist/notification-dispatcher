@@ -14,6 +14,8 @@ import { RequestValidationException } from '@/shared/http/request-validation.exc
 
 type ThrownValue = object | string | number | boolean | bigint | symbol;
 
+type HttpContext = ReturnType<ArgumentsHost['switchToHttp']>;
+
 @Catch()
 export class ProblemDetailsFilter implements ExceptionFilter<ThrownValue> {
   private static readonly CONTENT_TYPE: string = 'application/problem+json; charset=utf-8';
@@ -24,8 +26,8 @@ export class ProblemDetailsFilter implements ExceptionFilter<ThrownValue> {
   constructor(private readonly adapterHost: HttpAdapterHost) {}
 
   catch(exception: ThrownValue, host: ArgumentsHost): void {
-    const { httpAdapter } = this.adapterHost;
-    const context = host.switchToHttp();
+    const { httpAdapter }: HttpAdapterHost = this.adapterHost;
+    const context: HttpContext = host.switchToHttp();
     const instance: string = httpAdapter.getRequestUrl(context.getRequest());
     const problem: ProblemDetails = ProblemDetailsFilter.toProblem(exception, instance);
 
