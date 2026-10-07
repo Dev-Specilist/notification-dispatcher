@@ -819,8 +819,52 @@ describe('Delivery', () => {
     });
   });
 
-  it.todo(
-    'DLV-19 UNKNOWN Delivery이고 알림이 취소됐다 / reconcile에서 발송 내역이 없다 → 재시도 대신 CANCELLED가 된다',
+  it('DLV-19 UNKNOWN Delivery이고 알림이 취소됐다 / reconcile에서 발송 내역이 없다 → 재시도 대신 CANCELLED가 된다', () => {
+    const delivery: Delivery = transitioned(
+      unknownAfterTimeout().reconcileNotFoundAsCancelled(at(RECONCILABLE_ISO)),
+    );
+
+    expect(delivery.snapshot()).toMatchObject({
+      attempts: 1,
+      state: { status: 'CANCELLED', cancelledAt: at(RECONCILABLE_ISO) },
+    });
+  });
+
+  it('DLV-19 reconcile 가능 시각 전에는 내역 없음을 취소로 반영할 수 없다 (이전 요청이 아직 진행 중일 수 있음)', () => {
+    const beforeReconcilable: Date = new Date(at(RECONCILABLE_ISO).getTime() - 1);
+
+    expect(unknownAfterTimeout().reconcileNotFoundAsCancelled(beforeReconcilable)).toEqual({
+      kind: 'rejected',
+      reason: 'NOT_RECONCILABLE',
+    });
+  });
+
+  it.each<StatusBuildCase>([
+    ['PENDING', pending],
+    ['IN_FLIGHT', started],
+  ])(
+    'DLV-19 UNKNOWN이 아닌 %s Delivery에는 내역 없음을 취소로 반영할 수 없다',
+    (_status: string, build: () => Delivery) => {
+      expect(build().reconcileNotFoundAsCancelled(at(RECONCILABLE_ISO))).toEqual({
+        kind: 'rejected',
+        reason: 'NOT_UNKNOWN',
+      });
+    },
+  );
+
+  it.each<StatusBuildCase>([
+    ['SENT', sent],
+    ['FAILED', failed],
+    ['UNCONFIRMED', unconfirmed],
+    ['CANCELLED', cancelled],
+  ])(
+    'DLV-20 종결된 %s Delivery에는 내역 없음을 취소로 반영해도 상태가 바뀌지 않는다',
+    (_status: string, build: () => Delivery) => {
+      expect(build().reconcileNotFoundAsCancelled(at(RECONCILABLE_ISO))).toEqual({
+        kind: 'rejected',
+        reason: 'ALREADY_SETTLED',
+      });
+    },
   );
   it('DLV-21 확인 기간(UNCONFIRMED_AFTER_MS)이 지난 UNKNOWN Delivery / reconcile 대상을 고른다 → 재전송하지 않고 UNCONFIRMED로 종결된다', () => {
     expect(unconfirmed().snapshot()).toMatchObject({

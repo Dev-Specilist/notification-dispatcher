@@ -208,12 +208,9 @@ export class Delivery {
     policy: RetryPolicy,
     jitter: JitterRatio,
   ): DeliveryTransition {
-    const check: UnknownCheck = this.checkUnknown();
+    const check: UnknownCheck = this.checkReconcilable(now);
     if (check.kind === 'rejected') {
       return check;
-    }
-    if (!this.isReconcilableAt(now)) {
-      return Delivery.reject('NOT_RECONCILABLE');
     }
     const { attempts }: DeliverySnapshot = this.props;
     if (policy.isExhausted(attempts)) {
@@ -223,6 +220,17 @@ export class Delivery {
       status: 'RETRY_WAIT',
       retryAt: new Date(now.getTime() + policy.delayFor(attempts, jitter)),
       cause: 'NOT_DELIVERED',
+    });
+  }
+
+  reconcileNotFoundAsCancelled(now: Readonly<Date>): DeliveryTransition {
+    const check: UnknownCheck = this.checkReconcilable(now);
+    if (check.kind === 'rejected') {
+      return check;
+    }
+    return this.transitionTo(this.props.attempts, {
+      status: 'CANCELLED',
+      cancelledAt: Delivery.copyDate(now),
     });
   }
 
@@ -304,6 +312,17 @@ export class Delivery {
       return Delivery.reject('REQUEST_NOT_STARTED');
     }
     return { kind: 'started', startedAt: request.at };
+  }
+
+  private checkReconcilable(now: Readonly<Date>): UnknownCheck {
+    const check: UnknownCheck = this.checkUnknown();
+    if (check.kind === 'rejected') {
+      return check;
+    }
+    if (!this.isReconcilableAt(now)) {
+      return Delivery.reject('NOT_RECONCILABLE');
+    }
+    return check;
   }
 
   private checkUnknown(): UnknownCheck {
