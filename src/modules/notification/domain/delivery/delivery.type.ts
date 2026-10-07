@@ -36,6 +36,13 @@ export interface RequestStarted {
 
 export type RequestRecord = RequestNotStarted | RequestStarted;
 
+export interface RecordedMessage {
+  readonly messageId: MessageId;
+  readonly sentAt: Date;
+}
+
+export type FoundMessages = Readonly<[RecordedMessage, ...ReadonlyArray<RecordedMessage>]>;
+
 export interface PendingState {
   readonly status: 'PENDING';
 }
@@ -92,6 +99,7 @@ export interface DeliverySnapshot extends NewDelivery {
 export type DeliveryRejectionReason =
   | 'NOT_CLAIMABLE'
   | 'NOT_IN_FLIGHT'
+  | 'NOT_UNKNOWN'
   | 'LEASE_MISMATCH'
   | 'REQUEST_NOT_STARTED'
   | 'REQUEST_ALREADY_STARTED'

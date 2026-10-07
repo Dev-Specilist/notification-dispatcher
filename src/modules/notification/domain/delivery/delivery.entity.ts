@@ -5,13 +5,16 @@ import {
   DeliverySnapshot,
   DeliveryState,
   DeliveryTransition,
+  FoundMessages,
   InFlightState,
   JitterRatio,
   LeaseToken,
   MessageId,
   NewDelivery,
   PermanentFailureCode,
+  RecordedMessage,
   RequestRecord,
+  UnknownState,
 } from '@/modules/notification/domain/delivery/delivery.type';
 import { DurationMs } from '@/shared/domain/duration.type';
 
@@ -28,6 +31,13 @@ interface RequestInProgress {
 }
 
 type StartedCheck = RequestInProgress | DeliveryRejected;
+
+interface UnknownHeld {
+  readonly kind: 'held';
+  readonly state: UnknownState;
+}
+
+type UnknownCheck = UnknownHeld | DeliveryRejected;
 
 export class Delivery {
   private constructor(private readonly props: DeliverySnapshot) {}
@@ -174,6 +184,25 @@ export class Delivery {
     });
   }
 
+  reconcileFound(found: FoundMessages): DeliveryTransition {
+    const check: UnknownCheck = this.checkUnknown();
+    if (check.kind === 'rejected') {
+      return check;
+    }
+    const [first, ...rest]: FoundMessages = found;
+    const earliest: RecordedMessage = rest.reduce(
+      (current: RecordedMessage, next: RecordedMessage): RecordedMessage =>
+        next.sentAt.getTime() < current.sentAt.getTime() ? next : current,
+      first,
+    );
+    return this.transitionTo(this.props.attempts, {
+      status: 'SENT',
+      messageId: earliest.messageId,
+      sentAt: Delivery.copyDate(earliest.sentAt),
+      duplicateCount: rest.length,
+    });
+  }
+
   isReconcilableAt(now: Readonly<Date>): boolean {
     const { state }: DeliverySnapshot = this.props;
     return state.status === 'UNKNOWN' && state.reconcileAt.getTime() <= now.getTime();
@@ -205,6 +234,17 @@ export class Delivery {
       return Delivery.reject('REQUEST_NOT_STARTED');
     }
     return { kind: 'started', startedAt: request.at };
+  }
+
+  private checkUnknown(): UnknownCheck {
+    const { state }: DeliverySnapshot = this.props;
+    if (state.status === 'SENT' || state.status === 'FAILED') {
+      return Delivery.reject('ALREADY_SETTLED');
+    }
+    if (state.status !== 'UNKNOWN') {
+      return Delivery.reject('NOT_UNKNOWN');
+    }
+    return { kind: 'held', state };
   }
 
   private checkLease(token: LeaseToken): LeaseCheck {

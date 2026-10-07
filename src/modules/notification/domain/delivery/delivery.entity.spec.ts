@@ -12,6 +12,7 @@ import {
   DeliveryId,
   DeliverySnapshot,
   DeliveryTransition,
+  FoundMessages,
   JitterRatio,
   LeaseToken,
   MessageId,
@@ -105,6 +106,13 @@ const messageId = (): MessageId => {
   const value: string = 'm_1';
   if (!DeliveryPredicates.isMessageId(value)) {
     throw new Error('test fixture is not a valid MessageId');
+  }
+  return value;
+};
+
+const messageIdOf = (value: string): MessageId => {
+  if (!DeliveryPredicates.isMessageId(value)) {
+    throw new Error(`test fixture ${value} is not a valid MessageId`);
   }
   return value;
 };
@@ -489,18 +497,78 @@ describe('Delivery', () => {
     });
   });
 
-  it.todo(
-    'DLV-09 UNKNOWN Delivery / reconcile에서 같은 clientRef의 발송 내역 1건을 찾는다 → SENT가 되고 messageId가 기록된다',
+  it('DLV-09 UNKNOWN Delivery / reconcile에서 같은 clientRef의 발송 내역 1건을 찾는다 → SENT가 되고 messageId가 기록된다', () => {
+    const found: FoundMessages = [{ messageId: messageIdOf('m_9'), sentAt: at(SETTLED_ISO) }];
+
+    const delivery: Delivery = transitioned(unknownAfterTimeout().reconcileFound(found));
+
+    expect(delivery.snapshot()).toMatchObject({
+      attempts: 1,
+      state: { status: 'SENT', messageId: 'm_9', sentAt: at(SETTLED_ISO), duplicateCount: 0 },
+    });
+  });
+
+  it.each<StatusBuildCase>([
+    ['PENDING', pending],
+    ['IN_FLIGHT', started],
+  ])(
+    'DLV-09 UNKNOWN이 아닌 %s Delivery에는 발송 내역을 반영할 수 없다',
+    (_status: string, build: () => Delivery) => {
+      const found: FoundMessages = [{ messageId: messageIdOf('m_9'), sentAt: at(SETTLED_ISO) }];
+
+      expect(build().reconcileFound(found)).toEqual({ kind: 'rejected', reason: 'NOT_UNKNOWN' });
+    },
   );
+
+  it.each<StatusBuildCase>([
+    ['SENT', sent],
+    ['FAILED', failed],
+  ])(
+    'DLV-20 종결된 %s Delivery에는 발송 내역을 반영해도 상태가 바뀌지 않는다',
+    (_status: string, build: () => Delivery) => {
+      const found: FoundMessages = [{ messageId: messageIdOf('m_9'), sentAt: at(SETTLED_ISO) }];
+
+      expect(build().reconcileFound(found)).toEqual({
+        kind: 'rejected',
+        reason: 'ALREADY_SETTLED',
+      });
+    },
+  );
+
+  it('DLV-09 반영한 뒤 넘긴 발송 시각을 바꿔도 기록된 발송 시각은 바뀌지 않는다', () => {
+    const sentAt: Date = at(SETTLED_ISO);
+    const delivery: Delivery = transitioned(
+      unknownAfterTimeout().reconcileFound([{ messageId: messageIdOf('m_9'), sentAt }]),
+    );
+
+    sentAt.setUTCFullYear(1990);
+
+    expect(delivery.snapshot().state).toMatchObject({ sentAt: at(SETTLED_ISO) });
+  });
+
   it.todo(
     'DLV-10 reconcile 가능 시각이 지난 UNKNOWN Delivery / reconcile에서 발송 내역이 없다 → 최대 시도 횟수 안이면 RETRY_WAIT, 소진했으면 FAILED(RETRY_EXHAUSTED)가 된다',
   );
   it.todo(
     'DLV-12 UNKNOWN Delivery / 발송 내역 조회 자체가 실패한다 → 빈 내역으로 보지 않고 UNKNOWN을 유지하며 백오프 후 다음 조회를 예약한다',
   );
-  it.todo(
-    'DLV-13 UNKNOWN Delivery / 같은 clientRef의 발송 내역이 2건 이상 나온다 → SENT가 되고 중복 발송 건수가 기록된다',
-  );
+  it('DLV-13 UNKNOWN Delivery / 같은 clientRef의 발송 내역이 2건 이상 나온다 → SENT가 되고 중복 발송 건수가 기록된다', () => {
+    const found: FoundMessages = [
+      { messageId: messageIdOf('m_late'), sentAt: at('2026-10-07T09:00:40.000Z') },
+      { messageId: messageIdOf('m_first'), sentAt: at(STARTED_ISO) },
+      { messageId: messageIdOf('m_mid'), sentAt: at(SETTLED_ISO) },
+    ];
+
+    const delivery: Delivery = transitioned(unknownAfterTimeout().reconcileFound(found));
+
+    expect(delivery.snapshot().state).toEqual({
+      status: 'SENT',
+      messageId: 'm_first',
+      sentAt: at(STARTED_ISO),
+      duplicateCount: 2,
+    });
+  });
+
   it.todo('DLV-17 PENDING·RETRY_WAIT Delivery / 알림이 취소된다 → CANCELLED가 된다');
   it.todo(
     'DLV-18 알림이 취소된 뒤의 IN_FLIGHT Delivery / 늦게 202를 받는다 → 이미 나간 사실대로 SENT가 된다',
