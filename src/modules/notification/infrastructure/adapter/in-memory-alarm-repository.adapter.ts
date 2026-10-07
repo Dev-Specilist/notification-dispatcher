@@ -6,9 +6,10 @@ import {
   AlarmFound,
   AlarmLookup,
 } from '@/modules/notification/application/port/alarm-repository.type';
+import { Rollback } from '@/modules/notification/infrastructure/adapter/rollback.type';
 
 @Injectable()
-export class InMemoryAlarmRepositoryAdapter extends AlarmRepositoryPort {
+export class InMemoryAlarmRepositoryAdapter implements AlarmRepositoryPort {
   private readonly alarmsById: Map<AlarmId, AlarmFound> = new Map<AlarmId, AlarmFound>();
 
   save(alarm: Alarm): Promise<void> {
@@ -18,5 +19,15 @@ export class InMemoryAlarmRepositoryAdapter extends AlarmRepositoryPort {
 
   findById(id: AlarmId): Promise<AlarmLookup> {
     return Promise.resolve(this.alarmsById.get(id) ?? { kind: 'missing' });
+  }
+
+  checkpoint(): Rollback {
+    const saved: Map<AlarmId, AlarmFound> = new Map<AlarmId, AlarmFound>(this.alarmsById);
+    return (): void => {
+      this.alarmsById.clear();
+      saved.forEach((value: AlarmFound, key: AlarmId): void => {
+        this.alarmsById.set(key, value);
+      });
+    };
   }
 }

@@ -1,4 +1,5 @@
-import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
+import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
+import { AlarmConflicted, AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
 import { AlarmFound } from '@/modules/notification/application/port/alarm-repository.type';
 
 export interface AlarmNotFoundError {
@@ -12,3 +13,10 @@ export interface AlarmNotFound {
 }
 
 export type AlarmResult = AlarmFound | AlarmNotFound;
+
+export interface AlarmDispatched {
+  readonly kind: 'dispatched';
+  readonly alarm: Alarm;
+}
+
+export type StartDispatchResult = AlarmDispatched | AlarmNotFound | AlarmConflicted;

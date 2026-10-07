@@ -1,15 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
-import { AlarmCreation, AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
-import { AlarmRepositoryPort } from '@/modules/notification/application/port/alarm-repository.port';
+import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
+import { AlarmCreation, AlarmDraft, AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
+import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
+import { DeliveryId } from '@/modules/notification/domain/delivery/delivery.type';
+import { AlarmLookup } from '@/modules/notification/application/port/alarm-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/clock.port';
 import { IdGeneratorPort } from '@/modules/notification/application/port/id-generator.port';
-import { AlarmLookup } from '@/modules/notification/application/port/alarm-repository.type';
 import { CreateAlarmUseCase } from '@/modules/notification/application/use-case/create-alarm.use-case';
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
+import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-delivery-repository.adapter';
+import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-expansion-job-repository.adapter';
+import { InMemoryUnitOfWorkAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-unit-of-work.adapter';
 
 const NOW_ISO: string = '2026-10-07T09:00:00.000Z';
+
+const BULK_DRAFT: AlarmDraft = {
+  title: '추석 이벤트',
+  body: '연휴 쿠폰이 도착했어요',
+  kind: 'BULK',
+  recipientIds: [],
+};
 
 const alarmId = (): AlarmId => {
   const value: string = '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10';
@@ -19,25 +30,29 @@ const alarmId = (): AlarmId => {
   return value;
 };
 
-class FixedClock extends ClockPort {
+class FixedClock implements ClockPort {
   now(): Date {
     return new Date(NOW_ISO);
   }
 }
 
-class FixedIdGenerator extends IdGeneratorPort {
+class FixedIdGenerator implements IdGeneratorPort {
   alarmId(): AlarmId {
     return alarmId();
   }
+
+  deliveryId(): DeliveryId {
+    const value: string = '5f1d2a8c-3b4e-4c6d-9e7f-8a9b0c1d2e3f';
+    if (!DeliveryPredicates.isDeliveryId(value)) {
+      throw new Error('test fixture is not a valid DeliveryId');
+    }
+    return value;
+  }
 }
 
-class FailingAlarmRepository extends AlarmRepositoryPort {
-  save(): Promise<void> {
+class FailingAlarmRepository extends InMemoryAlarmRepositoryAdapter {
+  override save(): Promise<void> {
     return Promise.reject(new Error('alarm storage is unavailable'));
-  }
-
-  findById(): Promise<AlarmLookup> {
-    return Promise.resolve({ kind: 'missing' });
   }
 }
 
@@ -55,16 +70,39 @@ const found = (lookup: AlarmLookup): Alarm => {
   return lookup.alarm;
 };
 
+interface Gate {
+  readonly opened: Promise<void>;
+  readonly open: () => void;
+}
+
+const NOT_YET_OPENED: () => void = (): void => {};
+
+const createGate = (): Gate => {
+  let release: () => void = NOT_YET_OPENED;
+  const opened: Promise<void> = new Promise<void>((resolve: () => void): void => {
+    release = resolve;
+  });
+  return { opened, open: (): void => release() };
+};
+
 interface Fixture {
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
+  readonly unitOfWork: InMemoryUnitOfWorkAdapter;
   readonly useCase: CreateAlarmUseCase;
 }
 
-const fixture = (): Fixture => {
-  const alarmRepository: InMemoryAlarmRepositoryAdapter = new InMemoryAlarmRepositoryAdapter();
+const fixture = (
+  alarmRepository: InMemoryAlarmRepositoryAdapter = new InMemoryAlarmRepositoryAdapter(),
+): Fixture => {
+  const unitOfWork: InMemoryUnitOfWorkAdapter = new InMemoryUnitOfWorkAdapter({
+    alarmRepository,
+    deliveryRepository: new InMemoryDeliveryRepositoryAdapter(),
+    expansionJobRepository: new InMemoryExpansionJobRepositoryAdapter(),
+  });
   return {
     alarmRepository,
-    useCase: new CreateAlarmUseCase(alarmRepository, new FixedIdGenerator(), new FixedClock()),
+    unitOfWork,
+    useCase: new CreateAlarmUseCase(unitOfWork, new FixedIdGenerator(), new FixedClock()),
   };
 };
 
@@ -72,14 +110,7 @@ describe('CreateAlarmUseCase', () => {
   it('UC-01 유효한 요청 / 알림 생성 유스케이스 → 저장소에 DRAFT 알림이 저장되고 반환된다', async (): Promise<void> => {
     const { alarmRepository, useCase }: Fixture = fixture();
 
-    const alarm: Alarm = created(
-      await useCase.execute({
-        title: '추석 이벤트',
-        body: '연휴 쿠폰이 도착했어요',
-        kind: 'BULK',
-        recipientIds: [],
-      }),
-    );
+    const alarm: Alarm = created(await useCase.execute(BULK_DRAFT));
     const stored: Alarm = found(await alarmRepository.findById(alarmId()));
 
     expect(stored.snapshot()).toEqual(alarm.snapshot());
@@ -91,26 +122,34 @@ describe('CreateAlarmUseCase', () => {
   });
 
   it('UC-01 저장에 실패하면 생성 성공을 반환하지 않고 저장 오류를 그대로 전달한다', async (): Promise<void> => {
-    const useCase: CreateAlarmUseCase = new CreateAlarmUseCase(
-      new FailingAlarmRepository(),
-      new FixedIdGenerator(),
-      new FixedClock(),
-    );
+    const { useCase }: Fixture = fixture(new FailingAlarmRepository());
 
-    await expect(
-      useCase.execute({ title: '추석 이벤트', body: '본문', kind: 'BULK', recipientIds: [] }),
-    ).rejects.toThrow('alarm storage is unavailable');
+    await expect(useCase.execute(BULK_DRAFT)).rejects.toThrow('alarm storage is unavailable');
+  });
+
+  it('UC-01 진행 중인 다른 트랜잭션이 실패해 롤백돼도 그사이 생성한 알림은 남는다', async (): Promise<void> => {
+    const { alarmRepository, unitOfWork, useCase }: Fixture = fixture();
+    const transactionStarted: Gate = createGate();
+    const failureReleased: Gate = createGate();
+    const failing: Promise<void> = unitOfWork.run(async (): Promise<void> => {
+      transactionStarted.open();
+      await failureReleased.opened;
+      throw new Error('other transaction failed');
+    });
+    await transactionStarted.opened;
+
+    const creation: Promise<AlarmCreation> = useCase.execute(BULK_DRAFT);
+    failureReleased.open();
+
+    await expect(failing).rejects.toThrow('other transaction failed');
+    expect(created(await creation).snapshot().id).toBe(alarmId());
+    expect((await alarmRepository.findById(alarmId())).kind).toBe('found');
   });
 
   it('UC-01 검증에 실패한 요청은 저장하지 않고 거부 사유를 반환한다', async (): Promise<void> => {
     const { alarmRepository, useCase }: Fixture = fixture();
 
-    const creation: AlarmCreation = await useCase.execute({
-      title: ' ',
-      body: '본문',
-      kind: 'BULK',
-      recipientIds: [],
-    });
+    const creation: AlarmCreation = await useCase.execute({ ...BULK_DRAFT, title: ' ' });
 
     expect(creation).toEqual({ kind: 'rejected', error: { code: 'EMPTY_TITLE' } });
     expect(await alarmRepository.findById(alarmId())).toEqual({ kind: 'missing' });
