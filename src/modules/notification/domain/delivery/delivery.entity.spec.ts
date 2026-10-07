@@ -56,6 +56,8 @@ const MAX_REQUEST_MS: DurationMs = durationMs(10_000);
 const RECONCILE_DELAY_MS: DurationMs = durationMs(35_000);
 const LEASE_EXPIRED_ISO: string = '2026-10-07T09:01:01.000Z';
 const RECONCILABLE_ISO: string = '2026-10-07T09:00:37.000Z';
+const UNCONFIRMED_AFTER_MS: DurationMs = durationMs(600_000);
+const UNCONFIRMED_ISO: string = '2026-10-07T09:10:03.000Z';
 
 const retryPolicy = (maxAttempts: number): RetryPolicy => {
   const creation: RetryPolicyCreation = RetryPolicy.create({
@@ -151,6 +153,9 @@ const sent = (): Delivery =>
 
 const unknownAfterTimeout = (): Delivery =>
   transitioned(started().recordUnknown(TOKEN_A(), at(SETTLED_ISO), RECONCILE_DELAY_MS));
+
+const unconfirmed = (): Delivery =>
+  transitioned(unknownAfterTimeout().expireUnconfirmed(at(UNCONFIRMED_ISO), UNCONFIRMED_AFTER_MS));
 
 const failed = (): Delivery =>
   transitioned(started().recordPermanentFailure(TOKEN_A(), 'RECIPIENT_BLOCKED'));
@@ -286,6 +291,7 @@ describe('Delivery', () => {
   it.each<StatusBuildCase>([
     ['SENT', (): Delivery => sent()],
     ['FAILED', (): Delivery => failed()],
+    ['UNCONFIRMED', (): Delivery => unconfirmed()],
   ])(
     'DLV-20 %s Delivery / 어떤 결과든 다시 기록하려 한다 → 종결 상태는 바뀌지 않는다',
     (_status: string, build: () => Delivery) => {
@@ -524,6 +530,7 @@ describe('Delivery', () => {
   it.each<StatusBuildCase>([
     ['SENT', sent],
     ['FAILED', failed],
+    ['UNCONFIRMED', unconfirmed],
   ])(
     'DLV-20 종결된 %s Delivery에는 발송 내역을 반영해도 상태가 바뀌지 않는다',
     (_status: string, build: () => Delivery) => {
@@ -603,6 +610,7 @@ describe('Delivery', () => {
   it.each<StatusBuildCase>([
     ['SENT', sent],
     ['FAILED', failed],
+    ['UNCONFIRMED', unconfirmed],
   ])(
     'DLV-20 종결된 %s Delivery에는 내역 없음을 반영해도 상태가 바뀌지 않는다',
     (_status: string, build: () => Delivery) => {
@@ -686,6 +694,7 @@ describe('Delivery', () => {
   it.each<StatusBuildCase>([
     ['SENT', sent],
     ['FAILED', failed],
+    ['UNCONFIRMED', unconfirmed],
   ])(
     'DLV-20 종결된 %s Delivery에는 조회 실패를 기록해도 상태가 바뀌지 않는다',
     (_status: string, build: () => Delivery) => {
@@ -719,7 +728,76 @@ describe('Delivery', () => {
   it.todo(
     'DLV-19 UNKNOWN Delivery이고 알림이 취소됐다 / reconcile에서 발송 내역이 없다 → 재시도 대신 CANCELLED가 된다',
   );
-  it.todo(
-    'DLV-21 확인 기간(UNCONFIRMED_AFTER_MS)이 지난 UNKNOWN Delivery / reconcile 대상을 고른다 → 재전송하지 않고 UNCONFIRMED로 종결된다',
+  it('DLV-21 확인 기간(UNCONFIRMED_AFTER_MS)이 지난 UNKNOWN Delivery / reconcile 대상을 고른다 → 재전송하지 않고 UNCONFIRMED로 종결된다', () => {
+    expect(unconfirmed().snapshot()).toMatchObject({
+      attempts: 1,
+      state: {
+        status: 'UNCONFIRMED',
+        unknownSince: at(SETTLED_ISO),
+        unconfirmedAt: at(UNCONFIRMED_ISO),
+      },
+    });
+  });
+
+  it('DLV-21 확인 기간이 남은 UNKNOWN Delivery는 UNCONFIRMED로 종결할 수 없다', () => {
+    const beforeWindowEnds: Date = new Date(at(UNCONFIRMED_ISO).getTime() - 1);
+
+    expect(unknownAfterTimeout().expireUnconfirmed(beforeWindowEnds, UNCONFIRMED_AFTER_MS)).toEqual(
+      { kind: 'rejected', reason: 'CONFIRM_WINDOW_OPEN' },
+    );
+  });
+
+  it('DLV-21 확인 기간은 조회 실패로 다음 조회가 미뤄져도 처음 UNKNOWN이 된 시각부터 잰다', () => {
+    const lookupFailed: Delivery = transitioned(
+      unknownAfterTimeout().recordLookupFailure(at(UNCONFIRMED_ISO), retryPolicy(3), jitter(0)),
+    );
+
+    expect(
+      transitioned(
+        lookupFailed.expireUnconfirmed(at(UNCONFIRMED_ISO), UNCONFIRMED_AFTER_MS),
+      ).snapshot().state,
+    ).toMatchObject({ status: 'UNCONFIRMED', unknownSince: at(SETTLED_ISO) });
+  });
+
+  it.each<StatusBuildCase>([
+    ['PENDING', pending],
+    ['IN_FLIGHT', started],
+  ])(
+    'DLV-21 UNKNOWN이 아닌 %s Delivery는 UNCONFIRMED로 종결할 수 없다',
+    (_status: string, build: () => Delivery) => {
+      expect(build().expireUnconfirmed(at(UNCONFIRMED_ISO), UNCONFIRMED_AFTER_MS)).toEqual({
+        kind: 'rejected',
+        reason: 'NOT_UNKNOWN',
+      });
+    },
   );
+
+  it.each<StatusBuildCase>([
+    ['SENT', sent],
+    ['FAILED', failed],
+    ['UNCONFIRMED', unconfirmed],
+  ])(
+    'DLV-20 종결된 %s Delivery는 다시 UNCONFIRMED로 종결해도 상태가 바뀌지 않는다',
+    (_status: string, build: () => Delivery) => {
+      expect(build().expireUnconfirmed(at(UNCONFIRMED_ISO), UNCONFIRMED_AFTER_MS)).toEqual({
+        kind: 'rejected',
+        reason: 'ALREADY_SETTLED',
+      });
+    },
+  );
+
+  it('DLV-21 UNCONFIRMED snapshot으로 받은 Date를 바꿔도 Delivery 내부 상태는 바뀌지 않는다', () => {
+    const delivery: Delivery = unconfirmed();
+    const { state }: DeliverySnapshot = delivery.snapshot();
+
+    if (state.status === 'UNCONFIRMED') {
+      state.unknownSince.setUTCFullYear(1990);
+      state.unconfirmedAt.setUTCFullYear(1990);
+    }
+
+    expect(delivery.snapshot().state).toMatchObject({
+      unknownSince: at(SETTLED_ISO),
+      unconfirmedAt: at(UNCONFIRMED_ISO),
+    });
+  });
 });

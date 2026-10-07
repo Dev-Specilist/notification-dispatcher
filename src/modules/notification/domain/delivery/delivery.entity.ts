@@ -243,6 +243,22 @@ export class Delivery {
     });
   }
 
+  expireUnconfirmed(now: Readonly<Date>, unconfirmedAfterMs: DurationMs): DeliveryTransition {
+    const check: UnknownCheck = this.checkUnknown();
+    if (check.kind === 'rejected') {
+      return check;
+    }
+    const { unknownSince }: UnknownState = check.state;
+    if (now.getTime() - unknownSince.getTime() < unconfirmedAfterMs) {
+      return Delivery.reject('CONFIRM_WINDOW_OPEN');
+    }
+    return this.transitionTo(this.props.attempts, {
+      status: 'UNCONFIRMED',
+      unknownSince: Delivery.copyDate(unknownSince),
+      unconfirmedAt: Delivery.copyDate(now),
+    });
+  }
+
   isReconcilableAt(now: Readonly<Date>): boolean {
     const { state }: DeliverySnapshot = this.props;
     return state.status === 'UNKNOWN' && state.reconcileAt.getTime() <= now.getTime();
@@ -278,7 +294,7 @@ export class Delivery {
 
   private checkUnknown(): UnknownCheck {
     const { state }: DeliverySnapshot = this.props;
-    if (state.status === 'SENT' || state.status === 'FAILED') {
+    if (Delivery.isSettled(state)) {
       return Delivery.reject('ALREADY_SETTLED');
     }
     if (state.status !== 'UNKNOWN') {
@@ -289,7 +305,7 @@ export class Delivery {
 
   private checkLease(token: LeaseToken): LeaseCheck {
     const { state }: DeliverySnapshot = this.props;
-    if (state.status === 'SENT' || state.status === 'FAILED') {
+    if (Delivery.isSettled(state)) {
       return Delivery.reject('ALREADY_SETTLED');
     }
     if (state.status !== 'IN_FLIGHT') {
@@ -306,6 +322,10 @@ export class Delivery {
       kind: 'transitioned',
       delivery: new Delivery({ ...this.snapshot(), attempts, state }),
     };
+  }
+
+  private static isSettled(state: DeliveryState): boolean {
+    return state.status === 'SENT' || state.status === 'FAILED' || state.status === 'UNCONFIRMED';
   }
 
   private static copyState(state: DeliveryState): DeliveryState {
@@ -328,6 +348,12 @@ export class Delivery {
         };
       case 'SENT':
         return { ...state, sentAt: Delivery.copyDate(state.sentAt) };
+      case 'UNCONFIRMED':
+        return {
+          status: 'UNCONFIRMED',
+          unknownSince: Delivery.copyDate(state.unknownSince),
+          unconfirmedAt: Delivery.copyDate(state.unconfirmedAt),
+        };
       case 'FAILED':
         break;
     }
