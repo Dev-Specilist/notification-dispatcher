@@ -612,8 +612,88 @@ describe('Delivery', () => {
       });
     },
   );
-  it.todo(
-    'DLV-12 UNKNOWN Delivery / 발송 내역 조회 자체가 실패한다 → 빈 내역으로 보지 않고 UNKNOWN을 유지하며 백오프 후 다음 조회를 예약한다',
+  it('DLV-12 UNKNOWN Delivery / 발송 내역 조회 자체가 실패한다 → 빈 내역으로 보지 않고 UNKNOWN을 유지하며 백오프 후 다음 조회를 예약한다', () => {
+    const delivery: Delivery = transitioned(
+      unknownAfterTimeout().recordLookupFailure(at(RECONCILABLE_ISO), retryPolicy(3), jitter(0)),
+    );
+
+    expect(delivery.snapshot()).toMatchObject({
+      attempts: 1,
+      state: {
+        status: 'UNKNOWN',
+        unknownSince: at(SETTLED_ISO),
+        reconcileAt: new Date(at(RECONCILABLE_ISO).getTime() + 500),
+        lookupFailures: 1,
+      },
+    });
+  });
+
+  it('DLV-12 조회 실패가 이어지면 실패 횟수가 쌓이고 다음 조회 간격이 늘어난다', () => {
+    const firstFailedAt: Date = at(RECONCILABLE_ISO);
+    const secondFailedAt: Date = new Date(firstFailedAt.getTime() + 500);
+    const once: Delivery = transitioned(
+      unknownAfterTimeout().recordLookupFailure(firstFailedAt, retryPolicy(3), jitter(0)),
+    );
+
+    const twice: Delivery = transitioned(
+      once.recordLookupFailure(secondFailedAt, retryPolicy(3), jitter(0)),
+    );
+
+    expect(twice.snapshot().state).toMatchObject({
+      reconcileAt: new Date(secondFailedAt.getTime() + 1_000),
+      lookupFailures: 2,
+    });
+  });
+
+  it('DLV-12 조회 실패가 최대 시도 횟수보다 많이 쌓여도 FAILED가 되지 않고 발송 시도 횟수도 그대로다', () => {
+    const policy: RetryPolicy = retryPolicy(2);
+    const failedAt: Date = at(RECONCILABLE_ISO);
+    const failThrice: Delivery = [1, 2, 3].reduce(
+      (delivery: Delivery): Delivery =>
+        transitioned(delivery.recordLookupFailure(failedAt, policy, jitter(0))),
+      unknownAfterTimeout(),
+    );
+
+    expect(failThrice.snapshot()).toMatchObject({
+      attempts: 1,
+      state: { status: 'UNKNOWN', lookupFailures: 3 },
+    });
+  });
+
+  it('DLV-12 조회 실패 뒤에는 다시 예약한 시각부터 reconcile 대상이 된다', () => {
+    const nextLookupAt: number = at(RECONCILABLE_ISO).getTime() + 500;
+    const delivery: Delivery = transitioned(
+      unknownAfterTimeout().recordLookupFailure(at(RECONCILABLE_ISO), retryPolicy(3), jitter(0)),
+    );
+
+    expect(delivery.isReconcilableAt(new Date(nextLookupAt - 1))).toBe(false);
+    expect(delivery.isReconcilableAt(new Date(nextLookupAt))).toBe(true);
+  });
+
+  it.each<StatusBuildCase>([
+    ['PENDING', pending],
+    ['IN_FLIGHT', started],
+  ])(
+    'DLV-12 UNKNOWN이 아닌 %s Delivery에는 조회 실패를 기록할 수 없다',
+    (_status: string, build: () => Delivery) => {
+      expect(build().recordLookupFailure(at(RECONCILABLE_ISO), retryPolicy(3), jitter(0))).toEqual({
+        kind: 'rejected',
+        reason: 'NOT_UNKNOWN',
+      });
+    },
+  );
+
+  it.each<StatusBuildCase>([
+    ['SENT', sent],
+    ['FAILED', failed],
+  ])(
+    'DLV-20 종결된 %s Delivery에는 조회 실패를 기록해도 상태가 바뀌지 않는다',
+    (_status: string, build: () => Delivery) => {
+      expect(build().recordLookupFailure(at(RECONCILABLE_ISO), retryPolicy(3), jitter(0))).toEqual({
+        kind: 'rejected',
+        reason: 'ALREADY_SETTLED',
+      });
+    },
   );
   it('DLV-13 UNKNOWN Delivery / 같은 clientRef의 발송 내역이 2건 이상 나온다 → SENT가 되고 중복 발송 건수가 기록된다', () => {
     const found: FoundMessages = [

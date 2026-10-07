@@ -226,6 +226,23 @@ export class Delivery {
     });
   }
 
+  recordLookupFailure(
+    now: Readonly<Date>,
+    policy: RetryPolicy,
+    jitter: JitterRatio,
+  ): DeliveryTransition {
+    const check: UnknownCheck = this.checkUnknown();
+    if (check.kind === 'rejected') {
+      return check;
+    }
+    const lookupFailures: number = check.state.lookupFailures + 1;
+    return this.transitionTo(this.props.attempts, {
+      ...check.state,
+      reconcileAt: new Date(now.getTime() + policy.delayFor(lookupFailures, jitter)),
+      lookupFailures,
+    });
+  }
+
   isReconcilableAt(now: Readonly<Date>): boolean {
     const { state }: DeliverySnapshot = this.props;
     return state.status === 'UNKNOWN' && state.reconcileAt.getTime() <= now.getTime();
