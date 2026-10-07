@@ -43,6 +43,10 @@ export class InMemoryExpansionJobRepositoryAdapter implements ExpansionJobReposi
     });
   }
 
+  findByAlarmIdForUpdate(alarmId: AlarmId): Promise<ExpansionJobLookup> {
+    return this.findByAlarmId(alarmId);
+  }
+
   recordProgress(alarmId: AlarmId, progress: ExpansionProgress): Promise<void> {
     const lookup: ExpansionJobLookup = this.jobsByAlarmId.get(alarmId) ?? { kind: 'missing' };
     if (lookup.kind === 'missing') {

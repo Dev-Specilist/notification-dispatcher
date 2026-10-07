@@ -30,7 +30,7 @@ export class StartDispatchUseCase {
         deliveryRepository,
         expansionJobRepository,
       }: TransactionRepositories): Promise<StartDispatchResult> => {
-        const lookup: AlarmLookup = await alarmRepository.findById(alarmId);
+        const lookup: AlarmLookup = await alarmRepository.findByIdForUpdate(alarmId);
         if (lookup.kind === 'missing') {
           return { kind: 'not-found', error: { code: 'ALARM_NOT_FOUND', alarmId } };
         }

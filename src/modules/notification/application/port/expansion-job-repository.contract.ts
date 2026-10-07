@@ -153,6 +153,34 @@ export class ExpansionJobRepositoryContract {
       expect(await expansionJobRepository.findByAlarmId(owner)).toEqual({ kind: 'missing' });
     });
 
+    it('UC-07 잠그며 조회해도 기록된 확장 진행을 그대로 돌려준다', async (): Promise<void> => {
+      const { expansionJobRepository, owner }: Scenario =
+        await ExpansionJobRepositoryContract.scenario(createRepositories);
+      await expansionJobRepository.enqueue(owner, new Date(ENQUEUED_ISO));
+      await expansionJobRepository.recordProgress(owner, {
+        kind: 'in-progress',
+        cursor: { kind: 'next', token: 'Mw' },
+      });
+
+      expect(await expansionJobRepository.findByAlarmIdForUpdate(owner)).toEqual({
+        kind: 'found',
+        job: {
+          alarmId: owner,
+          enqueuedAt: new Date(ENQUEUED_ISO),
+          progress: { kind: 'in-progress', cursor: { kind: 'next', token: 'Mw' } },
+        },
+      });
+    });
+
+    it('UC-07 확장 작업이 없는 알림을 잠그며 조회하면 없음으로 돌려준다', async (): Promise<void> => {
+      const { expansionJobRepository, owner }: Scenario =
+        await ExpansionJobRepositoryContract.scenario(createRepositories);
+
+      expect(await expansionJobRepository.findByAlarmIdForUpdate(owner)).toEqual({
+        kind: 'missing',
+      });
+    });
+
     it('UC-06 확장 작업이 없는 알림의 진행은 기록하지 않고 거부한다', async (): Promise<void> => {
       const { expansionJobRepository, owner }: Scenario =
         await ExpansionJobRepositoryContract.scenario(createRepositories);

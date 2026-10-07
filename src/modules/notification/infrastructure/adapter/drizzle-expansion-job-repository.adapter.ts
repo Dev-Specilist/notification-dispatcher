@@ -34,16 +34,24 @@ export class DrizzleExpansionJobRepositoryAdapter implements ExpansionJobReposit
   }
 
   async findByAlarmId(alarmId: AlarmId): Promise<ExpansionJobLookup> {
-    const rows: ReadonlyArray<ExpansionJobRow> = await this.database
-      .select()
-      .from(expansionJobs)
-      .where(eq(expansionJobs.alarmId, alarmId))
-      .limit(1);
-    if (rows.length === 0) {
-      return { kind: 'missing' };
-    }
-    const [row]: ReadonlyArray<ExpansionJobRow> = rows;
-    return { kind: 'found', job: ExpansionJobRowMapper.toJob(row) };
+    return DrizzleExpansionJobRepositoryAdapter.toLookup(
+      await this.database
+        .select()
+        .from(expansionJobs)
+        .where(eq(expansionJobs.alarmId, alarmId))
+        .limit(1),
+    );
+  }
+
+  async findByAlarmIdForUpdate(alarmId: AlarmId): Promise<ExpansionJobLookup> {
+    return DrizzleExpansionJobRepositoryAdapter.toLookup(
+      await this.database
+        .select()
+        .from(expansionJobs)
+        .where(eq(expansionJobs.alarmId, alarmId))
+        .limit(1)
+        .for('update'),
+    );
   }
 
   async recordProgress(alarmId: AlarmId, progress: ExpansionProgress): Promise<void> {
@@ -55,5 +63,13 @@ export class DrizzleExpansionJobRepositoryAdapter implements ExpansionJobReposit
     if (updated.length === 0) {
       throw new Error(`expansion job for alarm ${alarmId} does not exist`);
     }
+  }
+
+  private static toLookup(rows: ReadonlyArray<ExpansionJobRow>): ExpansionJobLookup {
+    if (rows.length === 0) {
+      return { kind: 'missing' };
+    }
+    const [row]: ReadonlyArray<ExpansionJobRow> = rows;
+    return { kind: 'found', job: ExpansionJobRowMapper.toJob(row) };
   }
 }

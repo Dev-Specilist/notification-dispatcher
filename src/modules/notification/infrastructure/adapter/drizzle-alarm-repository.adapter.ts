@@ -24,11 +24,18 @@ export class DrizzleAlarmRepositoryAdapter implements AlarmRepositoryPort {
   }
 
   async findById(id: AlarmId): Promise<AlarmLookup> {
-    const rows: ReadonlyArray<AlarmRow> = await this.database
-      .select()
-      .from(alarms)
-      .where(eq(alarms.id, id))
-      .limit(1);
+    return DrizzleAlarmRepositoryAdapter.toLookup(
+      await this.database.select().from(alarms).where(eq(alarms.id, id)).limit(1),
+    );
+  }
+
+  async findByIdForUpdate(id: AlarmId): Promise<AlarmLookup> {
+    return DrizzleAlarmRepositoryAdapter.toLookup(
+      await this.database.select().from(alarms).where(eq(alarms.id, id)).limit(1).for('update'),
+    );
+  }
+
+  private static toLookup(rows: ReadonlyArray<AlarmRow>): AlarmLookup {
     if (rows.length === 0) {
       return { kind: 'missing' };
     }

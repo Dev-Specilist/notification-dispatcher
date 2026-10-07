@@ -113,6 +113,28 @@ export class AlarmRepositoryContract {
       ).toEqual(cancelled.snapshot());
     });
 
+    it('DB-04 잠그며 조회해도 저장된 알림을 같은 도메인 객체로 돌려준다', async (): Promise<void> => {
+      const repository: AlarmRepositoryPort = await createRepository();
+      const alarm: Alarm = AlarmRepositoryContract.dispatched(
+        AlarmRepositoryContract.created(URGENT_DRAFT),
+      );
+      await repository.save(alarm);
+
+      expect(
+        AlarmRepositoryContract.found(
+          await repository.findByIdForUpdate(alarm.snapshot().id),
+        ).snapshot(),
+      ).toEqual(alarm.snapshot());
+    });
+
+    it('DB-04 저장하지 않은 id를 잠그며 조회하면 없음으로 돌려준다', async (): Promise<void> => {
+      const repository: AlarmRepositoryPort = await createRepository();
+
+      expect(await repository.findByIdForUpdate(AlarmRepositoryContract.newAlarmId())).toEqual({
+        kind: 'missing',
+      });
+    });
+
     it('DB-01 조회한 알림의 Date를 바꿔도 저장된 값은 바뀌지 않는다', async (): Promise<void> => {
       const repository: AlarmRepositoryPort = await createRepository();
       const alarm: Alarm = AlarmRepositoryContract.created(BULK_DRAFT);

@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { AlarmId, RecipientId } from '@/modules/notification/domain/alarm/alarm.type';
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
-import { AlarmRepositoryPort } from '@/modules/notification/application/port/alarm-repository.port';
 import { AlarmLookup } from '@/modules/notification/application/port/alarm-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/clock.port';
 import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/expansion-job-repository.port';
@@ -69,7 +68,7 @@ export class ExpandRecipientsUseCase {
         if (progress.kind === 'stopped') {
           return { kind: 'cancelled' };
         }
-        if (await ExpandRecipientsUseCase.shouldStopExpansion(alarmRepository, alarmId)) {
+        if (ExpandRecipientsUseCase.shouldStopExpansion(await alarmRepository.findById(alarmId))) {
           return this.stop(expansionJobRepository, alarmId);
         }
         return { kind: 'fetch', cursor: progress.cursor };
@@ -94,11 +93,16 @@ export class ExpandRecipientsUseCase {
         deliveryRepository,
         expansionJobRepository,
       }: TransactionRepositories): Promise<ExpansionStep> => {
-        const current: ExpansionJobLookup = await expansionJobRepository.findByAlarmId(alarmId);
+        const current: ExpansionJobLookup =
+          await expansionJobRepository.findByAlarmIdForUpdate(alarmId);
         if (!ExpandRecipientsUseCase.isStillAt(current, fetchedWith)) {
           return { kind: 'superseded' };
         }
-        if (await ExpandRecipientsUseCase.shouldStopExpansion(alarmRepository, alarmId)) {
+        if (
+          ExpandRecipientsUseCase.shouldStopExpansion(
+            await alarmRepository.findByIdForUpdate(alarmId),
+          )
+        ) {
           return this.stop(expansionJobRepository, alarmId);
         }
         await deliveryRepository.insertMissing(
@@ -133,11 +137,7 @@ export class ExpandRecipientsUseCase {
     return { kind: 'cancelled' };
   }
 
-  private static async shouldStopExpansion(
-    alarmRepository: AlarmRepositoryPort,
-    alarmId: AlarmId,
-  ): Promise<boolean> {
-    const lookup: AlarmLookup = await alarmRepository.findById(alarmId);
+  private static shouldStopExpansion(lookup: AlarmLookup): boolean {
     return lookup.kind === 'missing' || lookup.alarm.snapshot().state.status === 'CANCELLED';
   }
 

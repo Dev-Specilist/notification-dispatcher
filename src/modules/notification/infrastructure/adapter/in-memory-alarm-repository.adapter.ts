@@ -21,6 +21,10 @@ export class InMemoryAlarmRepositoryAdapter implements AlarmRepositoryPort {
     return Promise.resolve(this.alarmsById.get(id) ?? { kind: 'missing' });
   }
 
+  findByIdForUpdate(id: AlarmId): Promise<AlarmLookup> {
+    return this.findById(id);
+  }
+
   checkpoint(): Rollback {
     const saved: Map<AlarmId, AlarmFound> = new Map<AlarmId, AlarmFound>(this.alarmsById);
     return (): void => {

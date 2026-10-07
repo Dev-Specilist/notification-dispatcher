@@ -68,8 +68,4 @@ describe('DrizzleDeliveryRepositoryAdapter', () => {
       ).rejects.toThrow('violates check constraint');
     },
   );
-
-  it.todo(
-    'DB-06 대기 Delivery 100건 / 워커 3개가 동시에 claim한다 (FOR UPDATE SKIP LOCKED) → 같은 Delivery를 두 워커가 가져가지 않는다',
-  );
 });

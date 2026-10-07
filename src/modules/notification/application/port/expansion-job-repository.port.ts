@@ -9,5 +9,7 @@ export abstract class ExpansionJobRepositoryPort {
 
   abstract findByAlarmId(alarmId: AlarmId): Promise<ExpansionJobLookup>;
 
+  abstract findByAlarmIdForUpdate(alarmId: AlarmId): Promise<ExpansionJobLookup>;
+
   abstract recordProgress(alarmId: AlarmId, progress: ExpansionProgress): Promise<void>;
 }
