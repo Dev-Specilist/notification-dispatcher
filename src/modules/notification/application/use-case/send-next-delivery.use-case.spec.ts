@@ -240,7 +240,7 @@ const retryPolicy = (maxAttempts: number): RetryPolicy => {
 };
 
 class FixedDispatchSettings implements DispatchSettingsPort {
-  readonly leaseMs: DurationMs = durationMs(60_000);
+  readonly leaseMs: DurationMs;
 
   readonly maxRequestMs: DurationMs = durationMs(10_000);
 
@@ -248,8 +248,9 @@ class FixedDispatchSettings implements DispatchSettingsPort {
 
   readonly retryPolicy: RetryPolicy;
 
-  constructor(maxAttempts: number = 3) {
+  constructor(maxAttempts: number = 3, leaseMs: number = 60_000) {
     this.retryPolicy = retryPolicy(maxAttempts);
+    this.leaseMs = durationMs(leaseMs);
   }
 }
 
@@ -774,6 +775,20 @@ describe('SendNextDeliveryUseCase', () => {
       ]);
     },
   );
+
+  it('UC-09 lease가 HTTP 최대 실행 시간보다 짧으면 요청을 시작하지 않고 lease를 반납한다', async (): Promise<void> => {
+    const { deliveryRepository, sender, useCase }: Fixture = await fixture(
+      [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
+      { settings: new FixedDispatchSettings(3, 5_000) },
+    );
+
+    expect(await useCase.execute()).toEqual({ kind: 'released', deliveryId: deliveryId(1) });
+    expect(sender.sent).toEqual([]);
+    const [stored]: ReadonlyArray<Delivery> = await deliveryRepository.findByAlarmId(
+      alarmId(BULK_ALARM_ID),
+    );
+    expect(stored.snapshot()).toMatchObject({ attempts: 0, state: { status: 'PENDING' } });
+  });
 
   it('UC-11 429 응답 / 발송 유스케이스 → 공유 처리량 제한기에 Retry-After만큼 정지가 걸려 모든 워커가 함께 멈춘다', async (): Promise<void> => {
     const clock: AdjustableClock = new AdjustableClock();
