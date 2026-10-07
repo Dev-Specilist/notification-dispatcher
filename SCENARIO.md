@@ -82,7 +82,7 @@ Delivery
 | ID | Given | When | Then |
 | --- | --- | --- | --- |
 | DLV-01 | `PENDING` Delivery | 워커가 claim한다 | `IN_FLIGHT`가 되고 새 leaseToken과 lease 만료 시각이 기록된다. 시도 횟수는 아직 늘지 않는다 |
-| DLV-02 | `IN_FLIGHT` Delivery | 실제 HTTP 요청을 시작한다 | 시도 횟수가 1 늘고 요청 시작 시각이 기록된다 |
+| DLV-02 | `IN_FLIGHT` Delivery | 실제 HTTP 요청을 시작한다 | 시도 횟수가 1 늘고 요청 시작 시각이 기록된다. 이미 시작한 요청은 다시 시작할 수 없다 |
 | DLV-03 | `IN_FLIGHT` Delivery | 202 응답을 받는다 | `SENT`가 되고 messageId가 기록된다 |
 | DLV-04 | `IN_FLIGHT` Delivery | 400 `RECIPIENT_BLOCKED`·`UNKNOWN_RECIPIENT`·`INVALID_REQUEST`를 받는다 | 재시도 없이 `FAILED`가 되고 사유 코드가 기록된다 |
 | DLV-05 | `IN_FLIGHT` Delivery | 500/503을 받는다 | `RETRY_WAIT`가 되고 지수 백오프(+jitter)로 다음 시도 시각이 정해진다 |
@@ -96,7 +96,7 @@ Delivery
 | DLV-13 | `UNKNOWN` Delivery | 같은 clientRef의 발송 내역이 2건 이상 나온다 | `SENT`가 되고 중복 발송 건수가 기록된다 |
 | DLV-14 | lease가 만료된 `IN_FLIGHT` Delivery (워커 종료) | 복구를 실행한다 | 재전송하지 않고 `UNKNOWN`으로 넘기며 reconcile 가능 시각(lease 만료 + `RECONCILE_DELAY_MS`)을 기록한다 |
 | DLV-15 | leaseToken이 바뀐 Delivery (다른 워커가 이어받음) | 이전 워커가 결과를 저장한다 | 저장이 거부된다 |
-| DLV-16 | 남은 lease 시간이 HTTP 최대 실행 시간보다 짧은 `IN_FLIGHT` Delivery | 요청을 시작하려 한다 | 요청을 시작하지 않고 lease를 반납한다 |
+| DLV-16 | 요청을 아직 시작하지 않았고 남은 lease 시간이 HTTP 최대 실행 시간보다 짧은 `IN_FLIGHT` Delivery | 요청을 시작하려 한다 | 요청을 시작하지 않고 lease를 반납한다 (이미 시작한 요청은 반납하지 않는다) |
 | DLV-17 | `PENDING`·`RETRY_WAIT` Delivery | 알림이 취소된다 | `CANCELLED`가 된다 |
 | DLV-18 | 알림이 취소된 뒤의 `IN_FLIGHT` Delivery | 늦게 202를 받는다 | 이미 나간 사실대로 `SENT`가 된다 |
 | DLV-19 | `UNKNOWN` Delivery이고 알림이 취소됐다 | reconcile에서 발송 내역이 없다 | 재시도 대신 `CANCELLED`가 된다 |
