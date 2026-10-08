@@ -37,6 +37,8 @@ interface StatusRow {
 
 const UUID: RegExp = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+const PROBLEM_JSON: string = 'application/problem+json; charset=utf-8';
+
 const ISO_UTC: RegExp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 describe('알림 REST API', () => {
@@ -158,8 +160,57 @@ describe('알림 REST API', () => {
     'API-03 알림 여러 개 / GET /alarms?status=&kind=&cursor=&limit= → 200 { items, page: { nextCursor } } (마지막 페이지는 nextCursor 필드 없음)',
   );
   it.todo('API-04 있는 알림 / GET /alarms/:id → 200과 Delivery 상태별 집계');
-  it.todo('API-05 없는 알림 / GET /alarms/:id → 404 Problem Details (ALARM_NOT_FOUND)');
-  it.todo('API-06 uuid가 아닌 id / GET /alarms/:id → 400 Problem Details');
+  it('있는 알림 / GET /alarms/:id → 200과 만들 때와 같은 알림 리소스', async (): Promise<void> => {
+    const created: CreatedAlarm = createdAlarmSchema.parse(
+      await spec()
+        .post('/alarms')
+        .withJson({ title: '추석 이벤트', body: '연휴 쿠폰이 도착했어요', kind: 'BULK' })
+        .expectStatus(201)
+        .returns('res.body'),
+    );
+
+    const fetched: CreatedAlarm = createdAlarmSchema.parse(
+      await spec().get(`/alarms/${created.id}`).expectStatus(200).returns('res.body'),
+    );
+
+    expect(fetched).toEqual(created);
+  });
+
+  it('API-05 없는 알림 / GET /alarms/:id → 404 Problem Details (ALARM_NOT_FOUND)', async (): Promise<void> => {
+    const missingId: string = '7d3f1e2a-4b5c-4d6e-8f70-1a2b3c4d5e6f';
+
+    const problem: Problem = problemSchema.parse(
+      await spec()
+        .get(`/alarms/${missingId}`)
+        .expectStatus(404)
+        .expectHeader('content-type', PROBLEM_JSON)
+        .returns('res.body'),
+    );
+
+    expect(problem).toEqual({
+      status: 404,
+      code: 'ALARM_NOT_FOUND',
+      instance: `/alarms/${missingId}`,
+      errors: [],
+    });
+  });
+
+  it('API-06 uuid가 아닌 id / GET /alarms/:id → 400 Problem Details', async (): Promise<void> => {
+    const problem: Problem = problemSchema.parse(
+      await spec()
+        .get('/alarms/not-a-uuid')
+        .expectStatus(400)
+        .expectHeader('content-type', PROBLEM_JSON)
+        .returns('res.body'),
+    );
+
+    expect(problem).toMatchObject({
+      status: 400,
+      code: 'VALIDATION_FAILED',
+      instance: '/alarms/not-a-uuid',
+    });
+    expect(problem.errors).toContainEqual({ field: 'id', message: expect.any(String) });
+  });
   it.todo('API-07 DRAFT 알림 / POST /alarms/:id/dispatch → 202와 DISPATCHING 알림');
   it.todo(
     'API-08 이미 시작한 알림 / POST /alarms/:id/dispatch → 409 Problem Details (ALARM_STATE_CONFLICT)',

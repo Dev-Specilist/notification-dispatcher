@@ -2,12 +2,15 @@ import {
   AlarmView,
   AlarmViewState,
 } from '@/modules/notification/application/port/in/alarm-view.type';
+import { AlarmNotFoundError } from '@/modules/notification/application/port/in/alarm-result.type';
 import { AlarmCreationError } from '@/modules/notification/application/port/in/create-alarm.type';
 import {
   AlarmResponse,
   AlarmResponseBase,
 } from '@/modules/notification/adapter/in/web/alarm-response.type';
+import { HttpStatus } from '@nestjs/common';
 import { FieldViolation } from '@/shared/http/problem-details.type';
+import { ProblemException } from '@/shared/http/problem.exception';
 
 export class AlarmPresenter {
   static toResponse(view: Readonly<AlarmView>): AlarmResponse {
@@ -40,6 +43,10 @@ export class AlarmPresenter {
         break;
     }
     return { field: 'recipientIds', message: `수신자 id 형식이 잘못되었습니다: ${error.value}` };
+  }
+
+  static problemOf({ code, alarmId }: AlarmNotFoundError): ProblemException {
+    return new ProblemException(HttpStatus.NOT_FOUND, code, `알림을 찾을 수 없습니다: ${alarmId}`);
   }
 
   private static withState(base: AlarmResponseBase, state: AlarmViewState): AlarmResponse {

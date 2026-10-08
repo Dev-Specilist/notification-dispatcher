@@ -1,4 +1,4 @@
-import { AlarmConflicted, AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
+import { AlarmConflicted } from '@/modules/notification/domain/alarm/alarm.type';
 import { AlarmView } from '@/modules/notification/application/port/in/alarm-view.type';
 
 export interface AlarmFoundResult {
@@ -8,7 +8,7 @@ export interface AlarmFoundResult {
 
 export interface AlarmNotFoundError {
   readonly code: 'ALARM_NOT_FOUND';
-  readonly alarmId: AlarmId;
+  readonly alarmId: string;
 }
 
 export interface AlarmNotFound {

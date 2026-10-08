@@ -6,7 +6,11 @@ import {
   AlarmCreation,
   AlarmId,
 } from '@/modules/notification/domain/alarm/alarm.type';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
+import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
+import {
+  TransactionRepositories,
+  TransactionWork,
+} from '@/modules/notification/application/port/out/transaction.type';
 import {
   AlarmFoundResult,
   AlarmResult,
@@ -36,6 +40,12 @@ const createGate = (): Gate => {
   });
   return { opened, open: (): void => release() };
 };
+
+class UnusedTransaction implements TransactionPort {
+  run<TResult>(_work: TransactionWork<TResult>): Promise<TResult> {
+    return Promise.reject(new Error('transaction must not run'));
+  }
+}
 
 interface Fixture {
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
@@ -87,7 +97,7 @@ describe('GetAlarmService', () => {
     const alarm: Alarm = storedAlarm();
     await alarmRepository.save(alarm);
 
-    const result: AlarmResult = await service.execute(alarmId(STORED_ID));
+    const result: AlarmResult = await service.execute({ alarmId: STORED_ID });
 
     expect(found(result)).toEqual(AlarmViewMapper.toView(alarm));
   });
@@ -96,11 +106,22 @@ describe('GetAlarmService', () => {
     const { alarmRepository, service }: Fixture = fixture();
     await alarmRepository.save(storedAlarm());
 
-    const result: AlarmResult = await service.execute(alarmId(MISSING_ID));
+    const result: AlarmResult = await service.execute({ alarmId: MISSING_ID });
 
     expect(result).toEqual({
       kind: 'not-found',
       error: { code: 'ALARM_NOT_FOUND', alarmId: MISSING_ID },
+    });
+  });
+
+  it('UC-02 알림 id 형식이 아닌 값으로 조회하면 저장소를 거치지 않고 알림 없음 오류가 난다', async (): Promise<void> => {
+    const service: GetAlarmService = new GetAlarmService(new UnusedTransaction());
+
+    const result: AlarmResult = await service.execute({ alarmId: 'not-a-uuid' });
+
+    expect(result).toEqual({
+      kind: 'not-found',
+      error: { code: 'ALARM_NOT_FOUND', alarmId: 'not-a-uuid' },
     });
   });
 
@@ -118,7 +139,7 @@ describe('GetAlarmService', () => {
     );
     await uncommittedSaved.opened;
 
-    const result: Promise<AlarmResult> = service.execute(alarmId(STORED_ID));
+    const result: Promise<AlarmResult> = service.execute({ alarmId: STORED_ID });
     failureReleased.open();
 
     await expect(failing).rejects.toThrow('other transaction failed');

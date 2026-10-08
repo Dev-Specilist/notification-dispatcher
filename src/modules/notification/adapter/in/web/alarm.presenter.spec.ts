@@ -3,10 +3,12 @@ import {
   AlarmView,
   AlarmViewState,
 } from '@/modules/notification/application/port/in/alarm-view.type';
+import { AlarmNotFoundError } from '@/modules/notification/application/port/in/alarm-result.type';
 import { AlarmCreationError } from '@/modules/notification/application/port/in/create-alarm.type';
 import { AlarmResponse } from '@/modules/notification/adapter/in/web/alarm-response.type';
 import { AlarmPresenter } from '@/modules/notification/adapter/in/web/alarm.presenter';
 import { FieldViolation } from '@/shared/http/problem-details.type';
+import { ProblemException } from '@/shared/http/problem.exception';
 
 type StateCase = Readonly<[string, AlarmViewState, AlarmResponse]>;
 
@@ -113,4 +115,17 @@ describe('AlarmPresenter', () => {
       expect(AlarmPresenter.violationOf(error)).toEqual(expected);
     },
   );
+
+  it('알림 없음 오류를 404 ALARM_NOT_FOUND 문제로 바꾸고 찾은 id를 설명에 담는다', (): void => {
+    const error: AlarmNotFoundError = {
+      code: 'ALARM_NOT_FOUND',
+      alarmId: '7d3f1e2a-4b5c-4d6e-8f70-1a2b3c4d5e6f',
+    };
+
+    const problem: ProblemException = AlarmPresenter.problemOf(error);
+
+    expect(problem.getStatus()).toBe(404);
+    expect(problem.code).toBe('ALARM_NOT_FOUND');
+    expect(problem.message).toBe('알림을 찾을 수 없습니다: 7d3f1e2a-4b5c-4d6e-8f70-1a2b3c4d5e6f');
+  });
 });

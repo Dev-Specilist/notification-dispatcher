@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpStatus,
   INestApplication,
   InternalServerErrorException,
   NotFoundException,
@@ -14,6 +15,7 @@ import { request, spec } from 'pactum';
 import { z } from 'zod';
 import { ApiStandardModule } from '@/shared/http/api-standard.module';
 import { ProblemDetails } from '@/shared/http/problem-details.type';
+import { ProblemException } from '@/shared/http/problem.exception';
 
 const createSampleSchema = z.object({
   title: z.string().min(1),
@@ -34,6 +36,15 @@ class SampleController {
     throw new NotFoundException('sample 42 not found');
   }
 
+  @Get('domain-missing')
+  domainMissing(): never {
+    throw new ProblemException(
+      HttpStatus.NOT_FOUND,
+      'SAMPLE_NOT_FOUND',
+      'sample 42를 찾을 수 없습니다',
+    );
+  }
+
   @Get('boom')
   boom(): never {
     throw new Error('database password leaked in message');
@@ -51,6 +62,16 @@ class SampleController {
 }
 
 const PROBLEM_JSON: string = 'application/problem+json; charset=utf-8';
+
+const DOMAIN_NOT_FOUND: ProblemDetails = {
+  type: 'about:blank',
+  title: 'Not Found',
+  status: 404,
+  detail: 'sample 42를 찾을 수 없습니다',
+  instance: '/samples/domain-missing',
+  code: 'SAMPLE_NOT_FOUND',
+  errors: [],
+};
 
 const NOT_FOUND: ProblemDetails = {
   type: 'about:blank',
@@ -147,6 +168,14 @@ describe('RFC 9457 Problem Details 응답', () => {
       .expectStatus(404)
       .expectHeader('content-type', PROBLEM_JSON)
       .expectJson(NOT_FOUND);
+  });
+
+  it('업무 오류 코드를 가진 ProblemException은 상태 코드와 그 코드를 담은 Problem Details로 반환한다', async (): Promise<void> => {
+    await spec()
+      .get('/samples/domain-missing')
+      .expectStatus(404)
+      .expectHeader('content-type', PROBLEM_JSON)
+      .expectJson(DOMAIN_NOT_FOUND);
   });
 
   it('존재하지 않는 경로도 Problem Details로 반환한다', async (): Promise<void> => {

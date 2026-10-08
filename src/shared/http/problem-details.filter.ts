@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import { ProblemDetails } from '@/shared/http/problem-details.type';
+import { ProblemException } from '@/shared/http/problem.exception';
 import { RequestValidationException } from '@/shared/http/request-validation.exception';
 
 type ThrownValue = object | string | number | boolean | bigint | symbol;
@@ -59,7 +60,10 @@ export class ProblemDetailsFilter implements ExceptionFilter<ThrownValue> {
           status >= ProblemDetailsFilter.SERVER_ERROR_FLOOR
             ? ProblemDetailsFilter.SERVER_ERROR_DETAIL
             : exception.message,
-        code: ProblemDetailsFilter.codeOf(status),
+        code:
+          exception instanceof ProblemException
+            ? exception.code
+            : ProblemDetailsFilter.codeOf(status),
         errors: [],
       });
     }
