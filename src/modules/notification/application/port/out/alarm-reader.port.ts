@@ -1,6 +1,12 @@
 import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
-import { AlarmLookup } from '@/modules/notification/application/port/out/alarm-repository.type';
+import {
+  AlarmLookup,
+  AlarmPage,
+  AlarmPageQuery,
+} from '@/modules/notification/application/port/out/alarm-repository.type';
 
 export abstract class AlarmReaderPort {
   abstract findById(id: AlarmId): Promise<AlarmLookup>;
+
+  abstract findPage(query: Readonly<AlarmPageQuery>): Promise<AlarmPage>;
 }

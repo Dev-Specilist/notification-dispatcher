@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
 import {
   SnapshotWork,
-  TransactionRepositories,
   TransactionWork,
 } from '@/modules/notification/application/port/out/transaction.type';
 import { InMemoryRepositories } from '@/modules/notification/adapter/out/in-memory/in-memory-transaction.type';
@@ -28,9 +27,9 @@ export class InMemoryTransactionAdapter implements TransactionPort {
   }
 
   readSnapshot<TResult>(work: SnapshotWork<TResult>): Promise<TResult> {
-    return this.run(
-      ({ alarmRepository, deliveryProgress }: TransactionRepositories): Promise<TResult> =>
-        work({ alarmReader: alarmRepository, deliveryProgress }),
+    const { alarmRepository, deliveryRepository }: InMemoryRepositories = this.repositories;
+    return this.run((): Promise<TResult> =>
+      work({ alarmReader: alarmRepository, deliveryProgress: deliveryRepository }),
     );
   }
 

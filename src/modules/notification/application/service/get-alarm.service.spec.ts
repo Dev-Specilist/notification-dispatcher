@@ -13,12 +13,7 @@ import {
   DeliveryId,
   DeliveryTransition,
 } from '@/modules/notification/domain/delivery/delivery.type';
-import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
-import {
-  SnapshotWork,
-  TransactionRepositories,
-  TransactionWork,
-} from '@/modules/notification/application/port/out/transaction.type';
+import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
 import {
   AlarmFoundResult,
   AlarmResult,
@@ -30,6 +25,7 @@ import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/adapter/o
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-expansion-job-repository.adapter';
 import { InMemoryTransactionAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-transaction.adapter';
+import { SnapshotOnlyTransaction } from '@/modules/notification/testing/snapshot-only-transaction';
 import { UnusedTransaction } from '@/modules/notification/testing/unused-transaction';
 
 const STORED_ID: string = '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10';
@@ -49,18 +45,6 @@ const createGate = (): Gate => {
   });
   return { opened, open: (): void => release() };
 };
-
-class SnapshotOnlyTransaction implements TransactionPort {
-  constructor(private readonly snapshotSource: InMemoryTransactionAdapter) {}
-
-  run<TResult>(_work: TransactionWork<TResult>): Promise<TResult> {
-    return Promise.reject(new Error('alarm lookup must read through a snapshot'));
-  }
-
-  readSnapshot<TResult>(work: SnapshotWork<TResult>): Promise<TResult> {
-    return this.snapshotSource.readSnapshot(work);
-  }
-}
 
 interface Fixture {
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;

@@ -10,6 +10,7 @@ import {
   AlarmSnapshot,
   AlarmTransition,
 } from '@/modules/notification/domain/alarm/alarm.type';
+import { AlarmReaderPort } from '@/modules/notification/application/port/out/alarm-reader.port';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/out/alarm-repository.port';
 import { AlarmRepositoryPredicates } from '@/modules/notification/application/port/out/alarm-repository.predicate';
 import {
@@ -21,7 +22,9 @@ import {
   PageSize,
 } from '@/modules/notification/application/port/out/alarm-repository.type';
 
-type AlarmRepositoryFactory = () => Promise<AlarmRepositoryPort>;
+type ContractAlarmRepository = AlarmRepositoryPort & AlarmReaderPort;
+
+type AlarmRepositoryFactory = () => Promise<ContractAlarmRepository>;
 
 interface PageSummary {
   readonly ids: ReadonlyArray<string>;
@@ -52,7 +55,7 @@ const BULK_DRAFT: AlarmDraft = {
 export class AlarmRepositoryContract {
   static verify(createRepository: AlarmRepositoryFactory): void {
     it('DB-01 알림 저장소 / 저장 후 id로 조회한다 → 같은 도메인 객체로 복원된다', async (): Promise<void> => {
-      const repository: AlarmRepositoryPort = await createRepository();
+      const repository: ContractAlarmRepository = await createRepository();
       const urgent: Alarm = AlarmRepositoryContract.dispatched(
         AlarmRepositoryContract.created(URGENT_DRAFT),
       );
@@ -91,7 +94,7 @@ export class AlarmRepositoryContract {
     ])(
       'DB-01 %s 알림을 처음 저장해도 상태와 시각이 그대로 복원된다',
       async (_status: string, advance: (alarm: Alarm) => Alarm): Promise<void> => {
-        const repository: AlarmRepositoryPort = await createRepository();
+        const repository: ContractAlarmRepository = await createRepository();
         const alarm: Alarm = advance(AlarmRepositoryContract.created(URGENT_DRAFT));
 
         await repository.save(alarm);
@@ -103,7 +106,7 @@ export class AlarmRepositoryContract {
     );
 
     it('DB-01 저장하지 않은 id로 조회하면 없음으로 돌려준다', async (): Promise<void> => {
-      const repository: AlarmRepositoryPort = await createRepository();
+      const repository: ContractAlarmRepository = await createRepository();
 
       expect(await repository.findById(AlarmRepositoryContract.newAlarmId())).toEqual({
         kind: 'missing',
@@ -111,7 +114,7 @@ export class AlarmRepositoryContract {
     });
 
     it('DB-01 상태가 바뀐 알림을 다시 저장하면 마지막 상태로 조회된다', async (): Promise<void> => {
-      const repository: AlarmRepositoryPort = await createRepository();
+      const repository: ContractAlarmRepository = await createRepository();
       const draft: Alarm = AlarmRepositoryContract.created(URGENT_DRAFT);
       const dispatching: Alarm = AlarmRepositoryContract.dispatched(draft);
       const cancelled: Alarm = AlarmRepositoryContract.transitioned(
@@ -128,7 +131,7 @@ export class AlarmRepositoryContract {
     });
 
     it('DB-04 잠그며 조회해도 저장된 알림을 같은 도메인 객체로 돌려준다', async (): Promise<void> => {
-      const repository: AlarmRepositoryPort = await createRepository();
+      const repository: ContractAlarmRepository = await createRepository();
       const alarm: Alarm = AlarmRepositoryContract.dispatched(
         AlarmRepositoryContract.created(URGENT_DRAFT),
       );
@@ -142,7 +145,7 @@ export class AlarmRepositoryContract {
     });
 
     it('DB-04 저장하지 않은 id를 잠그며 조회하면 없음으로 돌려준다', async (): Promise<void> => {
-      const repository: AlarmRepositoryPort = await createRepository();
+      const repository: ContractAlarmRepository = await createRepository();
 
       expect(await repository.findByIdForUpdate(AlarmRepositoryContract.newAlarmId())).toEqual({
         kind: 'missing',
@@ -150,7 +153,7 @@ export class AlarmRepositoryContract {
     });
 
     it('DB-01 조회한 알림의 Date를 바꿔도 저장된 값은 바뀌지 않는다', async (): Promise<void> => {
-      const repository: AlarmRepositoryPort = await createRepository();
+      const repository: ContractAlarmRepository = await createRepository();
       const alarm: Alarm = AlarmRepositoryContract.created(BULK_DRAFT);
       await repository.save(alarm);
 
@@ -165,7 +168,7 @@ export class AlarmRepositoryContract {
     });
 
     it('DB-02 알림 여러 개 / 상태·종류 필터와 cursor로 목록을 조회한다 → 생성 역순으로 페이지가 나뉘고 다음 cursor가 반환된다', async (): Promise<void> => {
-      const repository: AlarmRepositoryPort = await createRepository();
+      const repository: ContractAlarmRepository = await createRepository();
       const oldestDraftBulk: Alarm = AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 1);
       const draftUrgent: Alarm = AlarmRepositoryContract.createdAtMinute(URGENT_DRAFT, 2);
       const middleDraftBulk: Alarm = AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 3);
@@ -214,7 +217,7 @@ export class AlarmRepositoryContract {
     });
 
     it('DB-02 필터가 없으면 모든 상태와 종류의 알림을 생성 역순으로 돌려준다', async (): Promise<void> => {
-      const repository: AlarmRepositoryPort = await createRepository();
+      const repository: ContractAlarmRepository = await createRepository();
       const urgent: Alarm = AlarmRepositoryContract.createdAtMinute(URGENT_DRAFT, 1);
       const cancelledBulk: Alarm = AlarmRepositoryContract.transitioned(
         AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 2).cancel(new Date(CANCELLED_ISO)),
@@ -236,7 +239,7 @@ export class AlarmRepositoryContract {
     });
 
     it('DB-02 저장된 알림이 없으면 빈 마지막 페이지를 돌려준다', async (): Promise<void> => {
-      const repository: AlarmRepositoryPort = await createRepository();
+      const repository: ContractAlarmRepository = await createRepository();
 
       const page: AlarmPage = await repository.findPage({
         status: { kind: 'any' },
@@ -249,7 +252,7 @@ export class AlarmRepositoryContract {
     });
 
     it('DB-02 필터에 맞는 알림이 없으면 빈 마지막 페이지를 돌려준다', async (): Promise<void> => {
-      const repository: AlarmRepositoryPort = await createRepository();
+      const repository: ContractAlarmRepository = await createRepository();
       await repository.save(AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 1));
 
       const page: AlarmPage = await repository.findPage({
@@ -263,7 +266,7 @@ export class AlarmRepositoryContract {
     });
 
     it('DB-02 남은 알림 수가 페이지 크기와 같으면 다음 cursor 없이 마지막 페이지가 된다', async (): Promise<void> => {
-      const repository: AlarmRepositoryPort = await createRepository();
+      const repository: ContractAlarmRepository = await createRepository();
       const older: Alarm = AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 1);
       const newer: Alarm = AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 2);
       await repository.save(older);
@@ -283,7 +286,7 @@ export class AlarmRepositoryContract {
     });
 
     it('DB-02 페이지 크기가 1이면 한 건씩 나뉘고 가장 오래된 알림 뒤에서는 빈 마지막 페이지가 나온다', async (): Promise<void> => {
-      const repository: AlarmRepositoryPort = await createRepository();
+      const repository: ContractAlarmRepository = await createRepository();
       const older: Alarm = AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 1);
       const newer: Alarm = AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 2);
       await repository.save(older);
@@ -320,7 +323,7 @@ export class AlarmRepositoryContract {
     });
 
     it('DB-03 생성 시각이 같은 알림 여러 개 / cursor로 끝까지 조회한다 → (생성 시각, id) 복합 cursor로 누락·중복 없이 이어진다', async (): Promise<void> => {
-      const repository: AlarmRepositoryPort = await createRepository();
+      const repository: ContractAlarmRepository = await createRepository();
       const older: Alarm = AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 1);
       const sameInstant: ReadonlyArray<Alarm> = Array.from({ length: 5 }, (): Alarm =>
         AlarmRepositoryContract.createdAtMinute(BULK_DRAFT, 2),
@@ -344,7 +347,7 @@ export class AlarmRepositoryContract {
   }
 
   private static async readAll(
-    repository: AlarmRepositoryPort,
+    repository: ContractAlarmRepository,
     start: AlarmPageStart,
   ): Promise<ReadonlyArray<string>> {
     const page: AlarmPage = await repository.findPage({
