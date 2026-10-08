@@ -1,9 +1,11 @@
 import { AlarmConflicted } from '@/modules/notification/domain/alarm/alarm.type';
 import { AlarmView } from '@/modules/notification/application/port/in/alarm-view.type';
+import { DeliveryProgressView } from '@/modules/notification/application/port/in/delivery-progress-view.type';
 
 export interface AlarmFoundResult {
   readonly kind: 'found';
   readonly alarm: AlarmView;
+  readonly deliveries: DeliveryProgressView;
 }
 
 export interface AlarmNotFoundError {

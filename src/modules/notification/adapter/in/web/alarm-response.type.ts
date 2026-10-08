@@ -1,4 +1,5 @@
 import { AlarmKindName } from '@/modules/notification/application/port/in/alarm-view.type';
+import { DeliveryStatusName } from '@/modules/notification/application/port/in/delivery-progress-view.type';
 
 export interface AlarmResponseBase {
   readonly id: string;
@@ -39,3 +40,14 @@ export type AlarmResponse =
   | CompletedAlarmResponse
   | CancelledBeforeDispatchResponse
   | CancelledAfterDispatchResponse;
+
+export interface DeliveryProgressResponse {
+  readonly total: number;
+  readonly byStatus: Readonly<Record<DeliveryStatusName, number>>;
+}
+
+export interface DeliveriesSection {
+  readonly deliveries: DeliveryProgressResponse;
+}
+
+export type AlarmDetailResponse = AlarmResponse & DeliveriesSection;

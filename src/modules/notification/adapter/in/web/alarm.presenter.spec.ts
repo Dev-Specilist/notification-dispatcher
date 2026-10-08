@@ -5,7 +5,11 @@ import {
 } from '@/modules/notification/application/port/in/alarm-view.type';
 import { AlarmNotFoundError } from '@/modules/notification/application/port/in/alarm-result.type';
 import { AlarmCreationError } from '@/modules/notification/application/port/in/create-alarm.type';
-import { AlarmResponse } from '@/modules/notification/adapter/in/web/alarm-response.type';
+import { DeliveryProgressView } from '@/modules/notification/application/port/in/delivery-progress-view.type';
+import {
+  AlarmDetailResponse,
+  AlarmResponse,
+} from '@/modules/notification/adapter/in/web/alarm-response.type';
 import { AlarmPresenter } from '@/modules/notification/adapter/in/web/alarm.presenter';
 import { FieldViolation } from '@/shared/http/problem-details.type';
 import { ProblemException } from '@/shared/http/problem.exception';
@@ -84,6 +88,46 @@ describe('AlarmPresenter', () => {
       expect(AlarmPresenter.toResponse(urgentView(state))).toEqual(expected);
     },
   );
+
+  it('조회 결과는 알림 응답에 상태별 Delivery 수를 담은 deliveries를 더해 응답한다', (): void => {
+    const deliveries: DeliveryProgressView = {
+      total: 3,
+      byStatus: {
+        PENDING: 1,
+        IN_FLIGHT: 0,
+        RETRY_WAIT: 0,
+        UNKNOWN: 0,
+        SENT: 2,
+        FAILED: 0,
+        UNCONFIRMED: 0,
+        CANCELLED: 0,
+      },
+    };
+
+    const response: AlarmDetailResponse = AlarmPresenter.toDetailResponse(
+      urgentView({ status: 'DISPATCHING', dispatchedAt: new Date(DISPATCHED_ISO) }),
+      deliveries,
+    );
+
+    expect(response).toEqual({
+      ...URGENT_BASE,
+      status: 'DISPATCHING',
+      dispatchedAt: DISPATCHED_ISO,
+      deliveries: {
+        total: 3,
+        byStatus: {
+          PENDING: 1,
+          IN_FLIGHT: 0,
+          RETRY_WAIT: 0,
+          UNKNOWN: 0,
+          SENT: 2,
+          FAILED: 0,
+          UNCONFIRMED: 0,
+          CANCELLED: 0,
+        },
+      },
+    });
+  });
 
   it('결과 DTO의 수신자 목록을 새 배열로 옮겨 응답한다', (): void => {
     const view: AlarmView = urgentView({ status: 'DRAFT' });

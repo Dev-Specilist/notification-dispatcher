@@ -22,6 +22,15 @@ const createdAlarmSchema = z.object({
 
 type CreatedAlarm = z.infer<typeof createdAlarmSchema>;
 
+const alarmDetailSchema = createdAlarmSchema.extend({
+  deliveries: z.object({
+    total: z.number(),
+    byStatus: z.record(z.string(), z.number()),
+  }),
+});
+
+type AlarmDetail = z.infer<typeof alarmDetailSchema>;
+
 const problemSchema = z.object({
   status: z.number(),
   code: z.string(),
@@ -159,8 +168,7 @@ describe('알림 REST API', () => {
   it.todo(
     'API-03 알림 여러 개 / GET /alarms?status=&kind=&cursor=&limit= → 200 { items, page: { nextCursor } } (마지막 페이지는 nextCursor 필드 없음)',
   );
-  it.todo('API-04 있는 알림 / GET /alarms/:id → 200과 Delivery 상태별 집계');
-  it('있는 알림 / GET /alarms/:id → 200과 만들 때와 같은 알림 리소스', async (): Promise<void> => {
+  it('API-04 있는 알림 / GET /alarms/:id → 200과 Delivery 상태별 집계', async (): Promise<void> => {
     const created: CreatedAlarm = createdAlarmSchema.parse(
       await spec()
         .post('/alarms')
@@ -169,11 +177,26 @@ describe('알림 REST API', () => {
         .returns('res.body'),
     );
 
-    const fetched: CreatedAlarm = createdAlarmSchema.parse(
+    const fetchedAlarm: AlarmDetail = alarmDetailSchema.parse(
       await spec().get(`/alarms/${created.id}`).expectStatus(200).returns('res.body'),
     );
 
-    expect(fetched).toEqual(created);
+    expect(fetchedAlarm).toEqual({
+      ...created,
+      deliveries: {
+        total: 0,
+        byStatus: {
+          PENDING: 0,
+          IN_FLIGHT: 0,
+          RETRY_WAIT: 0,
+          UNKNOWN: 0,
+          SENT: 0,
+          FAILED: 0,
+          UNCONFIRMED: 0,
+          CANCELLED: 0,
+        },
+      },
+    });
   });
 
   it('API-05 없는 알림 / GET /alarms/:id → 404 Problem Details (ALARM_NOT_FOUND)', async (): Promise<void> => {

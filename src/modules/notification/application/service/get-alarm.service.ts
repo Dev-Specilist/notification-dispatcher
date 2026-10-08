@@ -1,11 +1,14 @@
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
+import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
+import { DeliveryStatusCounts } from '@/modules/notification/domain/delivery/delivery.type';
 import { AlarmLookup } from '@/modules/notification/application/port/out/alarm-repository.type';
 import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
+import { SnapshotRepositories } from '@/modules/notification/application/port/out/transaction.type';
 import { AlarmResult } from '@/modules/notification/application/port/in/alarm-result.type';
 import { GetAlarmQuery } from '@/modules/notification/application/port/in/get-alarm.type';
 import { GetAlarmUseCase } from '@/modules/notification/application/port/in/get-alarm.use-case';
 import { AlarmViewMapper } from '@/modules/notification/application/service/alarm-view.mapper';
+import { DeliveryProgressViewMapper } from '@/modules/notification/application/service/delivery-progress-view.mapper';
 
 export class GetAlarmService implements GetAlarmUseCase {
   constructor(private readonly transaction: TransactionPort) {}
@@ -14,13 +17,26 @@ export class GetAlarmService implements GetAlarmUseCase {
     if (!AlarmPredicates.isAlarmId(alarmId)) {
       return { kind: 'not-found', error: { code: 'ALARM_NOT_FOUND', alarmId } };
     }
-    const lookup: AlarmLookup = await this.transaction.run(
-      ({ alarmRepository }: TransactionRepositories): Promise<AlarmLookup> =>
-        alarmRepository.findById(alarmId),
+    return this.transaction.readSnapshot(
+      (repositories: SnapshotRepositories): Promise<AlarmResult> =>
+        GetAlarmService.readAlarmWithProgress(repositories, alarmId),
     );
+  }
+
+  private static async readAlarmWithProgress(
+    { alarmReader, deliveryProgress }: SnapshotRepositories,
+    alarmId: AlarmId,
+  ): Promise<AlarmResult> {
+    const lookup: AlarmLookup = await alarmReader.findById(alarmId);
     if (lookup.kind === 'missing') {
       return { kind: 'not-found', error: { code: 'ALARM_NOT_FOUND', alarmId } };
     }
-    return { kind: 'found', alarm: AlarmViewMapper.toView(lookup.alarm) };
+    const deliveryStatusCounts: DeliveryStatusCounts =
+      await deliveryProgress.countByStatus(alarmId);
+    return {
+      kind: 'found',
+      alarm: AlarmViewMapper.toView(lookup.alarm),
+      deliveries: DeliveryProgressViewMapper.toView(deliveryStatusCounts),
+    };
   }
 }

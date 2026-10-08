@@ -4,7 +4,9 @@ import {
 } from '@/modules/notification/application/port/in/alarm-view.type';
 import { AlarmNotFoundError } from '@/modules/notification/application/port/in/alarm-result.type';
 import { AlarmCreationError } from '@/modules/notification/application/port/in/create-alarm.type';
+import { DeliveryProgressView } from '@/modules/notification/application/port/in/delivery-progress-view.type';
 import {
+  AlarmDetailResponse,
   AlarmResponse,
   AlarmResponseBase,
 } from '@/modules/notification/adapter/in/web/alarm-response.type';
@@ -24,6 +26,16 @@ export class AlarmPresenter {
       createdAt: createdAt.toISOString(),
     };
     return AlarmPresenter.withState(base, state);
+  }
+
+  static toDetailResponse(
+    view: Readonly<AlarmView>,
+    { total, byStatus }: Readonly<DeliveryProgressView>,
+  ): AlarmDetailResponse {
+    return {
+      ...AlarmPresenter.toResponse(view),
+      deliveries: { total, byStatus: { ...byStatus } },
+    };
   }
 
   static violationOf(error: AlarmCreationError): FieldViolation {
