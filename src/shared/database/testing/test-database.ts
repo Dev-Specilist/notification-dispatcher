@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Client, Pool } from 'pg';
 import { inject } from 'vitest';
+import { databaseUrlSchema } from '@/shared/config/primitive.schema';
+import { DatabaseUrl } from '@/shared/config/primitive.type';
 
 export class TestDatabase {
   static readonly TEMPLATE_NAME: string = 'notification_template';
@@ -8,6 +10,7 @@ export class TestDatabase {
   private constructor(
     private readonly adminUri: string,
     private readonly name: string,
+    readonly databaseUrl: DatabaseUrl,
     readonly pool: Pool,
   ) {}
 
@@ -18,10 +21,12 @@ export class TestDatabase {
       adminUri,
       `CREATE DATABASE "${name}" TEMPLATE "${TestDatabase.TEMPLATE_NAME}"`,
     );
+    const databaseUrl: DatabaseUrl = databaseUrlSchema.parse(TestDatabase.uriFor(adminUri, name));
     return new TestDatabase(
       adminUri,
       name,
-      new Pool({ connectionString: TestDatabase.uriFor(adminUri, name) }),
+      databaseUrl,
+      new Pool({ connectionString: databaseUrl }),
     );
   }
 

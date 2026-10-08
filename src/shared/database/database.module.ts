@@ -1,0 +1,26 @@
+import { Global, Logger, Module } from '@nestjs/common';
+import { Pool } from 'pg';
+import { TypedConfigService } from '@/shared/config/typed-config.service';
+
+@Global()
+@Module({
+  providers: [
+    {
+      provide: Pool,
+      inject: [TypedConfigService],
+      useFactory: (config: TypedConfigService): Pool => DatabaseModule.createPool(config),
+    },
+  ],
+  exports: [Pool],
+})
+export class DatabaseModule {
+  private static readonly logger: Logger = new Logger('Database');
+
+  private static createPool(config: TypedConfigService): Pool {
+    const pool: Pool = new Pool({ connectionString: config.get('DATABASE_URL') });
+    pool.on('error', (error: Error): void => {
+      DatabaseModule.logger.error(`idle database connection failed: ${error.message}`);
+    });
+    return pool;
+  }
+}

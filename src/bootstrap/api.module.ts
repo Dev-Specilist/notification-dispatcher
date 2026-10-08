@@ -4,6 +4,7 @@ import { HealthModule } from '@/modules/health/health.module';
 import { createEnvSchema } from '@/shared/config/env.schema';
 import { portSchema } from '@/shared/config/primitive.schema';
 import { TypedConfigModule } from '@/shared/config/typed-config.module';
+import { DatabaseModule } from '@/shared/database/database.module';
 import { ApiStandardModule } from '@/shared/http/api-standard.module';
 import { LoggingModule } from '@/shared/logging/logging.module';
 
@@ -11,6 +12,7 @@ import { LoggingModule } from '@/shared/logging/logging.module';
   imports: [
     TypedConfigModule.forRoot(createEnvSchema(portSchema.parse(3000))),
     LoggingModule.forRoot('api'),
+    DatabaseModule,
     ApiStandardModule,
     HealthModule,
     LifecycleModule,

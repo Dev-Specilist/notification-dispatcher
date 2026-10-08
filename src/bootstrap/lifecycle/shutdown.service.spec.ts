@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Pool } from 'pg';
 import { ShutdownService } from '@/bootstrap/lifecycle/shutdown.service';
 import { ReadinessPort } from '@/modules/health/application/port/readiness.port';
 import { InMemoryReadinessAdapter } from '@/modules/health/infrastructure/adapter/in-memory-readiness.adapter';
@@ -11,6 +12,10 @@ type ExitSpy = MockInstance<typeof process.exit>;
 
 class ExitCalled extends Error {}
 
+const NEVER: () => void = (): void => {};
+
+const UNCONNECTED_DATABASE_URL: string = 'postgres://app:secret@localhost:5432/notification';
+
 const DRAIN_MS: number = 30;
 const TIMEOUT_MS: number = 1000;
 
@@ -19,6 +24,7 @@ describe('ShutdownService', () => {
   let readiness: ReadinessPort;
   let shutdown: ShutdownService;
   let exit: ExitSpy;
+  let pool: Pool;
 
   beforeEach(async (): Promise<void> => {
     vi.stubEnv('SHUTDOWN_DRAIN_MS', String(DRAIN_MS));
@@ -26,9 +32,14 @@ describe('ShutdownService', () => {
     vi.stubEnv('DATABASE_URL', 'postgres://app:secret@localhost:5432/notification');
     moduleRef = await Test.createTestingModule({
       imports: [TypedConfigModule.forRoot(createEnvSchema(portSchema.parse(3000)))],
-      providers: [{ provide: ReadinessPort, useClass: InMemoryReadinessAdapter }, ShutdownService],
+      providers: [
+        { provide: ReadinessPort, useClass: InMemoryReadinessAdapter },
+        { provide: Pool, useValue: new Pool({ connectionString: UNCONNECTED_DATABASE_URL }) },
+        ShutdownService,
+      ],
     }).compile();
     readiness = moduleRef.get(ReadinessPort);
+    pool = moduleRef.get(Pool);
     shutdown = moduleRef.get(ShutdownService);
     exit = vi.spyOn(process, 'exit').mockImplementation((): never => {
       throw new ExitCalled();
@@ -38,7 +49,6 @@ describe('ShutdownService', () => {
 
   afterEach(async (): Promise<void> => {
     vi.useRealTimers();
-    shutdown.onApplicationShutdown();
     await moduleRef.close();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
@@ -83,9 +93,9 @@ describe('ShutdownService', () => {
     expect(vi.getTimerCount()).toBe(1);
   });
 
-  it('정상 종료가 끝나면 제한 시간이 지나도 강제 종료하지 않는다', () => {
+  it('정상 종료가 끝나면 제한 시간이 지나도 강제 종료하지 않는다', async (): Promise<void> => {
     shutdown.handleSignal('SIGTERM');
-    shutdown.onApplicationShutdown();
+    await shutdown.onApplicationShutdown();
 
     vi.advanceTimersByTime(DRAIN_MS + TIMEOUT_MS);
 
@@ -102,14 +112,35 @@ describe('ShutdownService', () => {
     expect(exit).not.toHaveBeenCalled();
   });
 
-  it('부트스트랩 시 종료 신호 리스너를 등록하고 종료 시 해제한다', () => {
+  it('부트스트랩 시 종료 신호 리스너를 등록하고 종료 시 해제한다', async (): Promise<void> => {
     const before: number = process.listenerCount('SIGTERM');
 
     shutdown.onApplicationBootstrap();
     expect(process.listenerCount('SIGTERM')).toBe(before + 1);
 
-    shutdown.onApplicationShutdown();
+    await shutdown.onApplicationShutdown();
     expect(process.listenerCount('SIGTERM')).toBe(before);
+  });
+
+  it('종료 단계에서 DB Pool을 닫는다', async (): Promise<void> => {
+    await shutdown.onApplicationShutdown();
+
+    expect(pool.ended).toBe(true);
+  });
+
+  it('DB Pool 종료가 끝나지 않으면 워치독을 유지해 기한이 지나면 exit(1)로 강제 종료한다', async (): Promise<void> => {
+    const endNeverFinishes: MockInstance<Pool['end']> = vi
+      .spyOn(pool, 'end')
+      .mockImplementation((): Promise<void> => new Promise<void>(NEVER));
+    shutdown.handleSignal('SIGTERM');
+
+    void shutdown.onApplicationShutdown();
+    await vi.advanceTimersByTimeAsync(DRAIN_MS + TIMEOUT_MS - 1);
+    expect(exit).not.toHaveBeenCalled();
+
+    await expect(vi.advanceTimersByTimeAsync(1)).rejects.toThrow(ExitCalled);
+    expect(exit).toHaveBeenCalledWith(1);
+    endNeverFinishes.mockRestore();
   });
 
   it('Nest 종료 hook과 같은 종료 신호 목록을 공개한다', () => {

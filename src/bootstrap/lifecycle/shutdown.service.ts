@@ -5,6 +5,7 @@ import {
   OnApplicationBootstrap,
   OnApplicationShutdown,
 } from '@nestjs/common';
+import { Pool } from 'pg';
 import { ReadinessPort } from '@/modules/health/application/port/readiness.port';
 import { Milliseconds } from '@/shared/config/primitive.schema';
 import { TypedConfigService } from '@/shared/config/typed-config.service';
@@ -26,6 +27,7 @@ export class ShutdownService
   constructor(
     private readonly readiness: ReadinessPort,
     private readonly config: TypedConfigService,
+    private readonly pool: Pool,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -47,12 +49,20 @@ export class ShutdownService
     });
   }
 
-  onApplicationShutdown(): void {
+  async onApplicationShutdown(): Promise<void> {
     ShutdownService.SIGNALS.forEach((signal: NodeJS.Signals): void => {
       process.removeListener(signal, this.onSignal);
     });
+    await this.closeDatabase();
     this.watchdogs.forEach((watchdog: NodeJS.Timeout): void => clearTimeout(watchdog));
     this.watchdogs.clear();
+  }
+
+  private async closeDatabase(): Promise<void> {
+    if (this.pool.ending) {
+      return;
+    }
+    await this.pool.end();
   }
 
   private stopAcceptingTraffic(reason: string): void {
