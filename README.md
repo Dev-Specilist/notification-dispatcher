@@ -233,6 +233,12 @@ api와 worker는 기동할 때 env를 검증하고, PostgreSQL 접속 주소 `DA
 export DATABASE_URL=postgres://notification:notification@localhost:5432/notification
 ```
 
+스키마는 앱이 기동할 때 바꾸지 않고, 별도의 일회성 migration 프로세스로 적용합니다. api와 worker를 여러 개 띄워도 migration이 동시에 실행되지 않게 하려는 것입니다(Drizzle의 `migrate()`는 잠금을 잡지 않습니다).
+
+```bash
+pnpm db:migrate
+```
+
 api와 worker를 함께 실행합니다. 처음 한 번 빌드한 뒤 SWC watch 하나가 `dist/`를 갱신하고, 두 프로세스가 변경을 감지해 재시작합니다.
 
 ```bash

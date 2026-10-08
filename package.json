@@ -10,6 +10,7 @@
     "dev:worker": "pnpm build && concurrently -k -n swc,worker \"pnpm build:watch\" \"node --watch-path=dist --enable-source-maps dist/worker.js\"",
     "start:api": "node --enable-source-maps dist/main.js",
     "start:worker": "node --enable-source-maps dist/worker.js",
+    "db:migrate": "pnpm build && node --enable-source-maps dist/migrate.js",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write src test",
     "test": "vitest run --project unit --passWithNoTests",

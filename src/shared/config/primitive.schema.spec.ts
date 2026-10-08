@@ -32,7 +32,7 @@ describe('primitive 스키마', () => {
     expect(positiveMillisecondsSchema.safeParse(raw).success).toBe(false);
   });
 
-  it('프로세스 역할은 api와 worker만 허용한다', () => {
-    expect(processRoleSchema.options).toEqual(['api', 'worker']);
+  it('프로세스 역할은 api, worker, migrate만 허용한다', (): void => {
+    expect(processRoleSchema.options).toEqual(['api', 'worker', 'migrate']);
   });
 });

@@ -7,6 +7,8 @@ import { DatabaseUrl } from '@/shared/config/primitive.type';
 export class TestDatabase {
   static readonly TEMPLATE_NAME: string = 'notification_template';
 
+  private static readonly EMPTY_TEMPLATE_NAME: string = 'template0';
+
   private constructor(
     private readonly adminUri: string,
     private readonly name: string,
@@ -14,13 +16,18 @@ export class TestDatabase {
     readonly pool: Pool,
   ) {}
 
-  static async create(): Promise<TestDatabase> {
+  static create(): Promise<TestDatabase> {
+    return TestDatabase.createFrom(TestDatabase.TEMPLATE_NAME);
+  }
+
+  static createEmpty(): Promise<TestDatabase> {
+    return TestDatabase.createFrom(TestDatabase.EMPTY_TEMPLATE_NAME);
+  }
+
+  private static async createFrom(templateName: string): Promise<TestDatabase> {
     const adminUri: string = inject('postgresAdminUri');
     const name: string = `test_${randomUUID().replaceAll('-', '')}`;
-    await TestDatabase.runAsAdmin(
-      adminUri,
-      `CREATE DATABASE "${name}" TEMPLATE "${TestDatabase.TEMPLATE_NAME}"`,
-    );
+    await TestDatabase.runAsAdmin(adminUri, `CREATE DATABASE "${name}" TEMPLATE "${templateName}"`);
     const databaseUrl: DatabaseUrl = databaseUrlSchema.parse(TestDatabase.uriFor(adminUri, name));
     return new TestDatabase(
       adminUri,
