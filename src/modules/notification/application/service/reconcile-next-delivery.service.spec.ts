@@ -34,7 +34,7 @@ import { ReconcileNextDeliveryService } from '@/modules/notification/application
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-expansion-job-repository.adapter';
-import { InMemoryUnitOfWorkAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-unit-of-work.adapter';
+import { InMemoryTransactionAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-transaction.adapter';
 
 type LookupEntry = Readonly<[DeliveryId, MessageLookupResult]>;
 
@@ -48,7 +48,7 @@ interface Gate {
 }
 
 interface Fixture {
-  readonly unitOfWork: InMemoryUnitOfWorkAdapter;
+  readonly transaction: InMemoryTransactionAdapter;
   readonly deliveryRepository: InMemoryDeliveryRepositoryAdapter;
   readonly lookup: ScriptedMessageLookup;
   readonly clock: AdjustableClock;
@@ -269,18 +269,18 @@ const fixture = async (
     new InMemoryDeliveryRepositoryAdapter();
   await deliveryRepository.saveAll(deliveries);
   const clock: AdjustableClock = new AdjustableClock();
-  const unitOfWork: InMemoryUnitOfWorkAdapter = new InMemoryUnitOfWorkAdapter({
+  const transaction: InMemoryTransactionAdapter = new InMemoryTransactionAdapter({
     alarmRepository,
     deliveryRepository,
     expansionJobRepository: new InMemoryExpansionJobRepositoryAdapter(),
   });
   return {
-    unitOfWork,
+    transaction,
     deliveryRepository,
     lookup,
     clock,
     service: new ReconcileNextDeliveryService(
-      unitOfWork,
+      transaction,
       lookup,
       clock,
       settings,
@@ -442,14 +442,14 @@ describe('ReconcileNextDeliveryService', () => {
 
   it('UC-14 조회하는 동안 알림이 취소되고 발송 내역이 없으면 재시도 대신 CANCELLED로 확정한다', async (): Promise<void> => {
     const lookup: PausingMessageLookup = new PausingMessageLookup([]);
-    const { unitOfWork, deliveryRepository, clock, service }: Fixture = await fixture(
+    const { transaction, deliveryRepository, clock, service }: Fixture = await fixture(
       [unknownDelivery(1)],
       lookup,
     );
     const attempt: Promise<ReconcileAttempt> = service.execute();
     await lookup.looking.opened;
 
-    await new CancelAlarmService(unitOfWork, clock).execute(alarmId(ACTIVE_ALARM_ID));
+    await new CancelAlarmService(transaction, clock).execute(alarmId(ACTIVE_ALARM_ID));
     lookup.answered.open();
 
     expect(await attempt).toEqual({

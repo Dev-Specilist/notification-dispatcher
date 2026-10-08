@@ -24,7 +24,7 @@ import { ExpandRecipientsService } from '@/modules/notification/application/serv
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-expansion-job-repository.adapter';
-import { InMemoryUnitOfWorkAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-unit-of-work.adapter';
+import { InMemoryTransactionAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-transaction.adapter';
 
 type PageEntry = Readonly<[string, RecipientPage]>;
 
@@ -47,7 +47,7 @@ type DeliverySummary = Pick<DeliverySnapshot, 'recipientId' | 'priority' | 'stat
 
 interface Fixture {
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
-  readonly unitOfWork: InMemoryUnitOfWorkAdapter;
+  readonly transaction: InMemoryTransactionAdapter;
   readonly deliveryRepository: InMemoryDeliveryRepositoryAdapter;
   readonly expansionJobRepository: InMemoryExpansionJobRepositoryAdapter;
   readonly directory: PagedRecipientDirectory;
@@ -250,17 +250,17 @@ const fixture = async (
     new InMemoryDeliveryRepositoryAdapter();
   await alarmRepository.save(dispatchedBulkAlarm());
   await expansionJobRepository.enqueue(alarmId(ALARM_ID), new Date(ENQUEUED_ISO));
-  const unitOfWork: InMemoryUnitOfWorkAdapter = new InMemoryUnitOfWorkAdapter({
+  const transaction: InMemoryTransactionAdapter = new InMemoryTransactionAdapter({
     alarmRepository,
     deliveryRepository,
     expansionJobRepository,
   });
   const idGenerator: SequentialIdGenerator = new SequentialIdGenerator();
   const newWorker = (): ExpandRecipientsService =>
-    new ExpandRecipientsService(unitOfWork, directory, idGenerator, new FixedClock());
+    new ExpandRecipientsService(transaction, directory, idGenerator, new FixedClock());
   return {
     alarmRepository,
-    unitOfWork,
+    transaction,
     deliveryRepository,
     expansionJobRepository,
     directory,
@@ -442,7 +442,7 @@ describe('ExpandRecipientsService', () => {
 
   it('UC-08 페이지 조회 중 취소 유스케이스가 실행되면 이미 만든 Delivery는 취소되고 새 Delivery는 만들어지지 않는다', async (): Promise<void> => {
     const directory: PausingDirectory = new PausingDirectory(TWO_PAGES, 'next:Mw');
-    const { deliveryRepository, unitOfWork, service }: Fixture = await fixture(
+    const { deliveryRepository, transaction, service }: Fixture = await fixture(
       TWO_PAGES,
       new InMemoryExpansionJobRepositoryAdapter(),
       new InMemoryAlarmRepositoryAdapter(),
@@ -451,7 +451,7 @@ describe('ExpandRecipientsService', () => {
     const expansion: Promise<ExpansionResult> = service.execute(alarmId(ALARM_ID));
     await directory.paused.opened;
 
-    await new CancelAlarmService(unitOfWork, new FixedClock()).execute(alarmId(ALARM_ID));
+    await new CancelAlarmService(transaction, new FixedClock()).execute(alarmId(ALARM_ID));
     directory.resumed.open();
 
     expect(await expansion).toEqual({ kind: 'cancelled' });

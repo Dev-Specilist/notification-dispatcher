@@ -20,7 +20,7 @@ import { CreateAlarmService } from '@/modules/notification/application/service/c
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-expansion-job-repository.adapter';
-import { InMemoryUnitOfWorkAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-unit-of-work.adapter';
+import { InMemoryTransactionAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-transaction.adapter';
 
 const NOW_ISO: string = '2026-10-07T09:00:00.000Z';
 
@@ -98,22 +98,22 @@ const createGate = (): Gate => {
 
 interface Fixture {
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
-  readonly unitOfWork: InMemoryUnitOfWorkAdapter;
+  readonly transaction: InMemoryTransactionAdapter;
   readonly service: CreateAlarmService;
 }
 
 const fixture = (
   alarmRepository: InMemoryAlarmRepositoryAdapter = new InMemoryAlarmRepositoryAdapter(),
 ): Fixture => {
-  const unitOfWork: InMemoryUnitOfWorkAdapter = new InMemoryUnitOfWorkAdapter({
+  const transaction: InMemoryTransactionAdapter = new InMemoryTransactionAdapter({
     alarmRepository,
     deliveryRepository: new InMemoryDeliveryRepositoryAdapter(),
     expansionJobRepository: new InMemoryExpansionJobRepositoryAdapter(),
   });
   return {
     alarmRepository,
-    unitOfWork,
-    service: new CreateAlarmService(unitOfWork, new FixedIdGenerator(), new FixedClock()),
+    transaction,
+    service: new CreateAlarmService(transaction, new FixedIdGenerator(), new FixedClock()),
   };
 };
 
@@ -139,10 +139,10 @@ describe('CreateAlarmService', () => {
   });
 
   it('UC-01 진행 중인 다른 트랜잭션이 실패해 롤백돼도 그사이 생성한 알림은 남는다', async (): Promise<void> => {
-    const { alarmRepository, unitOfWork, service }: Fixture = fixture();
+    const { alarmRepository, transaction, service }: Fixture = fixture();
     const transactionStarted: Gate = createGate();
     const failureReleased: Gate = createGate();
-    const failing: Promise<void> = unitOfWork.run(async (): Promise<void> => {
+    const failing: Promise<void> = transaction.run(async (): Promise<void> => {
       transactionStarted.open();
       await failureReleased.opened;
       throw new Error('other transaction failed');

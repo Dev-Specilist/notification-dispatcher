@@ -10,19 +10,19 @@ import { AlarmLookup } from '@/modules/notification/application/port/out/alarm-r
 import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
 import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/out/expansion-job-repository.port';
 import { ExpansionJobLookup } from '@/modules/notification/application/port/out/expansion-job-repository.type';
-import { UnitOfWorkPort } from '@/modules/notification/application/port/out/unit-of-work.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/unit-of-work.type';
+import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
+import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
 import { CompleteAlarmResult } from '@/modules/notification/application/port/in/alarm-result.type';
 import { CompleteAlarmIfSettledUseCase } from '@/modules/notification/application/port/in/complete-alarm-if-settled.use-case';
 
 export class CompleteAlarmIfSettledService implements CompleteAlarmIfSettledUseCase {
   constructor(
-    private readonly unitOfWork: UnitOfWorkPort,
+    private readonly transaction: TransactionPort,
     private readonly clock: ClockPort,
   ) {}
 
   execute(alarmId: AlarmId): Promise<CompleteAlarmResult> {
-    return this.unitOfWork.run(
+    return this.transaction.run(
       async ({
         alarmRepository,
         deliveryRepository,

@@ -42,20 +42,20 @@ import { SendNextDeliveryService } from '@/modules/notification/application/serv
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-expansion-job-repository.adapter';
-import { InMemoryUnitOfWorkAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-unit-of-work.adapter';
-import { InMemoryRepositories } from '@/modules/notification/infrastructure/adapter/in-memory-unit-of-work.type';
-import { TransactionWork } from '@/modules/notification/application/port/out/unit-of-work.type';
+import { InMemoryTransactionAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-transaction.adapter';
+import { InMemoryRepositories } from '@/modules/notification/infrastructure/adapter/in-memory-transaction.type';
+import { TransactionWork } from '@/modules/notification/application/port/out/transaction.type';
 
 type RecipientStatus = Readonly<[string, string]>;
 
 type CancelDuringSendCase = Readonly<[string, string, Reply]>;
 
-type UnitOfWorkFactory = (repositories: InMemoryRepositories) => InMemoryUnitOfWorkAdapter;
+type TransactionFactory = (repositories: InMemoryRepositories) => InMemoryTransactionAdapter;
 
 interface Fixture {
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
   readonly deliveryRepository: InMemoryDeliveryRepositoryAdapter;
-  readonly unitOfWork: InMemoryUnitOfWorkAdapter;
+  readonly transaction: InMemoryTransactionAdapter;
   readonly sender: RecordingMessageSender;
   readonly clock: AdjustableClock;
   readonly service: SendNextDeliveryService;
@@ -69,7 +69,7 @@ interface FixtureOptions {
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
   readonly permit: SendPermitPort;
   readonly sender: RecordingMessageSender;
-  readonly createUnitOfWork: UnitOfWorkFactory;
+  readonly createTransaction: TransactionFactory;
 }
 
 interface Gate {
@@ -350,7 +350,7 @@ class PausingMessageSender extends RecordingMessageSender {
   }
 }
 
-class SecondRunObservingUnitOfWork extends InMemoryUnitOfWorkAdapter {
+class SecondRunObservingTransaction extends InMemoryTransactionAdapter {
   private runs: number = 0;
 
   constructor(
@@ -388,8 +388,8 @@ const defaultOptions = (): FixtureOptions => ({
   alarmRepository: new InMemoryAlarmRepositoryAdapter(),
   permit: new StubSendPermit({ kind: 'granted' }),
   sender: new RecordingMessageSender(),
-  createUnitOfWork: (repositories: InMemoryRepositories): InMemoryUnitOfWorkAdapter =>
-    new InMemoryUnitOfWorkAdapter(repositories),
+  createTransaction: (repositories: InMemoryRepositories): InMemoryTransactionAdapter =>
+    new InMemoryTransactionAdapter(repositories),
 });
 
 const fixture = async (
@@ -403,7 +403,7 @@ const fixture = async (
     alarmRepository,
     permit,
     sender,
-    createUnitOfWork,
+    createTransaction,
   }: FixtureOptions = {
     ...defaultOptions(),
     ...overrides,
@@ -412,7 +412,7 @@ const fixture = async (
     new InMemoryDeliveryRepositoryAdapter();
   await Promise.all(alarms.map((alarm: Alarm): Promise<void> => alarmRepository.save(alarm)));
   await deliveryRepository.saveAll(deliveries);
-  const unitOfWork: InMemoryUnitOfWorkAdapter = createUnitOfWork({
+  const transaction: InMemoryTransactionAdapter = createTransaction({
     alarmRepository,
     deliveryRepository,
     expansionJobRepository: new InMemoryExpansionJobRepositoryAdapter(),
@@ -420,12 +420,12 @@ const fixture = async (
   return {
     alarmRepository,
     deliveryRepository,
-    unitOfWork,
+    transaction,
     sender,
     clock,
     newWorker: (workerPermit: SendPermitPort): SendNextDeliveryService =>
       new SendNextDeliveryService(
-        unitOfWork,
+        transaction,
         workerPermit,
         sender,
         new FixedLeaseTokenGenerator(),
@@ -434,7 +434,7 @@ const fixture = async (
         new ZeroJitter(),
       ),
     service: new SendNextDeliveryService(
-      unitOfWork,
+      transaction,
       permit,
       sender,
       new FixedLeaseTokenGenerator(),
@@ -587,17 +587,17 @@ describe('SendNextDeliveryService', () => {
   it('UC-09 claim 트랜잭션을 기다리는 동안 시간이 흐르면 실제로 claim한 시각으로 lease와 요청 시작을 기록한다', async (): Promise<void> => {
     const sender: PausingMessageSender = new PausingMessageSender();
     const secondRunRequested: Gate = createGate();
-    const { deliveryRepository, unitOfWork, clock, service }: Fixture = await fixture(
+    const { deliveryRepository, transaction, clock, service }: Fixture = await fixture(
       [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
       {
         sender,
-        createUnitOfWork: (repositories: InMemoryRepositories): InMemoryUnitOfWorkAdapter =>
-          new SecondRunObservingUnitOfWork(repositories, secondRunRequested),
+        createTransaction: (repositories: InMemoryRepositories): InMemoryTransactionAdapter =>
+          new SecondRunObservingTransaction(repositories, secondRunRequested),
       },
     );
     const blockerHolding: Gate = createGate();
     const blockerReleased: Gate = createGate();
-    const blocker: Promise<void> = unitOfWork.run(async (): Promise<void> => {
+    const blocker: Promise<void> = transaction.run(async (): Promise<void> => {
       blockerHolding.open();
       await blockerReleased.opened;
     });
@@ -767,14 +767,14 @@ describe('SendNextDeliveryService', () => {
     'UC-09 발송 응답을 기다리는 동안 알림이 취소되고 %s 응답이 오면 Delivery는 %s가 된다',
     async (_label: string, expectedStatus: string, reply: Reply): Promise<void> => {
       const sender: PausingMessageSender = new PausingMessageSender(reply);
-      const { deliveryRepository, unitOfWork, clock, service }: Fixture = await fixture(
+      const { deliveryRepository, transaction, clock, service }: Fixture = await fixture(
         [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
         { sender },
       );
       const attempt: Promise<SendAttempt> = service.execute();
       await sender.sending.opened;
 
-      await new CancelAlarmService(unitOfWork, clock).execute(alarmId(BULK_ALARM_ID));
+      await new CancelAlarmService(transaction, clock).execute(alarmId(BULK_ALARM_ID));
       sender.responded.open();
       await attempt;
 

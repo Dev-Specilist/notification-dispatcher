@@ -40,7 +40,7 @@ import {
 } from '@/modules/notification/application/port/out/recipient-directory.type';
 import { SendPermitPort } from '@/modules/notification/application/port/out/send-permit.port';
 import { SendPermit } from '@/modules/notification/application/port/out/send-permit.type';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/unit-of-work.type';
+import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
 import {
   CancelAlarmResult,
   StartDispatchResult,
@@ -51,7 +51,7 @@ import { ExpandRecipientsService } from '@/modules/notification/application/serv
 import { SendAttempt } from '@/modules/notification/application/port/in/send-next-delivery.type';
 import { SendNextDeliveryService } from '@/modules/notification/application/service/send-next-delivery.service';
 import { StartDispatchService } from '@/modules/notification/application/service/start-dispatch.service';
-import { DrizzleUnitOfWorkAdapter } from '@/modules/notification/infrastructure/adapter/drizzle-unit-of-work.adapter';
+import { DrizzleTransactionAdapter } from '@/modules/notification/infrastructure/adapter/drizzle-transaction.adapter';
 import { NotificationDatabaseFactory } from '@/modules/notification/infrastructure/persistence/notification-database.factory';
 import { QueryResult } from 'pg';
 import { TestDatabase } from '@/shared/database/testing/test-database';
@@ -239,9 +239,9 @@ const drainAll = async (useCase: SendNextDeliveryService): Promise<void> => {
   }
 };
 
-describe('DrizzleUnitOfWorkAdapter', () => {
+describe('DrizzleTransactionAdapter', () => {
   let testDatabase: TestDatabase;
-  let unitOfWork: DrizzleUnitOfWorkAdapter;
+  let transaction: DrizzleTransactionAdapter;
 
   beforeAll(async (): Promise<void> => {
     testDatabase = await TestDatabase.create();
@@ -249,7 +249,7 @@ describe('DrizzleUnitOfWorkAdapter', () => {
 
   beforeEach(async (): Promise<void> => {
     await testDatabase.pool.query('TRUNCATE alarms CASCADE');
-    unitOfWork = new DrizzleUnitOfWorkAdapter(
+    transaction = new DrizzleTransactionAdapter(
       NotificationDatabaseFactory.create(testDatabase.pool),
     );
   });
@@ -259,12 +259,12 @@ describe('DrizzleUnitOfWorkAdapter', () => {
   });
 
   const save = (alarm: Alarm): Promise<void> =>
-    unitOfWork.run(({ alarmRepository }: TransactionRepositories): Promise<void> =>
+    transaction.run(({ alarmRepository }: TransactionRepositories): Promise<void> =>
       alarmRepository.save(alarm),
     );
 
   const storedStatus = async (id: AlarmId): Promise<string> => {
-    const lookup: AlarmLookup = await unitOfWork.run(
+    const lookup: AlarmLookup = await transaction.run(
       ({ alarmRepository }: TransactionRepositories): Promise<AlarmLookup> =>
         alarmRepository.findById(id),
     );
@@ -272,7 +272,7 @@ describe('DrizzleUnitOfWorkAdapter', () => {
   };
 
   const deliveriesOf = (id: AlarmId): Promise<ReadonlyArray<Delivery>> =>
-    unitOfWork.run(
+    transaction.run(
       ({ deliveryRepository }: TransactionRepositories): Promise<ReadonlyArray<Delivery>> =>
         deliveryRepository.findByAlarmId(id),
     );
@@ -291,7 +291,7 @@ describe('DrizzleUnitOfWorkAdapter', () => {
     );
 
   const startDispatch = (): StartDispatchService =>
-    new StartDispatchService(unitOfWork, new RandomIdGenerator(), new FixedClock());
+    new StartDispatchService(transaction, new RandomIdGenerator(), new FixedClock());
 
   it('DB-15 알림 상태 변경과 Delivery 생성을 한 트랜잭션에서 진행 중 / 트랜잭션 도중 실패한다 → 알림 상태 변경과 Delivery 생성이 함께 롤백된다', async (): Promise<void> => {
     const alarm: Alarm = urgentDraft();
@@ -303,7 +303,7 @@ describe('DrizzleUnitOfWorkAdapter', () => {
     const { id }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
 
     await expect(
-      unitOfWork.run(
+      transaction.run(
         async ({ alarmRepository, deliveryRepository }: TransactionRepositories): Promise<void> => {
           await alarmRepository.save(dispatchedTransition.alarm);
           await deliveryRepository.insertMissing(
@@ -337,7 +337,7 @@ describe('DrizzleUnitOfWorkAdapter', () => {
     const { id }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
 
     await expect(
-      unitOfWork.run(
+      transaction.run(
         async ({
           alarmRepository,
           expansionJobRepository,
@@ -350,7 +350,7 @@ describe('DrizzleUnitOfWorkAdapter', () => {
     ).rejects.toThrow('failure in the middle of the transaction');
     expect(await storedStatus(id)).toBe('DRAFT');
     expect(
-      await unitOfWork.run(
+      await transaction.run(
         ({ expansionJobRepository }: TransactionRepositories): Promise<ExpansionJobLookup> =>
           expansionJobRepository.findByAlarmId(id),
       ),
@@ -397,7 +397,7 @@ describe('DrizzleUnitOfWorkAdapter', () => {
 
     const [started, cancelled]: StartAndCancelResults = await Promise.all([
       startDispatch().execute(id),
-      new CancelAlarmService(unitOfWork, new FixedClock()).execute(id),
+      new CancelAlarmService(transaction, new FixedClock()).execute(id),
     ]);
     const outcome: OutcomePair = [started.kind, cancelled.kind];
     const deliveryStatuses: ReadonlyArray<string> = (await deliveriesOf(id)).map(
@@ -420,7 +420,7 @@ describe('DrizzleUnitOfWorkAdapter', () => {
     }
     await save(dispatchedTransition.alarm);
     const { id }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
-    await unitOfWork.run(({ deliveryRepository }: TransactionRepositories): Promise<void> =>
+    await transaction.run(({ deliveryRepository }: TransactionRepositories): Promise<void> =>
       deliveryRepository.insertMissing(
         recipientIds(100).map((recipientId: RecipientId): Delivery =>
           Delivery.create(
@@ -438,7 +438,7 @@ describe('DrizzleUnitOfWorkAdapter', () => {
     const sender: RecordingMessageSender = new RecordingMessageSender();
     const worker = (): SendNextDeliveryService =>
       new SendNextDeliveryService(
-        unitOfWork,
+        transaction,
         new AlwaysGrantedPermit(),
         sender,
         new RandomLeaseTokenGenerator(),
@@ -464,7 +464,12 @@ describe('DrizzleUnitOfWorkAdapter', () => {
     await startDispatch().execute(id);
     const directory: BothWorkersFetchFirstDirectory = new BothWorkersFetchFirstDirectory();
     const expander = (): ExpandRecipientsService =>
-      new ExpandRecipientsService(unitOfWork, directory, new RandomIdGenerator(), new FixedClock());
+      new ExpandRecipientsService(
+        transaction,
+        directory,
+        new RandomIdGenerator(),
+        new FixedClock(),
+      );
 
     const results: ReadonlyArray<ExpansionResult> = await Promise.all([
       expander().execute(id),
@@ -484,7 +489,7 @@ describe('DrizzleUnitOfWorkAdapter', () => {
     const { id }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
     const locked: Gate = createGate();
     const release: Gate = createGate();
-    const holder: Promise<void> = unitOfWork.run(
+    const holder: Promise<void> = transaction.run(
       async ({ alarmRepository }: TransactionRepositories): Promise<void> => {
         await alarmRepository.findByIdForUpdate(id);
         locked.open();
@@ -498,7 +503,7 @@ describe('DrizzleUnitOfWorkAdapter', () => {
     );
     await locked.opened;
 
-    const waiter: Promise<AlarmLookup> = unitOfWork.run(
+    const waiter: Promise<AlarmLookup> = transaction.run(
       ({ alarmRepository }: TransactionRepositories): Promise<AlarmLookup> =>
         alarmRepository.findByIdForUpdate(id),
     );
@@ -519,12 +524,12 @@ describe('DrizzleUnitOfWorkAdapter', () => {
     const alarm: Alarm = bulkDraft();
     await save(alarm);
     const { id }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
-    await unitOfWork.run(({ expansionJobRepository }: TransactionRepositories): Promise<void> =>
+    await transaction.run(({ expansionJobRepository }: TransactionRepositories): Promise<void> =>
       expansionJobRepository.enqueue(id, new Date(NOW_ISO)),
     );
     const locked: Gate = createGate();
     const release: Gate = createGate();
-    const holder: Promise<void> = unitOfWork.run(
+    const holder: Promise<void> = transaction.run(
       async ({ expansionJobRepository }: TransactionRepositories): Promise<void> => {
         await expansionJobRepository.findByAlarmIdForUpdate(id);
         locked.open();
@@ -537,7 +542,7 @@ describe('DrizzleUnitOfWorkAdapter', () => {
     );
     await locked.opened;
 
-    const waiter: Promise<ExpansionJobLookup> = unitOfWork.run(
+    const waiter: Promise<ExpansionJobLookup> = transaction.run(
       ({ expansionJobRepository }: TransactionRepositories): Promise<ExpansionJobLookup> =>
         expansionJobRepository.findByAlarmIdForUpdate(id),
     );

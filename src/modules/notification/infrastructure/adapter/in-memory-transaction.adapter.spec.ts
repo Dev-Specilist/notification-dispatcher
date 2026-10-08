@@ -10,16 +10,16 @@ import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import { DeliveryId } from '@/modules/notification/domain/delivery/delivery.type';
 import { Rollback } from '@/modules/notification/infrastructure/adapter/rollback.type';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/unit-of-work.type';
+import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-expansion-job-repository.adapter';
-import { InMemoryUnitOfWorkAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-unit-of-work.adapter';
+import { InMemoryTransactionAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-transaction.adapter';
 
 interface Fixture {
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
   readonly expansionJobRepository: InMemoryExpansionJobRepositoryAdapter;
-  readonly unitOfWork: InMemoryUnitOfWorkAdapter;
+  readonly transaction: InMemoryTransactionAdapter;
 }
 
 const ENQUEUED_ISO: string = '2026-10-07T09:05:00.000Z';
@@ -73,7 +73,7 @@ const fixture = (): Fixture => {
   return {
     alarmRepository,
     expansionJobRepository,
-    unitOfWork: new InMemoryUnitOfWorkAdapter({
+    transaction: new InMemoryTransactionAdapter({
       alarmRepository,
       deliveryRepository: new InMemoryDeliveryRepositoryAdapter(),
       expansionJobRepository,
@@ -81,19 +81,19 @@ const fixture = (): Fixture => {
   };
 };
 
-describe('InMemoryUnitOfWorkAdapter', () => {
+describe('InMemoryTransactionAdapter', () => {
   it('동시에 시작한 트랜잭션은 하나씩 차례로 실행되어 서로의 중간 상태를 보지 않는다', async (): Promise<void> => {
-    const { unitOfWork }: Fixture = fixture();
+    const { transaction }: Fixture = fixture();
     const order: Array<string> = [];
 
     await Promise.all([
-      unitOfWork.run(async (): Promise<void> => {
+      transaction.run(async (): Promise<void> => {
         order.push('first:start');
         await Promise.resolve();
         await Promise.resolve();
         order.push('first:end');
       }),
-      unitOfWork.run((): Promise<void> => {
+      transaction.run((): Promise<void> => {
         order.push('second:start');
         order.push('second:end');
         return Promise.resolve();
@@ -104,16 +104,16 @@ describe('InMemoryUnitOfWorkAdapter', () => {
   });
 
   it('한 트랜잭션이 실패해 롤백돼도 다른 트랜잭션이 커밋한 변경은 남는다', async (): Promise<void> => {
-    const { alarmRepository, unitOfWork }: Fixture = fixture();
+    const { alarmRepository, transaction }: Fixture = fixture();
 
     const results: ReadonlyArray<PromiseSettledResult<void>> = await Promise.allSettled([
-      unitOfWork.run(
+      transaction.run(
         async ({ alarmRepository: repository }: TransactionRepositories): Promise<void> => {
           await repository.save(bulkAlarm(FIRST_ID));
           throw new Error('first transaction failed');
         },
       ),
-      unitOfWork.run(({ alarmRepository: repository }: TransactionRepositories): Promise<void> =>
+      transaction.run(({ alarmRepository: repository }: TransactionRepositories): Promise<void> =>
         repository.save(bulkAlarm(SECOND_ID)),
       ),
     ]);
@@ -127,12 +127,12 @@ describe('InMemoryUnitOfWorkAdapter', () => {
   });
 
   it('앞선 트랜잭션이 실패해도 다음 트랜잭션은 계속 실행된다', async (): Promise<void> => {
-    const { unitOfWork }: Fixture = fixture();
-    const failed: Promise<void> = unitOfWork.run((): Promise<void> =>
+    const { transaction }: Fixture = fixture();
+    const failed: Promise<void> = transaction.run((): Promise<void> =>
       Promise.reject(new Error('first transaction failed')),
     );
 
-    const next: Promise<string> = unitOfWork.run((): Promise<string> => Promise.resolve('ran'));
+    const next: Promise<string> = transaction.run((): Promise<string> => Promise.resolve('ran'));
 
     await expect(failed).rejects.toThrow('first transaction failed');
     expect(await next).toBe('ran');

@@ -13,7 +13,7 @@ import { StartDispatchService } from '@/modules/notification/application/service
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-expansion-job-repository.adapter';
-import { InMemoryUnitOfWorkAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-unit-of-work.adapter';
+import { InMemoryTransactionAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-transaction.adapter';
 
 type DeliverySummary = Pick<DeliverySnapshot, 'recipientId' | 'priority' | 'state' | 'createdAt'>;
 
@@ -111,7 +111,7 @@ const fixture = async (
 ): Promise<Fixture> => {
   const alarmRepository: InMemoryAlarmRepositoryAdapter = new InMemoryAlarmRepositoryAdapter();
   await Promise.all(stored.map((alarm: Alarm): Promise<void> => alarmRepository.save(alarm)));
-  const unitOfWork: InMemoryUnitOfWorkAdapter = new InMemoryUnitOfWorkAdapter({
+  const transaction: InMemoryTransactionAdapter = new InMemoryTransactionAdapter({
     alarmRepository,
     deliveryRepository,
     expansionJobRepository,
@@ -120,7 +120,7 @@ const fixture = async (
     alarmRepository,
     deliveryRepository,
     expansionJobRepository,
-    service: new StartDispatchService(unitOfWork, new SequentialIdGenerator(), new FixedClock()),
+    service: new StartDispatchService(transaction, new SequentialIdGenerator(), new FixedClock()),
   };
 };
 

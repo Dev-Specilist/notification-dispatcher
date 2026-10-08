@@ -2,10 +2,10 @@ import { Module } from '@nestjs/common';
 import { Pool } from 'pg';
 import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
 import { IdGeneratorPort } from '@/modules/notification/application/port/out/id-generator.port';
-import { UnitOfWorkPort } from '@/modules/notification/application/port/out/unit-of-work.port';
+import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
 import { CreateAlarmUseCase } from '@/modules/notification/application/port/in/create-alarm.use-case';
 import { CreateAlarmService } from '@/modules/notification/application/service/create-alarm.service';
-import { DrizzleUnitOfWorkAdapter } from '@/modules/notification/infrastructure/adapter/drizzle-unit-of-work.adapter';
+import { DrizzleTransactionAdapter } from '@/modules/notification/infrastructure/adapter/drizzle-transaction.adapter';
 import { RandomIdGeneratorAdapter } from '@/modules/notification/infrastructure/adapter/random-id-generator.adapter';
 import { SystemClockAdapter } from '@/modules/notification/infrastructure/adapter/system-clock.adapter';
 import { NotificationDatabaseFactory } from '@/modules/notification/infrastructure/persistence/notification-database.factory';
@@ -17,19 +17,19 @@ import { AlarmController } from '@/modules/notification/presentation/alarm.contr
     { provide: ClockPort, useClass: SystemClockAdapter },
     { provide: IdGeneratorPort, useClass: RandomIdGeneratorAdapter },
     {
-      provide: UnitOfWorkPort,
+      provide: TransactionPort,
       inject: [Pool],
-      useFactory: (pool: Pool): UnitOfWorkPort =>
-        new DrizzleUnitOfWorkAdapter(NotificationDatabaseFactory.create(pool)),
+      useFactory: (pool: Pool): TransactionPort =>
+        new DrizzleTransactionAdapter(NotificationDatabaseFactory.create(pool)),
     },
     {
       provide: CreateAlarmUseCase,
-      inject: [UnitOfWorkPort, IdGeneratorPort, ClockPort],
+      inject: [TransactionPort, IdGeneratorPort, ClockPort],
       useFactory: (
-        unitOfWork: UnitOfWorkPort,
+        transaction: TransactionPort,
         idGenerator: IdGeneratorPort,
         clock: ClockPort,
-      ): CreateAlarmUseCase => new CreateAlarmService(unitOfWork, idGenerator, clock),
+      ): CreateAlarmUseCase => new CreateAlarmService(transaction, idGenerator, clock),
     },
   ],
 })

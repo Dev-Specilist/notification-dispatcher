@@ -2,8 +2,8 @@ import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmCreation } from '@/modules/notification/domain/alarm/alarm.type';
 import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
 import { IdGeneratorPort } from '@/modules/notification/application/port/out/id-generator.port';
-import { UnitOfWorkPort } from '@/modules/notification/application/port/out/unit-of-work.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/unit-of-work.type';
+import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
+import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
 import {
   CreateAlarmCommand,
   CreateAlarmResult,
@@ -13,7 +13,7 @@ import { AlarmViewMapper } from '@/modules/notification/application/service/alar
 
 export class CreateAlarmService implements CreateAlarmUseCase {
   constructor(
-    private readonly unitOfWork: UnitOfWorkPort,
+    private readonly transaction: TransactionPort,
     private readonly idGenerator: IdGeneratorPort,
     private readonly clock: ClockPort,
   ) {}
@@ -27,7 +27,7 @@ export class CreateAlarmService implements CreateAlarmUseCase {
     if (creation.kind === 'rejected') {
       return { kind: 'rejected', error: creation.error };
     }
-    await this.unitOfWork.run(({ alarmRepository }: TransactionRepositories): Promise<void> =>
+    await this.transaction.run(({ alarmRepository }: TransactionRepositories): Promise<void> =>
       alarmRepository.save(creation.alarm),
     );
     return { kind: 'created', alarm: AlarmViewMapper.toView(creation.alarm) };

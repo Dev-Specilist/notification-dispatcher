@@ -10,20 +10,20 @@ import {
   LeasedSave,
 } from '@/modules/notification/application/port/out/delivery-repository.type';
 import { LeaseRecoverySettingsPort } from '@/modules/notification/application/port/out/lease-recovery-settings.port';
-import { UnitOfWorkPort } from '@/modules/notification/application/port/out/unit-of-work.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/unit-of-work.type';
+import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
+import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
 import { RecoveryAttempt } from '@/modules/notification/application/port/in/recover-expired-lease.type';
 import { RecoverExpiredLeaseUseCase } from '@/modules/notification/application/port/in/recover-expired-lease.use-case';
 
 export class RecoverExpiredLeaseService implements RecoverExpiredLeaseUseCase {
   constructor(
-    private readonly unitOfWork: UnitOfWorkPort,
+    private readonly transaction: TransactionPort,
     private readonly clock: ClockPort,
     private readonly settings: LeaseRecoverySettingsPort,
   ) {}
 
   execute(): Promise<RecoveryAttempt> {
-    return this.unitOfWork.run(
+    return this.transaction.run(
       async ({ deliveryRepository }: TransactionRepositories): Promise<RecoveryAttempt> => {
         const now: Date = this.clock.now();
         const candidate: DeliveryCandidate = await deliveryRepository.findNextExpiredLease(now);

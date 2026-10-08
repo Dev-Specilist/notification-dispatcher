@@ -5,21 +5,21 @@ import {
 } from '@/modules/notification/domain/alarm/alarm.type';
 import { AlarmLookup } from '@/modules/notification/application/port/out/alarm-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
-import { UnitOfWorkPort } from '@/modules/notification/application/port/out/unit-of-work.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/unit-of-work.type';
+import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
+import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
 import { CancelAlarmResult } from '@/modules/notification/application/port/in/alarm-result.type';
 import { CancelAlarmUseCase } from '@/modules/notification/application/port/in/cancel-alarm.use-case';
 import { AlarmViewMapper } from '@/modules/notification/application/service/alarm-view.mapper';
 
 export class CancelAlarmService implements CancelAlarmUseCase {
   constructor(
-    private readonly unitOfWork: UnitOfWorkPort,
+    private readonly transaction: TransactionPort,
     private readonly clock: ClockPort,
   ) {}
 
   execute(alarmId: AlarmId): Promise<CancelAlarmResult> {
     const now: Date = this.clock.now();
-    return this.unitOfWork.run(
+    return this.transaction.run(
       async ({
         alarmRepository,
         deliveryRepository,

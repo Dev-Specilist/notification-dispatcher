@@ -27,7 +27,7 @@ import { CancelAlarmService } from '@/modules/notification/application/service/c
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-expansion-job-repository.adapter';
-import { InMemoryUnitOfWorkAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-unit-of-work.adapter';
+import { InMemoryTransactionAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-transaction.adapter';
 
 type DeliveryBuilder = (index: number) => Delivery;
 
@@ -191,7 +191,7 @@ const fixture = async (
   const alarmRepository: InMemoryAlarmRepositoryAdapter = new InMemoryAlarmRepositoryAdapter();
   await Promise.all(alarms.map((alarm: Alarm): Promise<void> => alarmRepository.save(alarm)));
   await deliveryRepository.saveAll(deliveries);
-  const unitOfWork: InMemoryUnitOfWorkAdapter = new InMemoryUnitOfWorkAdapter({
+  const transaction: InMemoryTransactionAdapter = new InMemoryTransactionAdapter({
     alarmRepository,
     deliveryRepository,
     expansionJobRepository: new InMemoryExpansionJobRepositoryAdapter(),
@@ -199,7 +199,7 @@ const fixture = async (
   return {
     alarmRepository,
     deliveryRepository,
-    service: new CancelAlarmService(unitOfWork, new FixedClock()),
+    service: new CancelAlarmService(transaction, new FixedClock()),
   };
 };
 

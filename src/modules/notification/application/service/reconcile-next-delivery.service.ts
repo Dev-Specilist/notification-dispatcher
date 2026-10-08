@@ -17,14 +17,14 @@ import { JitterSourcePort } from '@/modules/notification/application/port/out/ji
 import { MessageLookupPort } from '@/modules/notification/application/port/out/message-lookup.port';
 import { MessageLookupResult } from '@/modules/notification/application/port/out/message-lookup.type';
 import { ReconcileSettingsPort } from '@/modules/notification/application/port/out/reconcile-settings.port';
-import { UnitOfWorkPort } from '@/modules/notification/application/port/out/unit-of-work.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/unit-of-work.type';
+import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
+import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
 import { ReconcileAttempt } from '@/modules/notification/application/port/in/reconcile-next-delivery.type';
 import { ReconcileNextDeliveryUseCase } from '@/modules/notification/application/port/in/reconcile-next-delivery.use-case';
 
 export class ReconcileNextDeliveryService implements ReconcileNextDeliveryUseCase {
   constructor(
-    private readonly unitOfWork: UnitOfWorkPort,
+    private readonly transaction: TransactionPort,
     private readonly messageLookup: MessageLookupPort,
     private readonly clock: ClockPort,
     private readonly settings: ReconcileSettingsPort,
@@ -32,7 +32,7 @@ export class ReconcileNextDeliveryService implements ReconcileNextDeliveryUseCas
   ) {}
 
   async execute(): Promise<ReconcileAttempt> {
-    const candidate: DeliveryCandidate = await this.unitOfWork.run(
+    const candidate: DeliveryCandidate = await this.transaction.run(
       ({ deliveryRepository }: TransactionRepositories): Promise<DeliveryCandidate> =>
         deliveryRepository.findNextReconcilable(this.clock.now()),
     );
@@ -47,7 +47,7 @@ export class ReconcileNextDeliveryService implements ReconcileNextDeliveryUseCas
 
   private record(delivery: Delivery, lookup: MessageLookupResult): Promise<ReconcileAttempt> {
     const { id, alarmId }: DeliverySnapshot = delivery.snapshot();
-    return this.unitOfWork.run(
+    return this.transaction.run(
       async ({
         alarmRepository,
         deliveryRepository,

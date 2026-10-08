@@ -6,7 +6,7 @@ import {
   AlarmCreation,
   AlarmId,
 } from '@/modules/notification/domain/alarm/alarm.type';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/unit-of-work.type';
+import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
 import {
   AlarmFoundResult,
   AlarmResult,
@@ -17,7 +17,7 @@ import { GetAlarmService } from '@/modules/notification/application/service/get-
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-expansion-job-repository.adapter';
-import { InMemoryUnitOfWorkAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-unit-of-work.adapter';
+import { InMemoryTransactionAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-transaction.adapter';
 
 const STORED_ID: string = '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10';
 const MISSING_ID: string = '7d3f1e2a-4b5c-4d6e-8f70-1a2b3c4d5e6f';
@@ -39,7 +39,7 @@ const createGate = (): Gate => {
 
 interface Fixture {
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
-  readonly unitOfWork: InMemoryUnitOfWorkAdapter;
+  readonly transaction: InMemoryTransactionAdapter;
   readonly service: GetAlarmService;
 }
 
@@ -73,12 +73,12 @@ const found = (result: AlarmResult): AlarmView => {
 
 const fixture = (): Fixture => {
   const alarmRepository: InMemoryAlarmRepositoryAdapter = new InMemoryAlarmRepositoryAdapter();
-  const unitOfWork: InMemoryUnitOfWorkAdapter = new InMemoryUnitOfWorkAdapter({
+  const transaction: InMemoryTransactionAdapter = new InMemoryTransactionAdapter({
     alarmRepository,
     deliveryRepository: new InMemoryDeliveryRepositoryAdapter(),
     expansionJobRepository: new InMemoryExpansionJobRepositoryAdapter(),
   });
-  return { alarmRepository, unitOfWork, service: new GetAlarmService(unitOfWork) };
+  return { alarmRepository, transaction, service: new GetAlarmService(transaction) };
 };
 
 describe('GetAlarmService', () => {
@@ -105,10 +105,10 @@ describe('GetAlarmService', () => {
   });
 
   it('UC-02 커밋되지 않은 다른 트랜잭션의 저장은 조회되지 않는다', async (): Promise<void> => {
-    const { unitOfWork, service }: Fixture = fixture();
+    const { transaction, service }: Fixture = fixture();
     const uncommittedSaved: Gate = createGate();
     const failureReleased: Gate = createGate();
-    const failing: Promise<void> = unitOfWork.run(
+    const failing: Promise<void> = transaction.run(
       async ({ alarmRepository }: TransactionRepositories): Promise<void> => {
         await alarmRepository.save(storedAlarm());
         uncommittedSaved.open();

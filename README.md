@@ -49,7 +49,7 @@
 │             ExpandRecipients · SendDeliveries · ReconcileDeliveries            │
 │             CompleteAlarmIfSettled                                             │
 │ ports     : AlarmRepository · DeliveryRepository · RecipientDirectory          │
-│             MessageSender (+ SendOutcome union) · RateLimiter · UnitOfWork     │
+│             MessageSender (+ SendOutcome union) · RateLimiter · Transaction    │
 │             Clock                                                              │
 └──────────────────────────────────────┬─────────────────────────────────────────┘
                                        │ uses
@@ -115,7 +115,7 @@
 │       ├── 📂 config/                               zod env 스키마 · brand 타입 · TypedConfigService
 │       ├── 📂 http/                                 RFC 9457 Problem Details · 요청 검증
 │       ├── 📂 logging/                              Nest ConsoleLogger 기반 AppLogger
-│       └── 📂 database/                             Drizzle 연결 · UnitOfWork
+│       └── 📂 database/                             PostgreSQL Pool · 마이그레이션 실행기
 ├── 📂 drizzle/                                      마이그레이션 SQL
 ├── 📂 test/                                         e2e (api 전체 · 발송 전체 흐름)
 ├── 📄 Dockerfile                                    target: api · worker

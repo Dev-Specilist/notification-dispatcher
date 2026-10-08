@@ -42,11 +42,11 @@ import { SendNextDeliveryService } from '@/modules/notification/application/serv
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-expansion-job-repository.adapter';
-import { InMemoryUnitOfWorkAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-unit-of-work.adapter';
+import { InMemoryTransactionAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-transaction.adapter';
 
 interface Fixture {
   readonly deliveryRepository: InMemoryDeliveryRepositoryAdapter;
-  readonly unitOfWork: InMemoryUnitOfWorkAdapter;
+  readonly transaction: InMemoryTransactionAdapter;
   readonly clock: AdjustableClock;
   readonly service: RecoverExpiredLeaseService;
 }
@@ -255,7 +255,7 @@ const fixture = async (deliveries: ReadonlyArray<Delivery>): Promise<Fixture> =>
   const deliveryRepository: InMemoryDeliveryRepositoryAdapter =
     new InMemoryDeliveryRepositoryAdapter();
   await deliveryRepository.saveAll(deliveries);
-  const unitOfWork: InMemoryUnitOfWorkAdapter = new InMemoryUnitOfWorkAdapter({
+  const transaction: InMemoryTransactionAdapter = new InMemoryTransactionAdapter({
     alarmRepository,
     deliveryRepository,
     expansionJobRepository: new InMemoryExpansionJobRepositoryAdapter(),
@@ -263,9 +263,9 @@ const fixture = async (deliveries: ReadonlyArray<Delivery>): Promise<Fixture> =>
   const clock: AdjustableClock = new AdjustableClock();
   return {
     deliveryRepository,
-    unitOfWork,
+    transaction,
     clock,
-    service: new RecoverExpiredLeaseService(unitOfWork, clock, new FixedRecoverySettings()),
+    service: new RecoverExpiredLeaseService(transaction, clock, new FixedRecoverySettings()),
   };
 };
 
@@ -314,12 +314,12 @@ describe('RecoverExpiredLeaseService', () => {
   });
 
   it('UC-15 외부 발송이 성공한 직후 결과 저장 전에 워커가 멈췄다 / lease 만료 후 복구와 reconcile을 실행한다 → 재전송 없이 SENT로 확정된다', async (): Promise<void> => {
-    const { deliveryRepository, unitOfWork, clock, service }: Fixture = await fixture([
+    const { deliveryRepository, transaction, clock, service }: Fixture = await fixture([
       requestStarted(),
     ]);
     const sender: RecordingMessageSender = new RecordingMessageSender();
     const sendWorker: SendNextDeliveryService = new SendNextDeliveryService(
-      unitOfWork,
+      transaction,
       new AlwaysGrantedPermit(),
       sender,
       new FixedLeaseTokenGenerator(),
@@ -328,7 +328,7 @@ describe('RecoverExpiredLeaseService', () => {
       new ZeroJitter(),
     );
     const reconcileWorker: ReconcileNextDeliveryService = new ReconcileNextDeliveryService(
-      unitOfWork,
+      transaction,
       new AlreadySentLookup(),
       clock,
       new FixedReconcileSettings(),

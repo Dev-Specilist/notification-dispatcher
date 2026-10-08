@@ -21,8 +21,8 @@ import { MessageSenderPort } from '@/modules/notification/application/port/out/m
 import { SendOutcome } from '@/modules/notification/application/port/out/message-sender.type';
 import { SendPermitPort } from '@/modules/notification/application/port/out/send-permit.port';
 import { SendPermit } from '@/modules/notification/application/port/out/send-permit.type';
-import { UnitOfWorkPort } from '@/modules/notification/application/port/out/unit-of-work.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/unit-of-work.type';
+import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
+import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
 import { SendAttempt } from '@/modules/notification/application/port/in/send-next-delivery.type';
 import { SendNextDeliveryUseCase } from '@/modules/notification/application/port/in/send-next-delivery.use-case';
 
@@ -36,7 +36,7 @@ type ClaimStep = SendAttempt | RequestReady;
 
 export class SendNextDeliveryService implements SendNextDeliveryUseCase {
   constructor(
-    private readonly unitOfWork: UnitOfWorkPort,
+    private readonly transaction: TransactionPort,
     private readonly sendPermit: SendPermitPort,
     private readonly messageSender: MessageSenderPort,
     private readonly leaseTokenGenerator: LeaseTokenGeneratorPort,
@@ -66,7 +66,7 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
   }
 
   private claimNext(token: LeaseToken): Promise<ClaimStep> {
-    return this.unitOfWork.run(
+    return this.transaction.run(
       async ({
         alarmRepository,
         deliveryRepository,
@@ -118,7 +118,7 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
       this.applyOutcome(delivery, token, outcome, now),
     );
     const { id, alarmId }: DeliverySnapshot = delivery.snapshot();
-    return this.unitOfWork.run(
+    return this.transaction.run(
       async ({
         alarmRepository,
         deliveryRepository,

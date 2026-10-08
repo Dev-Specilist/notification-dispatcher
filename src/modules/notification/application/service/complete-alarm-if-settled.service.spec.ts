@@ -27,7 +27,7 @@ import { CompleteAlarmIfSettledService } from '@/modules/notification/applicatio
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-expansion-job-repository.adapter';
-import { InMemoryUnitOfWorkAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-unit-of-work.adapter';
+import { InMemoryTransactionAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-transaction.adapter';
 
 type DeliveryBuilder = (index: number) => Delivery;
 
@@ -190,7 +190,7 @@ const fixture = async (alarm: Alarm, deliveries: ReadonlyArray<Delivery>): Promi
     alarmRepository,
     expansionJobRepository,
     service: new CompleteAlarmIfSettledService(
-      new InMemoryUnitOfWorkAdapter({
+      new InMemoryTransactionAdapter({
         alarmRepository,
         deliveryRepository,
         expansionJobRepository,

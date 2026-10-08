@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { UnitOfWorkPort } from '@/modules/notification/application/port/out/unit-of-work.port';
-import { TransactionWork } from '@/modules/notification/application/port/out/unit-of-work.type';
-import { InMemoryRepositories } from '@/modules/notification/infrastructure/adapter/in-memory-unit-of-work.type';
+import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
+import { TransactionWork } from '@/modules/notification/application/port/out/transaction.type';
+import { InMemoryRepositories } from '@/modules/notification/infrastructure/adapter/in-memory-transaction.type';
 import { Rollback } from '@/modules/notification/infrastructure/adapter/rollback.type';
 
 @Injectable()
-export class InMemoryUnitOfWorkAdapter implements UnitOfWorkPort {
+export class InMemoryTransactionAdapter implements TransactionPort {
   private static readonly ignoreOutcome: () => void = (): void => {};
 
   constructor(private readonly repositories: InMemoryRepositories) {}
@@ -17,8 +17,8 @@ export class InMemoryUnitOfWorkAdapter implements UnitOfWorkPort {
       this.runWithRollback(work),
     );
     this.queue = result.then(
-      InMemoryUnitOfWorkAdapter.ignoreOutcome,
-      InMemoryUnitOfWorkAdapter.ignoreOutcome,
+      InMemoryTransactionAdapter.ignoreOutcome,
+      InMemoryTransactionAdapter.ignoreOutcome,
     );
     return result;
   }

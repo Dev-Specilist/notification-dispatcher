@@ -9,22 +9,22 @@ import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity
 import { AlarmLookup } from '@/modules/notification/application/port/out/alarm-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
 import { IdGeneratorPort } from '@/modules/notification/application/port/out/id-generator.port';
-import { UnitOfWorkPort } from '@/modules/notification/application/port/out/unit-of-work.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/unit-of-work.type';
+import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
+import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
 import { StartDispatchResult } from '@/modules/notification/application/port/in/alarm-result.type';
 import { StartDispatchUseCase } from '@/modules/notification/application/port/in/start-dispatch.use-case';
 import { AlarmViewMapper } from '@/modules/notification/application/service/alarm-view.mapper';
 
 export class StartDispatchService implements StartDispatchUseCase {
   constructor(
-    private readonly unitOfWork: UnitOfWorkPort,
+    private readonly transaction: TransactionPort,
     private readonly idGenerator: IdGeneratorPort,
     private readonly clock: ClockPort,
   ) {}
 
   execute(alarmId: AlarmId): Promise<StartDispatchResult> {
     const now: Date = this.clock.now();
-    return this.unitOfWork.run(
+    return this.transaction.run(
       async ({
         alarmRepository,
         deliveryRepository,

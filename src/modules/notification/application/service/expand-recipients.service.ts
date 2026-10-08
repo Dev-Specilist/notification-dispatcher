@@ -13,8 +13,8 @@ import {
   PageCursor,
   RecipientPage,
 } from '@/modules/notification/application/port/out/recipient-directory.type';
-import { UnitOfWorkPort } from '@/modules/notification/application/port/out/unit-of-work.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/unit-of-work.type';
+import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
+import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
 import {
   ExpansionCancelled,
   ExpansionResult,
@@ -36,7 +36,7 @@ type ExpansionStart = ExpansionResult | PageToFetch;
 
 export class ExpandRecipientsService implements ExpandRecipientsUseCase {
   constructor(
-    private readonly unitOfWork: UnitOfWorkPort,
+    private readonly transaction: TransactionPort,
     private readonly recipientDirectory: RecipientDirectoryPort,
     private readonly idGenerator: IdGeneratorPort,
     private readonly clock: ClockPort,
@@ -51,7 +51,7 @@ export class ExpandRecipientsService implements ExpandRecipientsUseCase {
   }
 
   private async expandNextPage(alarmId: AlarmId): Promise<ExpansionStep> {
-    const start: ExpansionStart = await this.unitOfWork.run(
+    const start: ExpansionStart = await this.transaction.run(
       async ({
         alarmRepository,
         expansionJobRepository,
@@ -86,7 +86,7 @@ export class ExpandRecipientsService implements ExpandRecipientsUseCase {
     { recipientIds, next }: RecipientPage,
   ): Promise<ExpansionStep> {
     const now: Date = this.clock.now();
-    return this.unitOfWork.run(
+    return this.transaction.run(
       async ({
         alarmRepository,
         deliveryRepository,
