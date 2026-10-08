@@ -285,10 +285,4 @@ describe('MockMessageSenderAdapter', () => {
 
     expect(outcome).toEqual({ kind: 'indeterminate' });
   });
-  it.todo(
-    'EXT-10 기본 RATE_LIMIT mock / 제한기를 거쳐 2초 동안 연속 발송한다 → 429가 나오지 않는다 (mock 한도 구간 방식에 대한 특성 테스트)',
-  );
-  it.todo(
-    'EXT-11 TIMEOUT_RATE=1 mock / 발송 요청 직후 응답을 기다리는 동안 발송 내역을 조회한다 → 내역이 이미 있다 (발송 기록 시점에 대한 특성 테스트, reconcile 가정의 근거)',
-  );
 });
