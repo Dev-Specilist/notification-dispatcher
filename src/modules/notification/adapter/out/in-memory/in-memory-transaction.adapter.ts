@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
-import { TransactionWork } from '@/modules/notification/application/port/out/transaction.type';
+import {
+  SnapshotWork,
+  TransactionRepositories,
+  TransactionWork,
+} from '@/modules/notification/application/port/out/transaction.type';
 import { InMemoryRepositories } from '@/modules/notification/adapter/out/in-memory/in-memory-transaction.type';
 import { Rollback } from '@/modules/notification/adapter/out/in-memory/rollback.type';
 
@@ -21,6 +25,13 @@ export class InMemoryTransactionAdapter implements TransactionPort {
       InMemoryTransactionAdapter.ignoreOutcome,
     );
     return result;
+  }
+
+  readSnapshot<TResult>(work: SnapshotWork<TResult>): Promise<TResult> {
+    return this.run(
+      ({ alarmRepository, deliveryProgress }: TransactionRepositories): Promise<TResult> =>
+        work({ alarmReader: alarmRepository, deliveryProgress }),
+    );
   }
 
   private async runWithRollback<TResult>(work: TransactionWork<TResult>): Promise<TResult> {

@@ -1,3 +1,4 @@
+import { AlarmReaderPort } from '@/modules/notification/application/port/out/alarm-reader.port';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/out/alarm-repository.port';
 import { DeliveryCreationPort } from '@/modules/notification/application/port/out/delivery-creation.port';
 import { DispatchQueuePort } from '@/modules/notification/application/port/out/dispatch-queue.port';
@@ -19,3 +20,10 @@ export interface TransactionRepositories {
 }
 
 export type TransactionWork<TResult> = (repositories: TransactionRepositories) => Promise<TResult>;
+
+export interface SnapshotRepositories {
+  readonly alarmReader: AlarmReaderPort;
+  readonly deliveryProgress: DeliveryProgressPort;
+}
+
+export type SnapshotWork<TResult> = (repositories: SnapshotRepositories) => Promise<TResult>;

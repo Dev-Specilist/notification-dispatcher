@@ -2,6 +2,7 @@ import { SQL, and, desc, eq, sql } from 'drizzle-orm';
 import { PgColumn } from 'drizzle-orm/pg-core';
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmId, AlarmSnapshot } from '@/modules/notification/domain/alarm/alarm.type';
+import { AlarmReaderPort } from '@/modules/notification/application/port/out/alarm-reader.port';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/out/alarm-repository.port';
 import {
   AlarmLookup,
@@ -18,7 +19,7 @@ import {
   NotificationDatabase,
 } from '@/modules/notification/adapter/out/persistence/notification-database.type';
 
-export class DrizzleAlarmRepositoryAdapter implements AlarmRepositoryPort {
+export class DrizzleAlarmRepositoryAdapter implements AlarmRepositoryPort, AlarmReaderPort {
   constructor(private readonly database: NotificationDatabase) {}
 
   async save(alarm: Alarm): Promise<void> {

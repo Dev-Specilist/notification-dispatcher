@@ -81,7 +81,7 @@
 
 - port는 abstract class라서 그 자체를 Nest DI 토큰으로 씁니다(`{ provide: ClockPort, useClass: SystemClockAdapter }`). 구현은 `implements`만 쓰고, 구현을 물려받을 필요가 없으면 `extends`하지 않습니다.
 - 성공과 실패는 예외 대신 `kind`로 구분하는 discriminated union으로 표현합니다. 외부 발송 결과(`SendOutcome = Accepted | PermanentFailure | TransientFailure | RateLimited | Unknown`)는 발송 port의 계약이므로 `port/out`에 둡니다.
-- 트랜잭션은 필요한 일관성으로 정합니다. 여러 변경이 함께 성공해야 하면 `TransactionPort`가 한 트랜잭션 안의 저장소를 넘겨줍니다. `TransactionPort`는 변경 추적이 없는 트랜잭션 실행기로, Fowler의 Unit of Work와는 범위가 다릅니다.
+- 트랜잭션은 필요한 일관성으로 정합니다. 여러 변경이 함께 성공해야 하면 `TransactionPort`가 한 트랜잭션 안의 저장소를 넘겨줍니다. 알림 상태와 Delivery 집계처럼 같은 시점의 값이 필요한 조회는 `readSnapshot`(PostgreSQL `REPEATABLE READ`, `READ ONLY`)으로 읽어, 두 조회 사이에 워커가 커밋해도 서로 어긋난 값이 섞이지 않게 합니다. `readSnapshot`은 조회용 port(`AlarmReader`, `DeliveryProgress`)만 넘겨서 스냅샷 안에서의 쓰기를 타입 단계에서 막습니다. `TransactionPort`는 변경 추적이 없는 트랜잭션 실행기로, Fowler의 Unit of Work와는 범위가 다릅니다.
 
 ### 의도한 타협
 

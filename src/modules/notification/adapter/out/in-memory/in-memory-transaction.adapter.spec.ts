@@ -10,11 +10,16 @@ import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import { DeliveryId } from '@/modules/notification/domain/delivery/delivery.type';
 import { Rollback } from '@/modules/notification/adapter/out/in-memory/rollback.type';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
+import {
+  SnapshotRepositories,
+  TransactionRepositories,
+} from '@/modules/notification/application/port/out/transaction.type';
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-expansion-job-repository.adapter';
 import { InMemoryTransactionAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-transaction.adapter';
+
+type SnapshotReading = Readonly<[alarmLookupKind: string, pendingCount: number]>;
 
 interface Fixture {
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
@@ -101,6 +106,28 @@ describe('InMemoryTransactionAdapter', () => {
     ]);
 
     expect(order).toEqual(['first:start', 'first:end', 'second:start', 'second:end']);
+  });
+
+  it('스냅샷 조회는 실행 중인 트랜잭션이 끝난 뒤 실행되어 함께 커밋된 알림과 상태별 Delivery 수를 같이 본다', async (): Promise<void> => {
+    const { transaction }: Fixture = fixture();
+    const savedAlarmId: AlarmId = alarmId(FIRST_ID);
+
+    const savingAlarmWithDelivery: Promise<void> = transaction.run(
+      async ({ alarmRepository, deliveryCreation }: TransactionRepositories): Promise<void> => {
+        await alarmRepository.save(bulkAlarm(FIRST_ID));
+        await Promise.resolve();
+        await deliveryCreation.saveAll([pendingDelivery(1, 'u_000001')]);
+      },
+    );
+    const snapshotReading: Promise<SnapshotReading> = transaction.readSnapshot(
+      async ({ alarmReader, deliveryProgress }: SnapshotRepositories): Promise<SnapshotReading> => [
+        (await alarmReader.findById(savedAlarmId)).kind,
+        (await deliveryProgress.countByStatus(savedAlarmId)).PENDING,
+      ],
+    );
+    await savingAlarmWithDelivery;
+
+    expect(await snapshotReading).toEqual(['found', 1]);
   });
 
   it('한 트랜잭션이 실패해 롤백돼도 다른 트랜잭션이 커밋한 변경은 남는다', async (): Promise<void> => {

@@ -13,6 +13,7 @@ import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import {
   DeliveryId,
+  DeliveryStatusCounts,
   JitterRatio,
   LeaseToken,
   MessageId,
@@ -40,7 +41,10 @@ import {
 } from '@/modules/notification/application/port/out/recipient-directory.type';
 import { SendPermitPort } from '@/modules/notification/application/port/out/send-permit.port';
 import { SendPermit } from '@/modules/notification/application/port/out/send-permit.type';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
+import {
+  SnapshotRepositories,
+  TransactionRepositories,
+} from '@/modules/notification/application/port/out/transaction.type';
 import {
   CancelAlarmResult,
   StartDispatchResult,
@@ -60,6 +64,10 @@ import { TestDatabase } from '@/shared/database/testing/test-database';
 type OutcomePair = Readonly<[string, string]>;
 
 type StartAndCancelResults = Readonly<[started: StartDispatchResult, cancelled: CancelAlarmResult]>;
+
+type CancelCounts = Readonly<
+  [beforeCancel: DeliveryStatusCounts, afterCancel: DeliveryStatusCounts]
+>;
 
 interface LockWaitRow {
   readonly waiting: number;
@@ -288,6 +296,51 @@ describe('DrizzleTransactionAdapter', () => {
 
   const startDispatch = (): StartDispatchService =>
     new StartDispatchService(transaction, new RandomDeliveryIdGenerator(), new FixedClock());
+
+  const countsAroundConcurrentCancel = async (alarmId: AlarmId): Promise<CancelCounts> => {
+    const beforeCancel: DeliveryStatusCounts = await deliveryProgressOf(alarmId);
+    await new CancelAlarmService(transaction, new FixedClock()).execute(alarmId);
+    return [beforeCancel, await deliveryProgressOf(alarmId)];
+  };
+
+  const deliveryProgressOf = (alarmId: AlarmId): Promise<DeliveryStatusCounts> =>
+    new DrizzleDeliveryRepositoryAdapter(
+      NotificationDatabaseFactory.create(testDatabase.pool),
+    ).countByStatus(alarmId);
+
+  const dispatchedUrgentAlarm = async (): Promise<AlarmId> => {
+    const alarm: Alarm = urgentDraft();
+    await save(alarm);
+    const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
+    await startDispatch().execute(alarmId);
+    return alarmId;
+  };
+
+  it('DB-17 발송 중인 알림 / 한 스냅샷 안에서 상태별 Delivery 수를 두 번 읽는 사이에 다른 트랜잭션이 Delivery를 바꿔 커밋한다 → 스냅샷 안의 두 조회는 같은 시점의 값을 본다', async (): Promise<void> => {
+    const alarmId: AlarmId = await dispatchedUrgentAlarm();
+
+    const [beforeCancel, afterCancel]: CancelCounts = await transaction.readSnapshot(
+      async ({ deliveryProgress }: SnapshotRepositories): Promise<CancelCounts> => {
+        const countedBeforeCancel: DeliveryStatusCounts =
+          await deliveryProgress.countByStatus(alarmId);
+        await new CancelAlarmService(transaction, new FixedClock()).execute(alarmId);
+        return [countedBeforeCancel, await deliveryProgress.countByStatus(alarmId)];
+      },
+    );
+
+    expect(beforeCancel).toMatchObject({ PENDING: 3, CANCELLED: 0 });
+    expect(afterCancel).toEqual(beforeCancel);
+    expect(await deliveryProgressOf(alarmId)).toMatchObject({ PENDING: 0, CANCELLED: 3 });
+  });
+
+  it('DB-17 스냅샷 없이 읽으면 두 조회 사이에 커밋된 변경이 보인다 (READ COMMITTED 대조)', async (): Promise<void> => {
+    const alarmId: AlarmId = await dispatchedUrgentAlarm();
+
+    const [beforeCancel, afterCancel]: CancelCounts = await countsAroundConcurrentCancel(alarmId);
+
+    expect(beforeCancel).toMatchObject({ PENDING: 3, CANCELLED: 0 });
+    expect(afterCancel).toMatchObject({ PENDING: 0, CANCELLED: 3 });
+  });
 
   it('DB-15 알림 상태 변경과 Delivery 생성을 한 트랜잭션에서 진행 중 / 트랜잭션 도중 실패한다 → 알림 상태 변경과 Delivery 생성이 함께 롤백된다', async (): Promise<void> => {
     const alarm: Alarm = urgentDraft();

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmId, AlarmSnapshot } from '@/modules/notification/domain/alarm/alarm.type';
+import { AlarmReaderPort } from '@/modules/notification/application/port/out/alarm-reader.port';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/out/alarm-repository.port';
 import {
   AlarmFound,
@@ -14,7 +15,7 @@ import {
 import { Rollback } from '@/modules/notification/adapter/out/in-memory/rollback.type';
 
 @Injectable()
-export class InMemoryAlarmRepositoryAdapter implements AlarmRepositoryPort {
+export class InMemoryAlarmRepositoryAdapter implements AlarmRepositoryPort, AlarmReaderPort {
   private readonly alarmsById: Map<AlarmId, AlarmFound> = new Map<AlarmId, AlarmFound>();
 
   save(alarm: Alarm): Promise<void> {
