@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ApiModule } from '@/bootstrap/api.module';
+import { ApiDocumentationBootstrap } from '@/bootstrap/server/api-documentation.bootstrap';
 import { ServerBootstrap } from '@/bootstrap/server/server.bootstrap';
 
 void ServerBootstrap.run(async (): Promise<void> => {
@@ -8,5 +9,6 @@ void ServerBootstrap.run(async (): Promise<void> => {
     bufferLogs: true,
     abortOnError: false,
   });
+  ApiDocumentationBootstrap.setup(app);
   await ServerBootstrap.start(app);
 });

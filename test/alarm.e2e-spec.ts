@@ -1,9 +1,11 @@
+import SwaggerParser from '@apidevtools/swagger-parser';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { INestApplication, Type } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { request, spec } from 'pactum';
 import { Pool, QueryResult } from 'pg';
 import { z } from 'zod';
+import { ApiDocumentationBootstrap } from '@/bootstrap/server/api-documentation.bootstrap';
 import { TestDatabase } from '@/shared/database/testing/test-database';
 
 type InvalidListQueryCase = Readonly<
@@ -67,6 +69,31 @@ const anyPageSchema = z.union([morePagesSchema, lastPageSchema]);
 
 type AnyPage = z.infer<typeof anyPageSchema>;
 
+const openApiDocumentSchema = z.object({
+  openapi: z.string(),
+  paths: z.record(z.string(), z.looseObject({})),
+});
+
+type OpenApiDocument = z.infer<typeof openApiDocumentSchema>;
+
+const listOperationSchema = z.object({
+  get: z.object({
+    parameters: z.array(z.object({ name: z.string(), in: z.string() })),
+  }),
+});
+
+type ListOperation = z.infer<typeof listOperationSchema>;
+
+type ValidatableDocument = Exclude<Parameters<typeof SwaggerParser.validate>[0], string>;
+
+type DocumentedParameter = ListOperation['get']['parameters'][number];
+
+const dispatchOperationSchema = z.object({
+  post: z.object({ responses: z.record(z.string(), z.looseObject({})) }),
+});
+
+type DispatchOperation = z.infer<typeof dispatchOperationSchema>;
+
 const problemSchema = z.object({
   status: z.number(),
   code: z.string(),
@@ -125,6 +152,7 @@ describe('알림 REST API', () => {
       imports: [rootModule],
     }).compile();
     app = moduleRef.createNestApplication();
+    ApiDocumentationBootstrap.setup(app);
     await app.listen(0, '127.0.0.1');
     request.setBaseUrl(await app.getUrl());
   });
@@ -570,5 +598,46 @@ describe('알림 REST API', () => {
 
     expect(problem).toMatchObject({ status: 404, code: 'ALARM_NOT_FOUND' });
   });
-  it.todo('API-11 실행 중인 api / GET /docs-json → OpenAPI 3 문서가 나온다');
+  it('API-11 실행 중인 api / GET /docs-json → OpenAPI 3 문서가 나온다', async (): Promise<void> => {
+    const openApiDocument: OpenApiDocument = openApiDocumentSchema.parse(
+      await spec().get('/docs-json').expectStatus(200).returns('res.body'),
+    );
+    const listOperation: ListOperation = listOperationSchema.parse(
+      openApiDocument.paths['/alarms'],
+    );
+    const dispatchOperation: DispatchOperation = dispatchOperationSchema.parse(
+      openApiDocument.paths['/alarms/{id}/dispatch'],
+    );
+
+    expect(openApiDocument.openapi).toMatch(/^3\./);
+    expect(Object.keys(openApiDocument.paths)).toEqual(
+      expect.arrayContaining([
+        '/alarms',
+        '/alarms/{id}',
+        '/alarms/{id}/dispatch',
+        '/alarms/{id}/cancel',
+      ]),
+    );
+    expect(
+      listOperation.get.parameters.map(
+        ({ name, in: location }: DocumentedParameter): string => `${location}:${name}`,
+      ),
+    ).toEqual(
+      expect.arrayContaining(['query:status', 'query:kind', 'query:cursor', 'query:limit']),
+    );
+    expect(Object.keys(dispatchOperation.post.responses)).toEqual(
+      expect.arrayContaining(['202', '400', '404', '409']),
+    );
+  });
+
+  it('API-11 제공하는 /docs-json 문서는 OpenAPI 3.0 명세 검증을 통과한다', async (): Promise<void> => {
+    const servedDocument: ValidatableDocument = await spec()
+      .get('/docs-json')
+      .expectStatus(200)
+      .returns('res.body');
+
+    await expect(SwaggerParser.validate(servedDocument)).resolves.toMatchObject({
+      openapi: '3.0.0',
+    });
+  });
 });

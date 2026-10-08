@@ -306,7 +306,7 @@ pnpm test && pnpm test:int && pnpm test:e2e
 
 ## API
 
-OpenAPI 문서는 `/docs`(UI)와 `/docs-json`에서 제공합니다. 계약은 [SCENARIO.md](SCENARIO.md)의 `API-*` 시나리오로 정의되어 있습니다.
+OpenAPI 3.0 문서는 `/docs-json`에서, 같은 문서의 Swagger UI는 `/docs`에서 제공합니다. 요청 본문 · 경로 · 쿼리 스키마는 컨트롤러에 붙인 zod 스키마에서 `@nestjs/swagger`가 OpenAPI 3.0 문법으로 만들고, e2e 테스트가 제공되는 문서를 OpenAPI 3.0 명세 검증기(`@apidevtools/swagger-parser`)로 검사합니다. 계약은 [SCENARIO.md](SCENARIO.md)의 `API-*` 시나리오로 정의되어 있습니다.
 
 | 메서드 | 경로 | 설명 |
 | --- | --- | --- |
