@@ -35,7 +35,7 @@
 
 ## 아키텍처 원칙과 선택
 
-이 구조는 하나의 공인 규격이 아니라, 원칙을 이 과제에 적용한 결과입니다. 원칙과 적용 방식, 의도한 타협과 그 이유를 나눠 적습니다.
+이 구조는 하나의 공인 규격이 아니라, 원칙을 이 서비스에 적용한 결과입니다. 원칙과 적용 방식, 의도한 타협과 그 이유를 나눠 적습니다.
 
 ```
 ┌─ adapter/in (driving) ─────────────┐      ┌─ adapter/out (driven) ─────────────┐
@@ -232,7 +232,7 @@ Delivery   PENDING ─claim(leaseToken)─▶ IN_FLIGHT ─202──────
 
 | 영역 | 선택 | 이유 |
 | --- | --- | --- |
-| 언어 · 프레임워크 | TypeScript 7 · NestJS 12 | 과제 필수. TS7(tsgo)로 빠른 타입 검사 |
+| 언어 · 프레임워크 | TypeScript 7 · NestJS 12 | 모듈 · DI · 라이프사이클로 api와 worker를 같은 구조로 조립. TS7(tsgo)로 빠른 타입 검사 |
 | 빌드 · 테스트 변환 | SWC | TS7에는 compiler API가 없어 Nest CLI 빌드 대신 SWC로 빌드하고 `tsc --noEmit`으로 타입만 검사 |
 | 저장소 · 큐 | PostgreSQL | 상태와 작업 큐를 한 트랜잭션에 두어 원자성 확보. 인프라 하나로 동시성 · 장애 복구 · 처리량 공유를 설명 가능 |
 | DB 접근 | Drizzle ORM 0.45 | 순수 TS(코드 생성 없음), `FOR UPDATE SKIP LOCKED` 지원, SQL 마이그레이션 생성 |
