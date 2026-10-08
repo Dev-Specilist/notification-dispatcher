@@ -40,8 +40,8 @@ export class ReconcileNextDeliveryService implements ReconcileNextDeliveryUseCas
       return { kind: 'idle' };
     }
     const { delivery }: CandidateFound = candidate;
-    const { id }: DeliverySnapshot = delivery.snapshot();
-    const lookup: MessageLookupResult = await this.messageLookup.findByClientRef(id);
+    const { id: deliveryId }: DeliverySnapshot = delivery.snapshot();
+    const lookup: MessageLookupResult = await this.messageLookup.findByClientRef(deliveryId);
     return this.record(delivery, lookup);
   }
 

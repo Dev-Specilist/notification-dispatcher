@@ -57,11 +57,11 @@ const durationMs = (value: number): DurationMs => {
 };
 
 const newClientRef = (): DeliveryId => {
-  const value: string = randomUUID();
-  if (!DeliveryPredicates.isDeliveryId(value)) {
-    throw new Error(`generated ${value} is not a valid DeliveryId`);
+  const rawDeliveryId: string = randomUUID();
+  if (!DeliveryPredicates.isDeliveryId(rawDeliveryId)) {
+    throw new Error(`generated ${rawDeliveryId} is not a valid DeliveryId`);
   }
-  return value;
+  return rawDeliveryId;
 };
 
 const messageWith = (clientRef: DeliveryId): OutgoingMessage => {

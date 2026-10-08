@@ -63,10 +63,10 @@ describe('알림 REST API', () => {
     await testDatabase.drop();
   });
 
-  const storedStatus = async (id: string): Promise<string> => {
+  const storedStatus = async (alarmId: string): Promise<string> => {
     const result: QueryResult<StatusRow> = await app
       .get(Pool)
-      .query<StatusRow>('SELECT status FROM alarms WHERE id = $1', [id]);
+      .query<StatusRow>('SELECT status FROM alarms WHERE id = $1', [alarmId]);
     const [{ status }]: ReadonlyArray<StatusRow> = result.rows;
     return status;
   };

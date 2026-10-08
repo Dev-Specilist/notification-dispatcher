@@ -91,20 +91,20 @@ const createGate = (): Gate => {
 };
 
 const newAlarmId = (): AlarmId => {
-  const value: string = randomUUID();
-  if (!AlarmPredicates.isAlarmId(value)) {
-    throw new Error(`generated ${value} is not a valid AlarmId`);
+  const rawAlarmId: string = randomUUID();
+  if (!AlarmPredicates.isAlarmId(rawAlarmId)) {
+    throw new Error(`generated ${rawAlarmId} is not a valid AlarmId`);
   }
-  return value;
+  return rawAlarmId;
 };
 
 const recipientIds = (count: number): ReadonlyArray<RecipientId> =>
   Array.from({ length: count }, (_: number, index: number): RecipientId => {
-    const value: string = `u_${String(index + 1).padStart(6, '0')}`;
-    if (!AlarmPredicates.isRecipientId(value)) {
-      throw new Error(`test fixture ${value} is not a valid RecipientId`);
+    const rawRecipientId: string = `u_${String(index + 1).padStart(6, '0')}`;
+    if (!AlarmPredicates.isRecipientId(rawRecipientId)) {
+      throw new Error(`test fixture ${rawRecipientId} is not a valid RecipientId`);
     }
-    return value;
+    return rawRecipientId;
   });
 
 const durationMs = (value: number): DurationMs => {
@@ -141,21 +141,21 @@ class FixedClock implements ClockPort {
 
 class RandomDeliveryIdGenerator implements DeliveryIdGeneratorPort {
   deliveryId(): DeliveryId {
-    const value: string = randomUUID();
-    if (!DeliveryPredicates.isDeliveryId(value)) {
-      throw new Error(`generated ${value} is not a valid DeliveryId`);
+    const rawDeliveryId: string = randomUUID();
+    if (!DeliveryPredicates.isDeliveryId(rawDeliveryId)) {
+      throw new Error(`generated ${rawDeliveryId} is not a valid DeliveryId`);
     }
-    return value;
+    return rawDeliveryId;
   }
 }
 
 class RandomLeaseTokenGenerator implements LeaseTokenGeneratorPort {
   next(): LeaseToken {
-    const value: string = randomUUID();
-    if (!DeliveryPredicates.isLeaseToken(value)) {
-      throw new Error(`generated ${value} is not a valid LeaseToken`);
+    const rawLeaseToken: string = randomUUID();
+    if (!DeliveryPredicates.isLeaseToken(rawLeaseToken)) {
+      throw new Error(`generated ${rawLeaseToken} is not a valid LeaseToken`);
     }
-    return value;
+    return rawLeaseToken;
   }
 }
 
@@ -174,11 +174,11 @@ class RecordingMessageSender implements MessageSenderPort {
 
   send(message: OutgoingMessage): Promise<SendOutcome> {
     this.clientRefs.push(message.clientRef);
-    const value: string = `m_${this.clientRefs.length}`;
-    if (!DeliveryPredicates.isMessageId(value)) {
-      throw new Error(`generated ${value} is not a valid MessageId`);
+    const rawMessageId: string = `m_${this.clientRefs.length}`;
+    if (!DeliveryPredicates.isMessageId(rawMessageId)) {
+      throw new Error(`generated ${rawMessageId} is not a valid MessageId`);
     }
-    const messageId: MessageId = value;
+    const messageId: MessageId = rawMessageId;
     return Promise.resolve({ kind: 'accepted', messageId });
   }
 }
@@ -349,7 +349,7 @@ describe('DrizzleTransactionAdapter', () => {
     if (dispatchedTransition.kind !== 'transitioned') {
       throw new Error('test fixture alarm cannot be dispatched');
     }
-    const { id }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
+    const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
 
     await expect(
       transaction.run(
@@ -360,7 +360,7 @@ describe('DrizzleTransactionAdapter', () => {
               Delivery.create(
                 {
                   id: new RandomDeliveryIdGenerator().deliveryId(),
-                  alarmId: id,
+                  alarmId,
                   recipientId,
                   priority: 'URGENT',
                 },
@@ -372,8 +372,8 @@ describe('DrizzleTransactionAdapter', () => {
         },
       ),
     ).rejects.toThrow('failure in the middle of the transaction');
-    expect(await storedStatus(id)).toBe('DRAFT');
-    expect(await deliveriesOf(id)).toEqual([]);
+    expect(await storedStatus(alarmId)).toBe('DRAFT');
+    expect(await deliveriesOf(alarmId)).toEqual([]);
   });
 
   it('DB-15 대량 알림 상태 변경과 확장 작업 생성을 한 트랜잭션에서 진행 중 / 트랜잭션 도중 실패한다 → 알림 상태 변경과 확장 작업 생성이 함께 롤백된다', async (): Promise<void> => {
@@ -383,7 +383,7 @@ describe('DrizzleTransactionAdapter', () => {
     if (dispatchedTransition.kind !== 'transitioned') {
       throw new Error('test fixture alarm cannot be dispatched');
     }
-    const { id }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
+    const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
 
     await expect(
       transaction.run(
@@ -392,16 +392,16 @@ describe('DrizzleTransactionAdapter', () => {
           expansionJobRepository,
         }: TransactionRepositories): Promise<void> => {
           await alarmRepository.save(dispatchedTransition.alarm);
-          await expansionJobRepository.enqueue(id, new Date(NOW_ISO));
+          await expansionJobRepository.enqueue(alarmId, new Date(NOW_ISO));
           throw new Error('failure in the middle of the transaction');
         },
       ),
     ).rejects.toThrow('failure in the middle of the transaction');
-    expect(await storedStatus(id)).toBe('DRAFT');
+    expect(await storedStatus(alarmId)).toBe('DRAFT');
     expect(
       await transaction.run(
         ({ expansionJobRepository }: TransactionRepositories): Promise<ExpansionJobLookup> =>
-          expansionJobRepository.findByAlarmId(id),
+          expansionJobRepository.findByAlarmId(alarmId),
       ),
     ).toEqual({ kind: 'missing' });
   });
@@ -409,28 +409,28 @@ describe('DrizzleTransactionAdapter', () => {
   it('DB-04 같은 DRAFT 알림 / 발송 시작 요청 두 개가 동시에 들어온다 → 하나만 성공하고 나머지는 상태 충돌이 난다', async (): Promise<void> => {
     const alarm: Alarm = urgentDraft();
     await save(alarm);
-    const { id }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
+    const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
 
     const results: ReadonlyArray<StartDispatchResult> = await Promise.all([
-      startDispatch().execute(id),
-      startDispatch().execute(id),
+      startDispatch().execute(alarmId),
+      startDispatch().execute(alarmId),
     ]);
 
     expect(results.map((result: StartDispatchResult): string => result.kind).toSorted()).toEqual([
       'conflict',
       'dispatched',
     ]);
-    expect(await deliveriesOf(id)).toHaveLength(3);
+    expect(await deliveriesOf(alarmId)).toHaveLength(3);
   });
 
   it('DB-04 같은 대량 DRAFT 알림의 발송 시작이 동시에 두 번 들어와도 하나만 성공한다', async (): Promise<void> => {
     const alarm: Alarm = bulkDraft();
     await save(alarm);
-    const { id }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
+    const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
 
     const results: ReadonlyArray<StartDispatchResult> = await Promise.all([
-      startDispatch().execute(id),
-      startDispatch().execute(id),
+      startDispatch().execute(alarmId),
+      startDispatch().execute(alarmId),
     ]);
 
     expect(results.map((result: StartDispatchResult): string => result.kind).toSorted()).toEqual([
@@ -442,18 +442,18 @@ describe('DrizzleTransactionAdapter', () => {
   it('DB-05 DRAFT 알림 / 발송 시작과 취소가 동시에 들어온다 → 최종 상태와 각 요청의 성공·실패가 어떤 직렬 실행 순서의 결과와 일치한다', async (): Promise<void> => {
     const alarm: Alarm = urgentDraft();
     await save(alarm);
-    const { id }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
+    const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
 
     const [started, cancelled]: StartAndCancelResults = await Promise.all([
-      startDispatch().execute(id),
-      new CancelAlarmService(transaction, new FixedClock()).execute(id),
+      startDispatch().execute(alarmId),
+      new CancelAlarmService(transaction, new FixedClock()).execute(alarmId),
     ]);
     const outcome: OutcomePair = [started.kind, cancelled.kind];
-    const deliveryStatuses: ReadonlyArray<string> = (await deliveriesOf(id)).map(
+    const deliveryStatuses: ReadonlyArray<string> = (await deliveriesOf(alarmId)).map(
       (delivery: Delivery): string => delivery.snapshot().state.status,
     );
 
-    expect(await storedStatus(id)).toBe('CANCELLED');
+    expect(await storedStatus(alarmId)).toBe('CANCELLED');
     expect([
       ['dispatched', 'cancelled'],
       ['conflict', 'cancelled'],
@@ -468,14 +468,14 @@ describe('DrizzleTransactionAdapter', () => {
       throw new Error('test fixture alarm cannot be dispatched');
     }
     await save(dispatchedTransition.alarm);
-    const { id }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
+    const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
     await transaction.run(({ deliveryCreation }: TransactionRepositories): Promise<void> =>
       deliveryCreation.insertMissing(
         recipientIds(100).map((recipientId: RecipientId): Delivery =>
           Delivery.create(
             {
               id: new RandomDeliveryIdGenerator().deliveryId(),
-              alarmId: id,
+              alarmId,
               recipientId,
               priority: 'BULK',
             },
@@ -500,7 +500,7 @@ describe('DrizzleTransactionAdapter', () => {
     expect(sender.clientRefs).toHaveLength(100);
     expect(new Set<string>(sender.clientRefs).size).toBe(100);
     expect(
-      (await deliveriesOf(id)).every(
+      (await deliveriesOf(alarmId)).every(
         (delivery: Delivery): boolean => delivery.snapshot().state.status === 'SENT',
       ),
     ).toBe(true);
@@ -509,8 +509,8 @@ describe('DrizzleTransactionAdapter', () => {
   it('UC-07 두 워커가 같은 확장 페이지를 받아 동시에 저장하면 한 워커만 진행하고 다른 워커는 superseded가 된다', async (): Promise<void> => {
     const alarm: Alarm = bulkDraft();
     await save(alarm);
-    const { id }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
-    await startDispatch().execute(id);
+    const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
+    await startDispatch().execute(alarmId);
     const directory: BothWorkersFetchFirstDirectory = new BothWorkersFetchFirstDirectory();
     const expander = (): ExpandRecipientsService =>
       new ExpandRecipientsService(
@@ -521,26 +521,26 @@ describe('DrizzleTransactionAdapter', () => {
       );
 
     const results: ReadonlyArray<ExpansionResult> = await Promise.all([
-      expander().execute(id),
-      expander().execute(id),
+      expander().execute(alarmId),
+      expander().execute(alarmId),
     ]);
 
     expect(results.map((result: ExpansionResult): string => result.kind).toSorted()).toEqual([
       'completed',
       'superseded',
     ]);
-    expect(await deliveriesOf(id)).toHaveLength(2);
+    expect(await deliveriesOf(alarmId)).toHaveLength(2);
   });
 
   it('DB-04 알림을 잠그며 읽은 트랜잭션이 있으면 다른 트랜잭션의 잠금 조회는 커밋을 기다렸다가 바뀐 상태를 읽는다', async (): Promise<void> => {
     const alarm: Alarm = bulkDraft();
     await save(alarm);
-    const { id }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
+    const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
     const locked: Gate = createGate();
     const release: Gate = createGate();
     const holder: Promise<void> = transaction.run(
       async ({ alarmRepository }: TransactionRepositories): Promise<void> => {
-        await alarmRepository.findByIdForUpdate(id);
+        await alarmRepository.findByIdForUpdate(alarmId);
         locked.open();
         await release.opened;
         const cancelled: AlarmTransition = alarm.cancel(new Date(NOW_ISO));
@@ -554,7 +554,7 @@ describe('DrizzleTransactionAdapter', () => {
 
     const waiter: Promise<AlarmLookup> = transaction.run(
       ({ alarmRepository }: TransactionRepositories): Promise<AlarmLookup> =>
-        alarmRepository.findByIdForUpdate(id),
+        alarmRepository.findByIdForUpdate(alarmId),
     );
     try {
       await waitUntilAnotherTransactionWaitsForLock();
@@ -572,18 +572,18 @@ describe('DrizzleTransactionAdapter', () => {
   it('UC-07 확장 작업을 잠그며 읽은 트랜잭션이 있으면 다른 트랜잭션의 잠금 조회는 커밋을 기다렸다가 바뀐 진행을 읽는다', async (): Promise<void> => {
     const alarm: Alarm = bulkDraft();
     await save(alarm);
-    const { id }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
+    const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
     await transaction.run(({ expansionJobRepository }: TransactionRepositories): Promise<void> =>
-      expansionJobRepository.enqueue(id, new Date(NOW_ISO)),
+      expansionJobRepository.enqueue(alarmId, new Date(NOW_ISO)),
     );
     const locked: Gate = createGate();
     const release: Gate = createGate();
     const holder: Promise<void> = transaction.run(
       async ({ expansionJobRepository }: TransactionRepositories): Promise<void> => {
-        await expansionJobRepository.findByAlarmIdForUpdate(id);
+        await expansionJobRepository.findByAlarmIdForUpdate(alarmId);
         locked.open();
         await release.opened;
-        await expansionJobRepository.recordProgress(id, {
+        await expansionJobRepository.recordProgress(alarmId, {
           kind: 'completed',
           completedAt: new Date(NOW_ISO),
         });
@@ -593,7 +593,7 @@ describe('DrizzleTransactionAdapter', () => {
 
     const waiter: Promise<ExpansionJobLookup> = transaction.run(
       ({ expansionJobRepository }: TransactionRepositories): Promise<ExpansionJobLookup> =>
-        expansionJobRepository.findByAlarmIdForUpdate(id),
+        expansionJobRepository.findByAlarmIdForUpdate(alarmId),
     );
     try {
       await waitUntilAnotherTransactionWaitsForLock();

@@ -66,11 +66,11 @@ class SequentialDeliveryIdGenerator implements DeliveryIdGeneratorPort {
 
   deliveryId(): DeliveryId {
     this.issued += 1;
-    const value: string = `00000000-0000-4000-8000-${String(this.issued).padStart(12, '0')}`;
-    if (!DeliveryPredicates.isDeliveryId(value)) {
-      throw new Error(`generated ${value} is not a valid DeliveryId`);
+    const rawDeliveryId: string = `00000000-0000-4000-8000-${String(this.issued).padStart(12, '0')}`;
+    if (!DeliveryPredicates.isDeliveryId(rawDeliveryId)) {
+      throw new Error(`generated ${rawDeliveryId} is not a valid DeliveryId`);
     }
-    return value;
+    return rawDeliveryId;
   }
 }
 
@@ -253,9 +253,9 @@ describe('StartDispatchService', () => {
     ]);
     await service.execute(alarmId(ALARM_ID));
 
-    const second: StartDispatchResult = await service.execute(alarmId(ALARM_ID));
+    const repeatedDispatch: StartDispatchResult = await service.execute(alarmId(ALARM_ID));
 
-    expect(second).toEqual({
+    expect(repeatedDispatch).toEqual({
       kind: 'conflict',
       error: { code: 'ALARM_STATE_CONFLICT', status: 'DISPATCHING', action: 'dispatch' },
     });

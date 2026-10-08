@@ -10,18 +10,18 @@ import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port
 @Injectable()
 export class RandomIdGeneratorAdapter implements AlarmIdGeneratorPort, DeliveryIdGeneratorPort {
   alarmId(): AlarmId {
-    const id: string = randomUUID();
-    if (!AlarmPredicates.isAlarmId(id)) {
-      throw new Error(`generated ${id} is not a valid AlarmId`);
+    const rawAlarmId: string = randomUUID();
+    if (!AlarmPredicates.isAlarmId(rawAlarmId)) {
+      throw new Error(`generated ${rawAlarmId} is not a valid AlarmId`);
     }
-    return id;
+    return rawAlarmId;
   }
 
   deliveryId(): DeliveryId {
-    const id: string = randomUUID();
-    if (!DeliveryPredicates.isDeliveryId(id)) {
-      throw new Error(`generated ${id} is not a valid DeliveryId`);
+    const rawDeliveryId: string = randomUUID();
+    if (!DeliveryPredicates.isDeliveryId(rawDeliveryId)) {
+      throw new Error(`generated ${rawDeliveryId} is not a valid DeliveryId`);
     }
-    return id;
+    return rawDeliveryId;
   }
 }

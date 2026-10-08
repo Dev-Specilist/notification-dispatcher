@@ -85,43 +85,43 @@ const retryPolicy = (maxAttempts: number): RetryPolicy => {
 const at = (iso: string): Date => new Date(iso);
 
 const deliveryId = (): DeliveryId => {
-  const value: string = '5f1d2a8c-3b4e-4c6d-9e7f-8a9b0c1d2e3f';
-  if (!DeliveryPredicates.isDeliveryId(value)) {
+  const rawDeliveryId: string = '5f1d2a8c-3b4e-4c6d-9e7f-8a9b0c1d2e3f';
+  if (!DeliveryPredicates.isDeliveryId(rawDeliveryId)) {
     throw new Error('test fixture is not a valid DeliveryId');
   }
-  return value;
+  return rawDeliveryId;
 };
 
 const alarmId = (): AlarmId => {
-  const value: string = '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10';
-  if (!AlarmPredicates.isAlarmId(value)) {
+  const rawAlarmId: string = '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10';
+  if (!AlarmPredicates.isAlarmId(rawAlarmId)) {
     throw new Error('test fixture is not a valid AlarmId');
   }
-  return value;
+  return rawAlarmId;
 };
 
 const recipientId = (): RecipientId => {
-  const value: string = 'u_000001';
-  if (!AlarmPredicates.isRecipientId(value)) {
+  const rawRecipientId: string = 'u_000001';
+  if (!AlarmPredicates.isRecipientId(rawRecipientId)) {
     throw new Error('test fixture is not a valid RecipientId');
   }
-  return value;
+  return rawRecipientId;
 };
 
 const leaseToken = (suffix: string): LeaseToken => {
-  const value: string = `9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c${suffix}`;
-  if (!DeliveryPredicates.isLeaseToken(value)) {
+  const rawLeaseToken: string = `9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c${suffix}`;
+  if (!DeliveryPredicates.isLeaseToken(rawLeaseToken)) {
     throw new Error('test fixture is not a valid LeaseToken');
   }
-  return value;
+  return rawLeaseToken;
 };
 
 const messageId = (): MessageId => {
-  const value: string = 'm_1';
-  if (!DeliveryPredicates.isMessageId(value)) {
+  const rawMessageId: string = 'm_1';
+  if (!DeliveryPredicates.isMessageId(rawMessageId)) {
     throw new Error('test fixture is not a valid MessageId');
   }
-  return value;
+  return rawMessageId;
 };
 
 const messageIdOf = (value: string): MessageId => {

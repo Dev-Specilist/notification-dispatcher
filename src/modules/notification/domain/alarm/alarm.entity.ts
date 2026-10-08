@@ -136,26 +136,26 @@ export class Alarm {
       }
       return { kind: 'resolved', audience: { kind: 'BULK', target: { kind: 'ALL_USERS' } } };
     }
-    const unique: ReadonlyArray<string> = [...new Set<string>(recipientIds)];
-    const valid: RecipientId[] = [];
-    for (const value of unique) {
-      if (!AlarmPredicates.isRecipientId(value)) {
-        return Alarm.reject({ code: 'INVALID_RECIPIENT_ID', value });
+    const distinctRecipientIds: ReadonlyArray<string> = [...new Set<string>(recipientIds)];
+    const validRecipientIds: RecipientId[] = [];
+    for (const rawRecipientId of distinctRecipientIds) {
+      if (!AlarmPredicates.isRecipientId(rawRecipientId)) {
+        return Alarm.reject({ code: 'INVALID_RECIPIENT_ID', value: rawRecipientId });
       }
-      valid.push(value);
+      validRecipientIds.push(rawRecipientId);
     }
     const { min, max }: Readonly<CountRange> = Alarm.URGENT_RECIPIENT_RANGE;
-    if (valid.length < min || valid.length > max) {
+    if (validRecipientIds.length < min || validRecipientIds.length > max) {
       return Alarm.reject({
         code: 'URGENT_RECIPIENTS_OUT_OF_RANGE',
-        count: valid.length,
+        count: validRecipientIds.length,
         min,
         max,
       });
     }
     return {
       kind: 'resolved',
-      audience: { kind: 'URGENT', target: { kind: 'EXPLICIT', recipientIds: valid } },
+      audience: { kind: 'URGENT', target: { kind: 'EXPLICIT', recipientIds: validRecipientIds } },
     };
   }
 

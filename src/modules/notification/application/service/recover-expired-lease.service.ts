@@ -31,7 +31,7 @@ export class RecoverExpiredLeaseService implements RecoverExpiredLeaseUseCase {
           return { kind: 'idle' };
         }
         const expired: Delivery = candidate.delivery;
-        const { id }: DeliverySnapshot = expired.snapshot();
+        const { id: deliveryId }: DeliverySnapshot = expired.snapshot();
         const recovered: Delivery = RecoverExpiredLeaseService.transitioned(
           expired.recoverExpiredLease(now, this.settings.reconcileDelayMs),
         );
@@ -40,8 +40,8 @@ export class RecoverExpiredLeaseService implements RecoverExpiredLeaseUseCase {
           RecoverExpiredLeaseService.leaseTokenOf(expired),
         );
         return saved.kind === 'saved'
-          ? { kind: 'recovered', deliveryId: id }
-          : { kind: 'lease-lost', deliveryId: id };
+          ? { kind: 'recovered', deliveryId }
+          : { kind: 'lease-lost', deliveryId };
       },
     );
   }

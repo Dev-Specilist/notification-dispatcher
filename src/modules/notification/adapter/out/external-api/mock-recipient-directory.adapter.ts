@@ -67,8 +67,8 @@ export class MockRecipientDirectoryAdapter implements RecipientDirectoryPort {
 
   private static toPage({ users, nextCursor }: Readonly<UsersBody>): DirectoryFetch {
     const recipientIds: ReadonlyArray<RecipientId> = users.flatMap(
-      ({ id }: UserEntry): ReadonlyArray<RecipientId> =>
-        AlarmPredicates.isRecipientId(id) ? [id] : [],
+      ({ id: userId }: UserEntry): ReadonlyArray<RecipientId> =>
+        AlarmPredicates.isRecipientId(userId) ? [userId] : [],
     );
     if (recipientIds.length !== users.length) {
       return { kind: 'failed', reason: 'responded with an invalid user id' };

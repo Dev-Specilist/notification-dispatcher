@@ -38,9 +38,9 @@ const alarmId = (value: string): AlarmId => {
   return value;
 };
 
-const bulkAlarm = (id: string): Alarm => {
+const bulkAlarm = (rawAlarmId: string): Alarm => {
   const creation: AlarmCreation = Alarm.create(
-    alarmId(id),
+    alarmId(rawAlarmId),
     { title: '추석 이벤트', body: '쿠폰 도착', kind: 'BULK', recipientIds: [] },
     new Date('2026-10-07T09:00:00.000Z'),
   );

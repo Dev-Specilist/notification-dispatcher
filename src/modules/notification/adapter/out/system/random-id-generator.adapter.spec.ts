@@ -9,20 +9,26 @@ describe('RandomIdGeneratorAdapter', () => {
   const generator: RandomIdGeneratorAdapter = new RandomIdGeneratorAdapter();
 
   it('알림 id는 도메인 형식(UUID)을 지키고 매번 다르다', (): void => {
-    const ids: ReadonlyArray<string> = Array.from({ length: SAMPLE_SIZE }, (): string =>
+    const alarmIds: ReadonlyArray<string> = Array.from({ length: SAMPLE_SIZE }, (): string =>
       generator.alarmId(),
     );
 
-    expect(ids.every((id: string): boolean => AlarmPredicates.isAlarmId(id))).toBe(true);
-    expect(new Set(ids).size).toBe(SAMPLE_SIZE);
+    expect(alarmIds.every((alarmId: string): boolean => AlarmPredicates.isAlarmId(alarmId))).toBe(
+      true,
+    );
+    expect(new Set(alarmIds).size).toBe(SAMPLE_SIZE);
   });
 
   it('Delivery id는 도메인 형식(UUID)을 지키고 매번 다르다', (): void => {
-    const ids: ReadonlyArray<string> = Array.from({ length: SAMPLE_SIZE }, (): string =>
+    const deliveryIds: ReadonlyArray<string> = Array.from({ length: SAMPLE_SIZE }, (): string =>
       generator.deliveryId(),
     );
 
-    expect(ids.every((id: string): boolean => DeliveryPredicates.isDeliveryId(id))).toBe(true);
-    expect(new Set(ids).size).toBe(SAMPLE_SIZE);
+    expect(
+      deliveryIds.every((deliveryId: string): boolean =>
+        DeliveryPredicates.isDeliveryId(deliveryId),
+      ),
+    ).toBe(true);
+    expect(new Set(deliveryIds).size).toBe(SAMPLE_SIZE);
   });
 });

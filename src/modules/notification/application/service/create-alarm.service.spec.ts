@@ -30,11 +30,11 @@ const BULK_DRAFT: AlarmDraft = {
 };
 
 const alarmId = (): AlarmId => {
-  const value: string = '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10';
-  if (!AlarmPredicates.isAlarmId(value)) {
+  const rawAlarmId: string = '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10';
+  if (!AlarmPredicates.isAlarmId(rawAlarmId)) {
     throw new Error('test fixture is not a valid AlarmId');
   }
-  return value;
+  return rawAlarmId;
 };
 
 class FixedClock implements ClockPort {

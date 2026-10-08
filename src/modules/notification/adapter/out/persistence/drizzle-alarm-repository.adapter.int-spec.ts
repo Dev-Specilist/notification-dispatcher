@@ -16,12 +16,12 @@ interface TimestampRow {
 }
 
 const draftAlarm = (): Alarm => {
-  const id: string = randomUUID();
-  if (!AlarmPredicates.isAlarmId(id)) {
-    throw new Error(`generated ${id} is not a valid AlarmId`);
+  const rawAlarmId: string = randomUUID();
+  if (!AlarmPredicates.isAlarmId(rawAlarmId)) {
+    throw new Error(`generated ${rawAlarmId} is not a valid AlarmId`);
   }
   const creation: AlarmCreation = Alarm.create(
-    id,
+    rawAlarmId,
     { title: '추석 이벤트', body: '쿠폰 도착', kind: 'BULK', recipientIds: [] },
     new Date('2020-01-01T00:00:00.000Z'),
   );
@@ -70,13 +70,13 @@ describe('DrizzleAlarmRepositoryAdapter', () => {
     );
     const alarm: Alarm = draftAlarm();
     await repository.save(alarm);
-    const first: TimestampRow = await timestampsOf(alarm);
+    const afterInsert: TimestampRow = await timestampsOf(alarm);
 
     await repository.save(dispatched(alarm));
-    const second: TimestampRow = await timestampsOf(alarm);
+    const afterUpdate: TimestampRow = await timestampsOf(alarm);
 
-    expect(second.created_at).toEqual(first.created_at);
-    expect(BigInt(second.updated_micros)).toBeGreaterThan(BigInt(first.updated_micros));
-    expect(first.updated_at.getTime()).toBeGreaterThan(first.created_at.getTime());
+    expect(afterUpdate.created_at).toEqual(afterInsert.created_at);
+    expect(BigInt(afterUpdate.updated_micros)).toBeGreaterThan(BigInt(afterInsert.updated_micros));
+    expect(afterInsert.updated_at.getTime()).toBeGreaterThan(afterInsert.created_at.getTime());
   });
 });

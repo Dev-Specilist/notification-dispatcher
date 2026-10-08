@@ -76,13 +76,13 @@ export class InMemoryDeliveryRepositoryAdapter
     if (claimable.length === 0) {
       return Promise.resolve({ kind: 'none' });
     }
-    const [first, ...rest]: ReadonlyArray<Delivery> = claimable;
-    const next: Delivery = rest.reduce(
+    const [firstClaimable, ...otherClaimable]: ReadonlyArray<Delivery> = claimable;
+    const next: Delivery = otherClaimable.reduce(
       (earliest: Delivery, candidate: Delivery): Delivery =>
         InMemoryDeliveryRepositoryAdapter.byDispatchOrder(candidate, earliest) < 0
           ? candidate
           : earliest,
-      first,
+      firstClaimable,
     );
     return Promise.resolve({ kind: 'found', delivery: next });
   }
@@ -94,14 +94,14 @@ export class InMemoryDeliveryRepositoryAdapter
     if (expired.length === 0) {
       return Promise.resolve({ kind: 'none' });
     }
-    const [first, ...rest]: ReadonlyArray<Delivery> = expired;
-    const next: Delivery = rest.reduce(
+    const [firstExpired, ...otherExpired]: ReadonlyArray<Delivery> = expired;
+    const next: Delivery = otherExpired.reduce(
       (earliest: Delivery, candidate: Delivery): Delivery =>
         InMemoryDeliveryRepositoryAdapter.leaseExpiryOf(candidate) <
         InMemoryDeliveryRepositoryAdapter.leaseExpiryOf(earliest)
           ? candidate
           : earliest,
-      first,
+      firstExpired,
     );
     return Promise.resolve({ kind: 'found', delivery: next });
   }
@@ -113,22 +113,22 @@ export class InMemoryDeliveryRepositoryAdapter
     if (reconcilable.length === 0) {
       return Promise.resolve({ kind: 'none' });
     }
-    const [first, ...rest]: ReadonlyArray<Delivery> = reconcilable;
-    const next: Delivery = rest.reduce(
+    const [firstReconcilable, ...otherReconcilable]: ReadonlyArray<Delivery> = reconcilable;
+    const next: Delivery = otherReconcilable.reduce(
       (earliest: Delivery, candidate: Delivery): Delivery =>
         InMemoryDeliveryRepositoryAdapter.byReconcileOrder(candidate, earliest) < 0
           ? candidate
           : earliest,
-      first,
+      firstReconcilable,
     );
     return Promise.resolve({ kind: 'found', delivery: next });
   }
 
   saveReconciled(delivery: Delivery, previous: Delivery): Promise<ReconciledSave> {
-    const { id }: DeliverySnapshot = delivery.snapshot();
-    const current: Delivery = this.deliveriesById.get(id) ?? delivery;
+    const { id: deliveryId }: DeliverySnapshot = delivery.snapshot();
+    const current: Delivery = this.deliveriesById.get(deliveryId) ?? delivery;
     const unchanged: boolean =
-      this.deliveriesById.has(id) &&
+      this.deliveriesById.has(deliveryId) &&
       InMemoryDeliveryRepositoryAdapter.reconcileVersionOf(current) ===
         InMemoryDeliveryRepositoryAdapter.reconcileVersionOf(previous);
     if (!unchanged) {
@@ -190,10 +190,11 @@ export class InMemoryDeliveryRepositoryAdapter
   }
 
   private isStillLeasedBy(delivery: Delivery, token: LeaseToken): boolean {
-    const { id }: DeliverySnapshot = delivery.snapshot();
-    const current: Delivery = this.deliveriesById.get(id) ?? delivery;
+    const { id: deliveryId }: DeliverySnapshot = delivery.snapshot();
+    const current: Delivery = this.deliveriesById.get(deliveryId) ?? delivery;
     return (
-      this.deliveriesById.has(id) && InMemoryDeliveryRepositoryAdapter.isLeasedBy(current, token)
+      this.deliveriesById.has(deliveryId) &&
+      InMemoryDeliveryRepositoryAdapter.isLeasedBy(current, token)
     );
   }
 
@@ -202,20 +203,23 @@ export class InMemoryDeliveryRepositoryAdapter
       this.deliveryIdsByRecipient,
     );
     return deliveries.every((delivery: Delivery): boolean => {
-      const { id }: DeliverySnapshot = delivery.snapshot();
+      const { id: deliveryId }: DeliverySnapshot = delivery.snapshot();
       const recipientKey: string = InMemoryDeliveryRepositoryAdapter.recipientKeyOf(delivery);
-      if (idsByRecipient.has(recipientKey) && idsByRecipient.get(recipientKey) !== id) {
+      if (idsByRecipient.has(recipientKey) && idsByRecipient.get(recipientKey) !== deliveryId) {
         return false;
       }
-      idsByRecipient.set(recipientKey, id);
+      idsByRecipient.set(recipientKey, deliveryId);
       return true;
     });
   }
 
   private store(delivery: Delivery): void {
-    const { id }: DeliverySnapshot = delivery.snapshot();
-    this.deliveriesById.set(id, delivery);
-    this.deliveryIdsByRecipient.set(InMemoryDeliveryRepositoryAdapter.recipientKeyOf(delivery), id);
+    const { id: deliveryId }: DeliverySnapshot = delivery.snapshot();
+    this.deliveriesById.set(deliveryId, delivery);
+    this.deliveryIdsByRecipient.set(
+      InMemoryDeliveryRepositoryAdapter.recipientKeyOf(delivery),
+      deliveryId,
+    );
   }
 
   private static isLeasedBy(delivery: Delivery, token: LeaseToken): boolean {
@@ -224,16 +228,16 @@ export class InMemoryDeliveryRepositoryAdapter
   }
 
   private static byDispatchOrder(left: Delivery, right: Delivery): number {
-    const first: DeliverySnapshot = left.snapshot();
-    const second: DeliverySnapshot = right.snapshot();
+    const leftSnapshot: DeliverySnapshot = left.snapshot();
+    const rightSnapshot: DeliverySnapshot = right.snapshot();
     const priorityGap: number =
-      InMemoryDeliveryRepositoryAdapter.priorityRank(first) -
-      InMemoryDeliveryRepositoryAdapter.priorityRank(second);
+      InMemoryDeliveryRepositoryAdapter.priorityRank(leftSnapshot) -
+      InMemoryDeliveryRepositoryAdapter.priorityRank(rightSnapshot);
     if (priorityGap !== 0) {
       return priorityGap;
     }
-    const ageGap: number = first.createdAt.getTime() - second.createdAt.getTime();
-    return ageGap === 0 ? first.id.localeCompare(second.id) : ageGap;
+    const ageGap: number = leftSnapshot.createdAt.getTime() - rightSnapshot.createdAt.getTime();
+    return ageGap === 0 ? leftSnapshot.id.localeCompare(rightSnapshot.id) : ageGap;
   }
 
   private static byReconcileOrder(left: Delivery, right: Delivery): number {
@@ -263,10 +267,10 @@ export class InMemoryDeliveryRepositoryAdapter
   }
 
   private static byCreation(left: Delivery, right: Delivery): number {
-    const first: DeliverySnapshot = left.snapshot();
-    const second: DeliverySnapshot = right.snapshot();
-    const ageGap: number = first.createdAt.getTime() - second.createdAt.getTime();
-    return ageGap === 0 ? first.id.localeCompare(second.id) : ageGap;
+    const leftSnapshot: DeliverySnapshot = left.snapshot();
+    const rightSnapshot: DeliverySnapshot = right.snapshot();
+    const ageGap: number = leftSnapshot.createdAt.getTime() - rightSnapshot.createdAt.getTime();
+    return ageGap === 0 ? leftSnapshot.id.localeCompare(rightSnapshot.id) : ageGap;
   }
 
   private static priorityRank({ priority }: DeliverySnapshot): number {

@@ -184,16 +184,16 @@ export class AlarmRepositoryContract {
         size: AlarmRepositoryContract.pageSize(2),
       };
 
-      const first: AlarmPage = await repository.findPage({
+      const firstPage: AlarmPage = await repository.findPage({
         ...filtered,
         start: { kind: 'newest' },
       });
-      const second: AlarmPage = await repository.findPage({
+      const secondPage: AlarmPage = await repository.findPage({
         ...filtered,
-        start: AlarmRepositoryContract.startAfter(first),
+        start: AlarmRepositoryContract.startAfter(firstPage),
       });
 
-      expect(AlarmRepositoryContract.summarize(first)).toEqual({
+      expect(AlarmRepositoryContract.summarize(firstPage)).toEqual({
         ids: [newestDraftBulk.snapshot().id, middleDraftBulk.snapshot().id],
         next: {
           kind: 'more',
@@ -203,11 +203,11 @@ export class AlarmRepositoryContract {
           },
         },
       });
-      expect(AlarmRepositoryContract.summarize(second)).toEqual({
+      expect(AlarmRepositoryContract.summarize(secondPage)).toEqual({
         ids: [oldestDraftBulk.snapshot().id],
         next: { kind: 'last' },
       });
-      expect(first.alarms.map((alarm: Alarm): AlarmSnapshot => alarm.snapshot())).toEqual([
+      expect(firstPage.alarms.map((alarm: Alarm): AlarmSnapshot => alarm.snapshot())).toEqual([
         newestDraftBulk.snapshot(),
         middleDraftBulk.snapshot(),
       ]);
@@ -294,7 +294,7 @@ export class AlarmRepositoryContract {
         size: AlarmRepositoryContract.pageSize(1),
       };
 
-      const first: AlarmPage = await repository.findPage({
+      const firstPage: AlarmPage = await repository.findPage({
         ...unfiltered,
         start: { kind: 'newest' },
       });
@@ -306,7 +306,7 @@ export class AlarmRepositoryContract {
         },
       });
 
-      expect(AlarmRepositoryContract.summarize(first)).toEqual({
+      expect(AlarmRepositoryContract.summarize(firstPage)).toEqual({
         ids: [newer.snapshot().id],
         next: {
           kind: 'more',
@@ -353,14 +353,14 @@ export class AlarmRepositoryContract {
       start,
       size: AlarmRepositoryContract.pageSize(2),
     });
-    const ids: ReadonlyArray<string> = page.alarms.map(
+    const pageAlarmIds: ReadonlyArray<string> = page.alarms.map(
       (alarm: Alarm): string => alarm.snapshot().id,
     );
     if (page.next.kind === 'last') {
-      return ids;
+      return pageAlarmIds;
     }
     return [
-      ...ids,
+      ...pageAlarmIds,
       ...(await AlarmRepositoryContract.readAll(
         repository,
         AlarmRepositoryContract.startAfter(page),
@@ -402,11 +402,11 @@ export class AlarmRepositoryContract {
   }
 
   private static newAlarmId(): AlarmId {
-    const value: string = randomUUID();
-    if (!AlarmPredicates.isAlarmId(value)) {
-      throw new Error(`generated ${value} is not a valid AlarmId`);
+    const rawAlarmId: string = randomUUID();
+    if (!AlarmPredicates.isAlarmId(rawAlarmId)) {
+      throw new Error(`generated ${rawAlarmId} is not a valid AlarmId`);
     }
-    return value;
+    return rawAlarmId;
   }
 
   private static created(draft: Readonly<AlarmDraft>): Alarm {

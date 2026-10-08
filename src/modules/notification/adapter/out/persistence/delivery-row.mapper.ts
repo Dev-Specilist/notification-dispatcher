@@ -160,11 +160,11 @@ export class DeliveryRowMapper {
     });
   }
 
-  private static deliveryIdOf({ id }: DeliveryRow): DeliveryId {
-    if (!DeliveryPredicates.isDeliveryId(id)) {
-      throw new Error(`delivery row has an invalid id: ${id}`);
+  private static deliveryIdOf({ id: rawDeliveryId }: DeliveryRow): DeliveryId {
+    if (!DeliveryPredicates.isDeliveryId(rawDeliveryId)) {
+      throw new Error(`delivery row has an invalid id: ${rawDeliveryId}`);
     }
-    return id;
+    return rawDeliveryId;
   }
 
   private static alarmIdOf({ id, alarmId }: DeliveryRow): AlarmId {

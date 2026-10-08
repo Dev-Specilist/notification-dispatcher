@@ -143,9 +143,11 @@ describe('Alarm', () => {
   });
 
   it('ALM-03 긴급 알림은 중복을 제거한 뒤 정확히 100명까지 허용한다', () => {
-    const ids: ReadonlyArray<string> = [...recipientIds(100), 'u_000001'];
+    const recipientIdsWithDuplicate: ReadonlyArray<string> = [...recipientIds(100), 'u_000001'];
 
-    const alarm: Alarm = created(Alarm.create(alarmId(), draft('URGENT', ids), NOW));
+    const alarm: Alarm = created(
+      Alarm.create(alarmId(), draft('URGENT', recipientIdsWithDuplicate), NOW),
+    );
 
     expect(alarm.snapshot().target).toEqual({ kind: 'EXPLICIT', recipientIds: recipientIds(100) });
   });

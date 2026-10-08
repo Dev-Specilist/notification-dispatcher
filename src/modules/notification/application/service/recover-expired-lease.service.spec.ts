@@ -70,19 +70,19 @@ const alarmId = (): AlarmId => {
 };
 
 const recipientId = (index: number): RecipientId => {
-  const value: string = `u_${String(index).padStart(6, '0')}`;
-  if (!AlarmPredicates.isRecipientId(value)) {
-    throw new Error(`test fixture ${value} is not a valid RecipientId`);
+  const rawRecipientId: string = `u_${String(index).padStart(6, '0')}`;
+  if (!AlarmPredicates.isRecipientId(rawRecipientId)) {
+    throw new Error(`test fixture ${rawRecipientId} is not a valid RecipientId`);
   }
-  return value;
+  return rawRecipientId;
 };
 
 const deliveryId = (index: number = 1): DeliveryId => {
-  const value: string = `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
-  if (!DeliveryPredicates.isDeliveryId(value)) {
-    throw new Error(`test fixture ${value} is not a valid DeliveryId`);
+  const rawDeliveryId: string = `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+  if (!DeliveryPredicates.isDeliveryId(rawDeliveryId)) {
+    throw new Error(`test fixture ${rawDeliveryId} is not a valid DeliveryId`);
   }
-  return value;
+  return rawDeliveryId;
 };
 
 const leaseToken = (value: string): LeaseToken => {
@@ -93,11 +93,11 @@ const leaseToken = (value: string): LeaseToken => {
 };
 
 const messageId = (): MessageId => {
-  const value: string = 'm_1';
-  if (!DeliveryPredicates.isMessageId(value)) {
+  const rawMessageId: string = 'm_1';
+  if (!DeliveryPredicates.isMessageId(rawMessageId)) {
     throw new Error('test fixture is not a valid MessageId');
   }
-  return value;
+  return rawMessageId;
 };
 
 const durationMs = (value: number): DurationMs => {

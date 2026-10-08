@@ -218,7 +218,7 @@ export class DeliveryRepositoryContract {
 
       expect(
         (await DeliveryRepositoryContract.snapshots(deliveryRepository, owner)).map(
-          ({ id }: DeliverySnapshot): string => id,
+          ({ id: deliveryId }: DeliverySnapshot): string => deliveryId,
         ),
       ).toEqual(
         deliveries
@@ -474,7 +474,7 @@ export class DeliveryRepositoryContract {
         DeliveryRepositoryContract.pending(owner, 'u_000001'),
       );
       await deliveryRepository.saveAll([uncertain]);
-      const first: Delivery = DeliveryRepositoryContract.transitioned(
+      const afterLookupFailure: Delivery = DeliveryRepositoryContract.transitioned(
         uncertain.recordLookupFailure(
           new Date(NOW_ISO),
           DeliveryRepositoryContract.retryPolicy(),
@@ -487,12 +487,14 @@ export class DeliveryRepositoryContract {
         ]),
       );
 
-      expect(await deliveryRepository.saveReconciled(first, uncertain)).toEqual({ kind: 'saved' });
+      expect(await deliveryRepository.saveReconciled(afterLookupFailure, uncertain)).toEqual({
+        kind: 'saved',
+      });
       expect(await deliveryRepository.saveReconciled(late, uncertain)).toEqual({
         kind: 'superseded',
       });
       expect(await DeliveryRepositoryContract.snapshots(deliveryRepository, owner)).toEqual([
-        first.snapshot(),
+        afterLookupFailure.snapshot(),
       ]);
     });
 
@@ -602,12 +604,12 @@ export class DeliveryRepositoryContract {
   }
 
   private static async storedAlarm(alarmRepository: AlarmRepositoryPort): Promise<AlarmId> {
-    const id: string = randomUUID();
-    if (!AlarmPredicates.isAlarmId(id)) {
-      throw new Error(`generated ${id} is not a valid AlarmId`);
+    const rawAlarmId: string = randomUUID();
+    if (!AlarmPredicates.isAlarmId(rawAlarmId)) {
+      throw new Error(`generated ${rawAlarmId} is not a valid AlarmId`);
     }
     const creation: AlarmCreation = Alarm.create(
-      id,
+      rawAlarmId,
       { title: '추석 이벤트', body: '쿠폰 도착', kind: 'BULK', recipientIds: [] },
       new Date(CREATED_ISO),
     );
@@ -619,7 +621,7 @@ export class DeliveryRepositoryContract {
       throw new Error(`contract fixture alarm cannot be dispatched: ${dispatched.error.code}`);
     }
     await alarmRepository.save(dispatched.alarm);
-    return id;
+    return rawAlarmId;
   }
 
   private static pending(
@@ -628,14 +630,14 @@ export class DeliveryRepositoryContract {
     priority: DeliveryPriority = 'BULK',
     createdIso: string = CREATED_ISO,
   ): Delivery {
-    const id: string = randomUUID();
-    if (!DeliveryPredicates.isDeliveryId(id)) {
-      throw new Error(`generated ${id} is not a valid DeliveryId`);
+    const rawDeliveryId: string = randomUUID();
+    if (!DeliveryPredicates.isDeliveryId(rawDeliveryId)) {
+      throw new Error(`generated ${rawDeliveryId} is not a valid DeliveryId`);
     }
     if (!AlarmPredicates.isRecipientId(recipient)) {
       throw new Error(`contract fixture ${recipient} is not a valid RecipientId`);
     }
-    const deliveryId: DeliveryId = id;
+    const deliveryId: DeliveryId = rawDeliveryId;
     const recipientId: RecipientId = recipient;
     return Delivery.create(
       { id: deliveryId, alarmId: owner, recipientId, priority },

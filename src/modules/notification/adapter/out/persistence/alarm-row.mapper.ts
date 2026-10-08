@@ -63,11 +63,11 @@ export class AlarmRowMapper {
     });
   }
 
-  private static alarmIdOf({ id }: AlarmRow): AlarmId {
-    if (!AlarmPredicates.isAlarmId(id)) {
-      throw new Error(`alarm row has an invalid id: ${id}`);
+  private static alarmIdOf({ id: rawAlarmId }: AlarmRow): AlarmId {
+    if (!AlarmPredicates.isAlarmId(rawAlarmId)) {
+      throw new Error(`alarm row has an invalid id: ${rawAlarmId}`);
     }
-    return id;
+    return rawAlarmId;
   }
 
   private static audienceOf({ id, kind, recipientIds }: AlarmRow): AlarmAudience {

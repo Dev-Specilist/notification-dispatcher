@@ -75,19 +75,19 @@ const alarmId = (value: string): AlarmId => {
 };
 
 const recipientId = (index: number): RecipientId => {
-  const value: string = `u_${String(index).padStart(6, '0')}`;
-  if (!AlarmPredicates.isRecipientId(value)) {
-    throw new Error(`test fixture ${value} is not a valid RecipientId`);
+  const rawRecipientId: string = `u_${String(index).padStart(6, '0')}`;
+  if (!AlarmPredicates.isRecipientId(rawRecipientId)) {
+    throw new Error(`test fixture ${rawRecipientId} is not a valid RecipientId`);
   }
-  return value;
+  return rawRecipientId;
 };
 
 const deliveryId = (index: number): DeliveryId => {
-  const value: string = `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
-  if (!DeliveryPredicates.isDeliveryId(value)) {
-    throw new Error(`test fixture ${value} is not a valid DeliveryId`);
+  const rawDeliveryId: string = `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+  if (!DeliveryPredicates.isDeliveryId(rawDeliveryId)) {
+    throw new Error(`test fixture ${rawDeliveryId} is not a valid DeliveryId`);
   }
-  return value;
+  return rawDeliveryId;
 };
 
 const leaseToken = (): LeaseToken => {
@@ -140,9 +140,9 @@ const transitionedAlarm = (transition: AlarmTransition): Alarm => {
   return transition.alarm;
 };
 
-const dispatchedAlarm = (id: string): Alarm => {
+const dispatchedAlarm = (rawAlarmId: string): Alarm => {
   const creation: AlarmCreation = Alarm.create(
-    alarmId(id),
+    alarmId(rawAlarmId),
     { title: '추석 이벤트', body: '쿠폰 도착', kind: 'BULK', recipientIds: [] },
     at(CREATED_ISO),
   );

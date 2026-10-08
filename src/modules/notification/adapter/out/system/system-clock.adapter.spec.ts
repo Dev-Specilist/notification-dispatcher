@@ -27,9 +27,9 @@ describe('SystemClockAdapter', () => {
 
   it('매번 새 Date를 돌려줘 호출한 쪽이 바꿔도 다음 값에 영향이 없다', (): void => {
     const clock: SystemClockAdapter = new SystemClockAdapter();
-    const first: Date = clock.now();
+    const returnedNow: Date = clock.now();
 
-    first.setUTCFullYear(1990);
+    returnedNow.setUTCFullYear(1990);
 
     expect(clock.now()).toEqual(new Date(FIXED_ISO));
   });

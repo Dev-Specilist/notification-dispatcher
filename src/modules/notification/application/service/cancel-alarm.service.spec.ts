@@ -54,35 +54,35 @@ const alarmId = (value: string): AlarmId => {
 };
 
 const recipientId = (index: number): RecipientId => {
-  const value: string = `u_${String(index).padStart(6, '0')}`;
-  if (!AlarmPredicates.isRecipientId(value)) {
-    throw new Error(`test fixture ${value} is not a valid RecipientId`);
+  const rawRecipientId: string = `u_${String(index).padStart(6, '0')}`;
+  if (!AlarmPredicates.isRecipientId(rawRecipientId)) {
+    throw new Error(`test fixture ${rawRecipientId} is not a valid RecipientId`);
   }
-  return value;
+  return rawRecipientId;
 };
 
 const deliveryId = (index: number): DeliveryId => {
-  const value: string = `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
-  if (!DeliveryPredicates.isDeliveryId(value)) {
-    throw new Error(`test fixture ${value} is not a valid DeliveryId`);
+  const rawDeliveryId: string = `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+  if (!DeliveryPredicates.isDeliveryId(rawDeliveryId)) {
+    throw new Error(`test fixture ${rawDeliveryId} is not a valid DeliveryId`);
   }
-  return value;
+  return rawDeliveryId;
 };
 
 const leaseToken = (): LeaseToken => {
-  const value: string = '9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7caa';
-  if (!DeliveryPredicates.isLeaseToken(value)) {
+  const rawLeaseToken: string = '9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7caa';
+  if (!DeliveryPredicates.isLeaseToken(rawLeaseToken)) {
     throw new Error('test fixture is not a valid LeaseToken');
   }
-  return value;
+  return rawLeaseToken;
 };
 
 const messageId = (): MessageId => {
-  const value: string = 'm_1';
-  if (!DeliveryPredicates.isMessageId(value)) {
+  const rawMessageId: string = 'm_1';
+  if (!DeliveryPredicates.isMessageId(rawMessageId)) {
     throw new Error('test fixture is not a valid MessageId');
   }
-  return value;
+  return rawMessageId;
 };
 
 const retryAfterMs = (value: number): RetryAfterMs => {
@@ -279,9 +279,9 @@ describe('CancelAlarmService', () => {
     );
     await service.execute(alarmId(ALARM_ID));
 
-    const second: CancelAlarmResult = await service.execute(alarmId(ALARM_ID));
+    const repeatedCancel: CancelAlarmResult = await service.execute(alarmId(ALARM_ID));
 
-    expect(second).toEqual({
+    expect(repeatedCancel).toEqual({
       kind: 'conflict',
       error: { code: 'ALARM_STATE_CONFLICT', status: 'CANCELLED', action: 'cancel' },
     });

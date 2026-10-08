@@ -211,17 +211,17 @@ export class Delivery {
     if (check.kind === 'rejected') {
       return check;
     }
-    const [first, ...rest]: FoundMessages = found;
-    const earliest: RecordedMessage = rest.reduce(
+    const [firstFound, ...otherFound]: FoundMessages = found;
+    const earliest: RecordedMessage = otherFound.reduce(
       (current: RecordedMessage, next: RecordedMessage): RecordedMessage =>
         next.sentAt.getTime() < current.sentAt.getTime() ? next : current,
-      first,
+      firstFound,
     );
     return this.transitionTo(this.props.attempts, {
       status: 'SENT',
       messageId: earliest.messageId,
       sentAt: Delivery.copyDate(earliest.sentAt),
-      duplicateCount: rest.length,
+      duplicateCount: otherFound.length,
     });
   }
 

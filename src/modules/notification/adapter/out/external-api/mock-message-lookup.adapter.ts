@@ -50,7 +50,7 @@ export class MockMessageLookupAdapter implements MessageLookupPort {
     if (recorded.length === 0) {
       return { kind: 'none' };
     }
-    const [first, ...rest]: ReadonlyArray<RecordedMessage> = recorded;
-    return { kind: 'found', messages: [first, ...rest] };
+    const [firstMessage, ...otherMessages]: ReadonlyArray<RecordedMessage> = recorded;
+    return { kind: 'found', messages: [firstMessage, ...otherMessages] };
   }
 }

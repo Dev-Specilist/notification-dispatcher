@@ -212,12 +212,12 @@ export class ExpansionJobRepositoryContract {
 
   private static async scenario(createRepositories: RepositoriesFactory): Promise<Scenario> {
     const repositories: ContractRepositories = await createRepositories();
-    const id: string = randomUUID();
-    if (!AlarmPredicates.isAlarmId(id)) {
-      throw new Error(`generated ${id} is not a valid AlarmId`);
+    const rawAlarmId: string = randomUUID();
+    if (!AlarmPredicates.isAlarmId(rawAlarmId)) {
+      throw new Error(`generated ${rawAlarmId} is not a valid AlarmId`);
     }
     const creation: AlarmCreation = Alarm.create(
-      id,
+      rawAlarmId,
       { title: '추석 이벤트', body: '쿠폰 도착', kind: 'BULK', recipientIds: [] },
       new Date(ENQUEUED_ISO),
     );
@@ -225,6 +225,6 @@ export class ExpansionJobRepositoryContract {
       throw new Error(`contract fixture alarm is invalid: ${creation.error.code}`);
     }
     await repositories.alarmRepository.save(creation.alarm);
-    return { ...repositories, owner: id };
+    return { ...repositories, owner: rawAlarmId };
   }
 }

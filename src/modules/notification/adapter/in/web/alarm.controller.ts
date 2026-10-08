@@ -32,9 +32,9 @@ export class AlarmController {
 
   @Get(':id')
   async findOne(
-    @Param({ schema: alarmIdParamSchema }) { id }: AlarmIdParam,
+    @Param({ schema: alarmIdParamSchema }) { id: alarmId }: AlarmIdParam,
   ): Promise<AlarmResponse> {
-    const result: AlarmResult = await this.getAlarm.execute({ alarmId: id });
+    const result: AlarmResult = await this.getAlarm.execute({ alarmId });
     if (result.kind === 'not-found') {
       throw AlarmPresenter.problemOf(result.error);
     }

@@ -102,11 +102,11 @@ const recipientId = (value: string): RecipientId => {
 };
 
 const deliveryId = (index: number): DeliveryId => {
-  const value: string = `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
-  if (!DeliveryPredicates.isDeliveryId(value)) {
-    throw new Error(`test fixture ${value} is not a valid DeliveryId`);
+  const rawDeliveryId: string = `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+  if (!DeliveryPredicates.isDeliveryId(rawDeliveryId)) {
+    throw new Error(`test fixture ${rawDeliveryId} is not a valid DeliveryId`);
   }
-  return value;
+  return rawDeliveryId;
 };
 
 const leaseToken = (value: string): LeaseToken => {

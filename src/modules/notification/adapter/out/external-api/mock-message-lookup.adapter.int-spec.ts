@@ -35,11 +35,11 @@ const requestTimeoutMs = (value: number): RequestTimeoutMs => {
 };
 
 const newClientRef = (): DeliveryId => {
-  const value: string = randomUUID();
-  if (!DeliveryPredicates.isDeliveryId(value)) {
-    throw new Error(`generated ${value} is not a valid DeliveryId`);
+  const rawDeliveryId: string = randomUUID();
+  if (!DeliveryPredicates.isDeliveryId(rawDeliveryId)) {
+    throw new Error(`generated ${rawDeliveryId} is not a valid DeliveryId`);
   }
-  return value;
+  return rawDeliveryId;
 };
 
 const messageWith = (clientRef: DeliveryId): OutgoingMessage => {
@@ -119,8 +119,8 @@ describe('MockMessageLookupAdapter', () => {
       baseUrl: mock.baseUrl,
       requestTimeoutMs: requestTimeoutMs(REQUEST_TIMEOUT_MS),
     });
-    const first: string = acceptedMessageId(await sender.send(messageWith(clientRef)));
-    const second: string = acceptedMessageId(await sender.send(messageWith(clientRef)));
+    const firstMessageId: string = acceptedMessageId(await sender.send(messageWith(clientRef)));
+    const secondMessageId: string = acceptedMessageId(await sender.send(messageWith(clientRef)));
 
     const result: MessageLookupResult = await lookupAt(
       mock.baseUrl,
@@ -129,7 +129,7 @@ describe('MockMessageLookupAdapter', () => {
 
     expect(summarize(result)).toEqual({
       kind: 'found',
-      messageIds: [first, second],
+      messageIds: [firstMessageId, secondMessageId],
       sentAtValid: true,
     });
   });

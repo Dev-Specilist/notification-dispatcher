@@ -118,12 +118,12 @@ describe('MockRecipientDirectoryAdapter', () => {
       settingsFor(mock.baseUrl, 2, REQUEST_TIMEOUT_MS),
     );
 
-    const first: RecipientPage = await directory.fetchPage({ kind: 'first' });
-    const second: RecipientPage = await directory.fetchPage(nextCursorOf(first));
+    const firstPage: RecipientPage = await directory.fetchPage({ kind: 'first' });
+    const secondPage: RecipientPage = await directory.fetchPage(nextCursorOf(firstPage));
 
-    expect(first.recipientIds).toEqual(['u_000001', 'u_000002']);
-    expect(first.next).toMatchObject({ kind: 'next' });
-    expect(second.recipientIds).toEqual(['u_000003', 'u_000004']);
+    expect(firstPage.recipientIds).toEqual(['u_000001', 'u_000002']);
+    expect(firstPage.next).toMatchObject({ kind: 'next' });
+    expect(secondPage.recipientIds).toEqual(['u_000003', 'u_000004']);
   });
 
   it.each<FailingResponseCase>([
