@@ -8,6 +8,8 @@ type Validate = (raw: RawEnv) => Env;
 
 type EnvSnapshot = Readonly<Record<keyof Env, string | number>>;
 
+type WorkerSettingCase = Readonly<[key: string, rawValue: string]>;
+
 const DATABASE_URL: string = 'postgres://app:secret@localhost:5432/notification';
 
 const REQUIRED: RawEnv = { DATABASE_URL };
@@ -25,6 +27,19 @@ describe('환경변수 스키마', () => {
       LOG_LEVEL: 'log',
       LOG_FORMAT: 'pretty',
       DATABASE_URL,
+      MOCK_API_URL: 'http://localhost:4000',
+      DISPATCH_MAX_REQUEST_MS: 5000,
+      DISPATCH_LEASE_MS: 30000,
+      RECONCILE_DELAY_MS: 35000,
+      RETRY_MAX_ATTEMPTS: 5,
+      RETRY_BASE_DELAY_MS: 1000,
+      RETRY_MAX_DELAY_MS: 60000,
+      LOOKUP_RETRY_MAX_ATTEMPTS: 10,
+      LOOKUP_RETRY_BASE_DELAY_MS: 5000,
+      LOOKUP_RETRY_MAX_DELAY_MS: 60000,
+      UNCONFIRMED_AFTER_MS: 3600000,
+      USER_PAGE_LIMIT: 1000,
+      RATE_LIMIT_INTERVAL_MS: 20,
     };
 
     expect(validate(REQUIRED)).toEqual(expected);
@@ -45,6 +60,19 @@ describe('환경변수 스키마', () => {
       SHUTDOWN_TIMEOUT_MS: '1000',
       LOG_LEVEL: 'debug',
       LOG_FORMAT: 'json',
+      MOCK_API_URL: 'http://mock:4000',
+      DISPATCH_MAX_REQUEST_MS: '3000',
+      DISPATCH_LEASE_MS: '20000',
+      RECONCILE_DELAY_MS: '40000',
+      RETRY_MAX_ATTEMPTS: '3',
+      RETRY_BASE_DELAY_MS: '500',
+      RETRY_MAX_DELAY_MS: '30000',
+      LOOKUP_RETRY_MAX_ATTEMPTS: '6',
+      LOOKUP_RETRY_BASE_DELAY_MS: '2000',
+      LOOKUP_RETRY_MAX_DELAY_MS: '20000',
+      UNCONFIRMED_AFTER_MS: '600000',
+      USER_PAGE_LIMIT: '500',
+      RATE_LIMIT_INTERVAL_MS: '25',
     };
     const expected: EnvSnapshot = {
       HOST: '127.0.0.1',
@@ -54,6 +82,19 @@ describe('환경변수 스키마', () => {
       LOG_LEVEL: 'debug',
       LOG_FORMAT: 'json',
       DATABASE_URL,
+      MOCK_API_URL: 'http://mock:4000',
+      DISPATCH_MAX_REQUEST_MS: 3000,
+      DISPATCH_LEASE_MS: 20000,
+      RECONCILE_DELAY_MS: 40000,
+      RETRY_MAX_ATTEMPTS: 3,
+      RETRY_BASE_DELAY_MS: 500,
+      RETRY_MAX_DELAY_MS: 30000,
+      LOOKUP_RETRY_MAX_ATTEMPTS: 6,
+      LOOKUP_RETRY_BASE_DELAY_MS: 2000,
+      LOOKUP_RETRY_MAX_DELAY_MS: 20000,
+      UNCONFIRMED_AFTER_MS: 600000,
+      USER_PAGE_LIMIT: 500,
+      RATE_LIMIT_INTERVAL_MS: 25,
     };
 
     expect(validate(raw)).toEqual(expected);
@@ -96,4 +137,29 @@ describe('환경변수 스키마', () => {
       expect(() => validate({ DATABASE_URL: url })).toThrow(/DATABASE_URL/);
     },
   );
+
+  it.each(['', 'not a url', 'ftp://mock:4000', 'postgres://mock:4000'])(
+    'http(s) URL이 아닌 MOCK_API_URL="%s"는 거부한다',
+    (url: string): void => {
+      expect(() => validate({ ...REQUIRED, MOCK_API_URL: url })).toThrow(/MOCK_API_URL/);
+    },
+  );
+
+  it.each<WorkerSettingCase>([
+    ['DISPATCH_MAX_REQUEST_MS', '0'],
+    ['DISPATCH_LEASE_MS', '0'],
+    ['RECONCILE_DELAY_MS', '-1'],
+    ['RETRY_MAX_ATTEMPTS', '0'],
+    ['RETRY_BASE_DELAY_MS', '0'],
+    ['RETRY_MAX_DELAY_MS', '0'],
+    ['LOOKUP_RETRY_MAX_ATTEMPTS', '0'],
+    ['LOOKUP_RETRY_BASE_DELAY_MS', '0'],
+    ['LOOKUP_RETRY_MAX_DELAY_MS', '0'],
+    ['UNCONFIRMED_AFTER_MS', '0'],
+    ['USER_PAGE_LIMIT', '0'],
+    ['RATE_LIMIT_INTERVAL_MS', '0'],
+    ['RETRY_MAX_ATTEMPTS', '1.5'],
+  ])('워커 설정 %s="%s"는 거부한다', (key: string, rawValue: string): void => {
+    expect(() => validate({ ...REQUIRED, [key]: rawValue })).toThrow(new RegExp(key));
+  });
 });

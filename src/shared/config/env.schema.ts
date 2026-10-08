@@ -4,17 +4,33 @@ import {
   databaseUrlSchema,
   Host,
   hostSchema,
+  httpUrlSchema,
   Milliseconds,
   millisecondsSchema,
   Port,
   portSchema,
+  positiveIntegerSchema,
   positiveMillisecondsSchema,
 } from '@/shared/config/primitive.schema';
+import { HttpUrl, PositiveInteger } from '@/shared/config/primitive.type';
 import { logFormatSchema, logLevelSchema } from '@/shared/logging/logging.schema';
 
 const DEFAULT_HOST: Host = hostSchema.parse('0.0.0.0');
 const DEFAULT_DRAIN: Milliseconds = millisecondsSchema.parse(5000);
 const DEFAULT_TIMEOUT: Milliseconds = positiveMillisecondsSchema.parse(25000);
+const DEFAULT_MOCK_API_URL: HttpUrl = httpUrlSchema.parse('http://localhost:4000');
+const DEFAULT_MAX_REQUEST: Milliseconds = positiveMillisecondsSchema.parse(5000);
+const DEFAULT_LEASE: Milliseconds = positiveMillisecondsSchema.parse(30000);
+const DEFAULT_RECONCILE_DELAY: Milliseconds = millisecondsSchema.parse(35000);
+const DEFAULT_RETRY_MAX_ATTEMPTS: PositiveInteger = positiveIntegerSchema.parse(5);
+const DEFAULT_RETRY_BASE_DELAY: Milliseconds = positiveMillisecondsSchema.parse(1000);
+const DEFAULT_RETRY_MAX_DELAY: Milliseconds = positiveMillisecondsSchema.parse(60000);
+const DEFAULT_LOOKUP_RETRY_MAX_ATTEMPTS: PositiveInteger = positiveIntegerSchema.parse(10);
+const DEFAULT_LOOKUP_RETRY_BASE_DELAY: Milliseconds = positiveMillisecondsSchema.parse(5000);
+const DEFAULT_LOOKUP_RETRY_MAX_DELAY: Milliseconds = positiveMillisecondsSchema.parse(60000);
+const DEFAULT_UNCONFIRMED_AFTER: Milliseconds = positiveMillisecondsSchema.parse(3600000);
+const DEFAULT_USER_PAGE_LIMIT: PositiveInteger = positiveIntegerSchema.parse(1000);
+const DEFAULT_RATE_LIMIT_INTERVAL: Milliseconds = positiveMillisecondsSchema.parse(20);
 
 export const createEnvSchema = (defaultPort: Port): EnvSchema =>
   z.object({
@@ -25,4 +41,17 @@ export const createEnvSchema = (defaultPort: Port): EnvSchema =>
     LOG_LEVEL: logLevelSchema.default('log'),
     LOG_FORMAT: logFormatSchema.default('pretty'),
     DATABASE_URL: databaseUrlSchema,
+    MOCK_API_URL: httpUrlSchema.default(DEFAULT_MOCK_API_URL),
+    DISPATCH_MAX_REQUEST_MS: positiveMillisecondsSchema.default(DEFAULT_MAX_REQUEST),
+    DISPATCH_LEASE_MS: positiveMillisecondsSchema.default(DEFAULT_LEASE),
+    RECONCILE_DELAY_MS: millisecondsSchema.default(DEFAULT_RECONCILE_DELAY),
+    RETRY_MAX_ATTEMPTS: positiveIntegerSchema.default(DEFAULT_RETRY_MAX_ATTEMPTS),
+    RETRY_BASE_DELAY_MS: positiveMillisecondsSchema.default(DEFAULT_RETRY_BASE_DELAY),
+    RETRY_MAX_DELAY_MS: positiveMillisecondsSchema.default(DEFAULT_RETRY_MAX_DELAY),
+    LOOKUP_RETRY_MAX_ATTEMPTS: positiveIntegerSchema.default(DEFAULT_LOOKUP_RETRY_MAX_ATTEMPTS),
+    LOOKUP_RETRY_BASE_DELAY_MS: positiveMillisecondsSchema.default(DEFAULT_LOOKUP_RETRY_BASE_DELAY),
+    LOOKUP_RETRY_MAX_DELAY_MS: positiveMillisecondsSchema.default(DEFAULT_LOOKUP_RETRY_MAX_DELAY),
+    UNCONFIRMED_AFTER_MS: positiveMillisecondsSchema.default(DEFAULT_UNCONFIRMED_AFTER),
+    USER_PAGE_LIMIT: positiveIntegerSchema.default(DEFAULT_USER_PAGE_LIMIT),
+    RATE_LIMIT_INTERVAL_MS: positiveMillisecondsSchema.default(DEFAULT_RATE_LIMIT_INTERVAL),
   });

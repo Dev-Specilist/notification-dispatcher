@@ -30,6 +30,10 @@ export type PositiveMillisecondsSchema = typeof positiveMillisecondsSchema;
 
 export const databaseUrlSchema = z.url({ protocol: /^postgres(ql)?$/ }).brand<'DatabaseUrl'>();
 
+export const httpUrlSchema = z.url({ protocol: /^https?$/ }).brand<'HttpUrl'>();
+
+export const positiveIntegerSchema = integer.pipe(z.number().min(1)).brand<'PositiveInteger'>();
+
 export const processRoleSchema = z.enum(['api', 'worker', 'migrate']);
 
 export type ProcessRole = z.infer<typeof processRoleSchema>;

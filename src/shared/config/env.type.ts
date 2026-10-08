@@ -5,7 +5,11 @@ import {
   PortSchema,
   PositiveMillisecondsSchema,
 } from '@/shared/config/primitive.schema';
-import { DatabaseUrlSchema } from '@/shared/config/primitive.type';
+import {
+  DatabaseUrlSchema,
+  HttpUrlSchema,
+  PositiveIntegerSchema,
+} from '@/shared/config/primitive.type';
 import { LogFormatSchema, LogLevelSchema } from '@/shared/logging/logging.schema';
 
 export type EnvShape = {
@@ -16,6 +20,19 @@ export type EnvShape = {
   readonly LOG_LEVEL: z.ZodDefault<LogLevelSchema>;
   readonly LOG_FORMAT: z.ZodDefault<LogFormatSchema>;
   readonly DATABASE_URL: DatabaseUrlSchema;
+  readonly MOCK_API_URL: z.ZodDefault<HttpUrlSchema>;
+  readonly DISPATCH_MAX_REQUEST_MS: z.ZodDefault<PositiveMillisecondsSchema>;
+  readonly DISPATCH_LEASE_MS: z.ZodDefault<PositiveMillisecondsSchema>;
+  readonly RECONCILE_DELAY_MS: z.ZodDefault<MillisecondsSchema>;
+  readonly RETRY_MAX_ATTEMPTS: z.ZodDefault<PositiveIntegerSchema>;
+  readonly RETRY_BASE_DELAY_MS: z.ZodDefault<PositiveMillisecondsSchema>;
+  readonly RETRY_MAX_DELAY_MS: z.ZodDefault<PositiveMillisecondsSchema>;
+  readonly LOOKUP_RETRY_MAX_ATTEMPTS: z.ZodDefault<PositiveIntegerSchema>;
+  readonly LOOKUP_RETRY_BASE_DELAY_MS: z.ZodDefault<PositiveMillisecondsSchema>;
+  readonly LOOKUP_RETRY_MAX_DELAY_MS: z.ZodDefault<PositiveMillisecondsSchema>;
+  readonly UNCONFIRMED_AFTER_MS: z.ZodDefault<PositiveMillisecondsSchema>;
+  readonly USER_PAGE_LIMIT: z.ZodDefault<PositiveIntegerSchema>;
+  readonly RATE_LIMIT_INTERVAL_MS: z.ZodDefault<PositiveMillisecondsSchema>;
 };
 
 export type EnvSchema = z.ZodObject<EnvShape>;

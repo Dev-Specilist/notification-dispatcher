@@ -55,6 +55,7 @@ services:
     environment:
       LOG_FORMAT: json
       DATABASE_URL: postgres://notification:notification@postgres:5432/notification
+      MOCK_API_URL: http://mock:4000
     depends_on:
       postgres:
         condition: service_healthy
