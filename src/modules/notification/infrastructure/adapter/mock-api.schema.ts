@@ -14,3 +14,8 @@ export const retryAfterSecondsSchema = z
 export const lookupBodySchema = z.object({
   messages: z.array(z.object({ messageId: z.string(), sentAt: z.iso.datetime({ offset: true }) })),
 });
+
+export const usersBodySchema = z.object({
+  users: z.array(z.object({ id: z.string() })),
+  nextCursor: z.string().nullable(),
+});

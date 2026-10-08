@@ -3,6 +3,8 @@ import { MockApiPredicates } from '@/modules/notification/infrastructure/adapter
 
 type TimeoutCase = Readonly<[string, number]>;
 
+type LimitCase = Readonly<[string, number]>;
+
 describe('MockApiPredicates', () => {
   it.each<TimeoutCase>([
     ['1ms', 1],
@@ -22,6 +24,26 @@ describe('MockApiPredicates', () => {
     '요청 제한 시간은 %s(%s)를 허용하지 않는다 (Node 타이머가 1ms로 바꿔 즉시 타임아웃되므로)',
     (_label: string, value: number): void => {
       expect(MockApiPredicates.isRequestTimeoutMs(value)).toBe(false);
+    },
+  );
+
+  it.each<LimitCase>([
+    ['최소', 1],
+    ['기본', 100],
+    ['최대', 1_000],
+  ])('사용자 페이지 크기는 %s(%s)를 허용한다', (_label: string, value: number): void => {
+    expect(MockApiPredicates.isUserPageLimit(value)).toBe(true);
+  });
+
+  it.each<LimitCase>([
+    ['0', 0],
+    ['최대 초과', 1_001],
+    ['소수', 1.5],
+    ['NaN', Number.NaN],
+  ])(
+    '사용자 페이지 크기는 %s(%s)를 허용하지 않는다 (mock API 제약 1~1000)',
+    (_label: string, value: number): void => {
+      expect(MockApiPredicates.isUserPageLimit(value)).toBe(false);
     },
   );
 });
