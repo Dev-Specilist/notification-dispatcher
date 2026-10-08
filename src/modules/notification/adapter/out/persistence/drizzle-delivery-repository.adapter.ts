@@ -3,7 +3,13 @@ import { PgColumn } from 'drizzle-orm/pg-core';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { AlarmId, DeliveryCount } from '@/modules/notification/domain/alarm/alarm.type';
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
-import { DeliverySnapshot, LeaseToken } from '@/modules/notification/domain/delivery/delivery.type';
+import {
+  DeliverySnapshot,
+  DeliveryStatusCounts,
+  DeliveryStatusTally,
+  LeaseToken,
+} from '@/modules/notification/domain/delivery/delivery.type';
+import { DeliveryStatusCountsFactory } from '@/modules/notification/domain/delivery/delivery-status-counts.factory';
 import { DeliveryCreationPort } from '@/modules/notification/application/port/out/delivery-creation.port';
 import { DispatchQueuePort } from '@/modules/notification/application/port/out/dispatch-queue.port';
 import { LeaseRecoveryQueuePort } from '@/modules/notification/application/port/out/lease-recovery-queue.port';
@@ -183,6 +189,15 @@ export class DrizzleDeliveryRepositoryAdapter
       throw new Error(`unsettled delivery count ${total} is not a valid DeliveryCount`);
     }
     return total;
+  }
+
+  async countByStatus(alarmId: AlarmId): Promise<DeliveryStatusCounts> {
+    const tallies: ReadonlyArray<DeliveryStatusTally> = await this.database
+      .select({ status: deliveries.status, count: count() })
+      .from(deliveries)
+      .where(eq(deliveries.alarmId, alarmId))
+      .groupBy(deliveries.status);
+    return DeliveryStatusCountsFactory.fromTallies(tallies);
   }
 
   async cancelWaiting(alarmId: AlarmId, now: Readonly<Date>): Promise<void> {

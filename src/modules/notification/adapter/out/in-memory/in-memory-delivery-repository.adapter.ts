@@ -5,9 +5,12 @@ import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity
 import {
   DeliveryId,
   DeliverySnapshot,
+  DeliveryStatusCounts,
+  DeliveryStatusTally,
   DeliveryTransition,
   LeaseToken,
 } from '@/modules/notification/domain/delivery/delivery.type';
+import { DeliveryStatusCountsFactory } from '@/modules/notification/domain/delivery/delivery-status-counts.factory';
 import {
   DeliveryCandidate,
   LeasedSave,
@@ -151,6 +154,16 @@ export class InMemoryDeliveryRepositoryAdapter
       throw new Error(`unsettled delivery count ${unsettled} is not a valid DeliveryCount`);
     }
     return unsettled;
+  }
+
+  async countByStatus(alarmId: AlarmId): Promise<DeliveryStatusCounts> {
+    const deliveries: ReadonlyArray<Delivery> = await this.findByAlarmId(alarmId);
+    return DeliveryStatusCountsFactory.fromTallies(
+      deliveries.map((delivery: Delivery): DeliveryStatusTally => ({
+        status: delivery.snapshot().state.status,
+        count: 1,
+      })),
+    );
   }
 
   async cancelWaiting(alarmId: AlarmId, now: Readonly<Date>): Promise<void> {

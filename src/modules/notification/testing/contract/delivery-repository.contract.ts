@@ -58,6 +58,8 @@ type RepositoriesFactory = () => Promise<ContractRepositories>;
 
 type StateCase = Readonly<[string, (delivery: Delivery) => Delivery]>;
 
+type StatusSeed = Readonly<[advance: (delivery: Delivery) => Delivery, count: number]>;
+
 type RecipientStatus = Readonly<[string, string]>;
 
 const CREATED_ISO: string = '2026-10-08T09:00:00.000Z';
@@ -128,53 +130,18 @@ export class DeliveryRepositoryContract {
       ],
       [
         'RETRY_WAIT',
-        (delivery: Delivery): Delivery =>
-          DeliveryRepositoryContract.transitioned(
-            DeliveryRepositoryContract.start(delivery).recordRateLimited(
-              DeliveryRepositoryContract.token(TOKEN),
-              new Date(SETTLED_ISO),
-              DeliveryRepositoryContract.retryAfter(2_000),
-            ),
-          ),
+        (delivery: Delivery): Delivery => DeliveryRepositoryContract.retryWaiting(delivery),
       ],
       ['UNKNOWN', (delivery: Delivery): Delivery => DeliveryRepositoryContract.timedOut(delivery)],
-      [
-        'SENT',
-        (delivery: Delivery): Delivery =>
-          DeliveryRepositoryContract.transitioned(
-            DeliveryRepositoryContract.timedOut(delivery).reconcileFound([
-              { messageId: DeliveryRepositoryContract.messageId('m_2'), sentAt: new Date(NOW_ISO) },
-              {
-                messageId: DeliveryRepositoryContract.messageId('m_1'),
-                sentAt: new Date(SETTLED_ISO),
-              },
-            ]),
-          ),
-      ],
-      [
-        'FAILED',
-        (delivery: Delivery): Delivery =>
-          DeliveryRepositoryContract.transitioned(
-            DeliveryRepositoryContract.start(delivery).recordPermanentFailure(
-              DeliveryRepositoryContract.token(TOKEN),
-              'RECIPIENT_BLOCKED',
-            ),
-          ),
-      ],
+      ['SENT', (delivery: Delivery): Delivery => DeliveryRepositoryContract.sent(delivery)],
+      ['FAILED', (delivery: Delivery): Delivery => DeliveryRepositoryContract.failed(delivery)],
       [
         'UNCONFIRMED',
-        (delivery: Delivery): Delivery =>
-          DeliveryRepositoryContract.transitioned(
-            DeliveryRepositoryContract.timedOut(delivery).expireUnconfirmed(
-              new Date('2026-10-08T10:00:00.000Z'),
-              DeliveryRepositoryContract.duration(600_000),
-            ),
-          ),
+        (delivery: Delivery): Delivery => DeliveryRepositoryContract.unconfirmed(delivery),
       ],
       [
         'CANCELLED',
-        (delivery: Delivery): Delivery =>
-          DeliveryRepositoryContract.transitioned(delivery.cancel(new Date(SETTLED_ISO))),
+        (delivery: Delivery): Delivery => DeliveryRepositoryContract.cancelled(delivery),
       ],
     ])(
       'DB-07 %s Delivery를 저장하면 상태와 시각이 그대로 복원된다',
@@ -303,6 +270,58 @@ export class DeliveryRepositoryContract {
       ]);
 
       expect(await deliveryRepository.countUnsettled(owner)).toBe(2);
+    });
+
+    it('DB-16 여러 상태의 Delivery를 가진 알림과 다른 알림 / 알림의 상태별 Delivery 수를 조회한다 → 그 알림의 건만 상태마다 세고, 건이 없는 상태는 0이다', async (): Promise<void> => {
+      const { alarmRepository, deliveryRepository, owner }: Scenario =
+        await DeliveryRepositoryContract.scenario(createRepositories);
+      const other: AlarmId = await DeliveryRepositoryContract.storedAlarm(alarmRepository);
+      const seeds: ReadonlyArray<StatusSeed> = [
+        [(delivery: Delivery): Delivery => delivery, 1],
+        [(delivery: Delivery): Delivery => DeliveryRepositoryContract.claim(delivery), 2],
+        [(delivery: Delivery): Delivery => DeliveryRepositoryContract.retryWaiting(delivery), 3],
+        [(delivery: Delivery): Delivery => DeliveryRepositoryContract.timedOut(delivery), 4],
+        [(delivery: Delivery): Delivery => DeliveryRepositoryContract.sent(delivery), 5],
+        [(delivery: Delivery): Delivery => DeliveryRepositoryContract.failed(delivery), 6],
+        [(delivery: Delivery): Delivery => DeliveryRepositoryContract.unconfirmed(delivery), 7],
+        [(delivery: Delivery): Delivery => DeliveryRepositoryContract.cancelled(delivery), 8],
+      ];
+      await deliveryRepository.saveAll([
+        ...seeds.flatMap(
+          ([advance, count]: StatusSeed, seedIndex: number): ReadonlyArray<Delivery> =>
+            Array.from({ length: count }, (_: number, itemIndex: number): Delivery =>
+              advance(DeliveryRepositoryContract.pending(owner, `u_${seedIndex}_${itemIndex}`)),
+            ),
+        ),
+        DeliveryRepositoryContract.pending(other, 'u_0_0'),
+      ]);
+
+      expect(await deliveryRepository.countByStatus(owner)).toEqual({
+        PENDING: 1,
+        IN_FLIGHT: 2,
+        RETRY_WAIT: 3,
+        UNKNOWN: 4,
+        SENT: 5,
+        FAILED: 6,
+        UNCONFIRMED: 7,
+        CANCELLED: 8,
+      });
+    });
+
+    it('DB-16 Delivery가 하나도 없는 알림은 모든 상태의 수가 0이다', async (): Promise<void> => {
+      const { deliveryRepository, owner }: Scenario =
+        await DeliveryRepositoryContract.scenario(createRepositories);
+
+      expect(await deliveryRepository.countByStatus(owner)).toEqual({
+        PENDING: 0,
+        IN_FLIGHT: 0,
+        RETRY_WAIT: 0,
+        UNKNOWN: 0,
+        SENT: 0,
+        FAILED: 0,
+        UNCONFIRMED: 0,
+        CANCELLED: 0,
+      });
     });
 
     it('UC-09 claim 대상은 발송 가능한 건 중 긴급 우선, 같으면 먼저 만든 건이다', async (): Promise<void> => {
@@ -652,6 +671,47 @@ export class DeliveryRepositoryContract {
         DeliveryRepositoryContract.duration(35_000),
       ),
     );
+  }
+
+  private static retryWaiting(delivery: Delivery): Delivery {
+    return DeliveryRepositoryContract.transitioned(
+      DeliveryRepositoryContract.start(delivery).recordRateLimited(
+        DeliveryRepositoryContract.token(TOKEN),
+        new Date(SETTLED_ISO),
+        DeliveryRepositoryContract.retryAfter(2_000),
+      ),
+    );
+  }
+
+  private static sent(delivery: Delivery): Delivery {
+    return DeliveryRepositoryContract.transitioned(
+      DeliveryRepositoryContract.timedOut(delivery).reconcileFound([
+        { messageId: DeliveryRepositoryContract.messageId('m_2'), sentAt: new Date(NOW_ISO) },
+        { messageId: DeliveryRepositoryContract.messageId('m_1'), sentAt: new Date(SETTLED_ISO) },
+      ]),
+    );
+  }
+
+  private static failed(delivery: Delivery): Delivery {
+    return DeliveryRepositoryContract.transitioned(
+      DeliveryRepositoryContract.start(delivery).recordPermanentFailure(
+        DeliveryRepositoryContract.token(TOKEN),
+        'RECIPIENT_BLOCKED',
+      ),
+    );
+  }
+
+  private static unconfirmed(delivery: Delivery): Delivery {
+    return DeliveryRepositoryContract.transitioned(
+      DeliveryRepositoryContract.timedOut(delivery).expireUnconfirmed(
+        new Date('2026-10-08T10:00:00.000Z'),
+        DeliveryRepositoryContract.duration(600_000),
+      ),
+    );
+  }
+
+  private static cancelled(delivery: Delivery): Delivery {
+    return DeliveryRepositoryContract.transitioned(delivery.cancel(new Date(SETTLED_ISO)));
   }
 
   private static transitioned(transition: DeliveryTransition): Delivery {

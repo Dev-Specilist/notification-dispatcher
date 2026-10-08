@@ -151,6 +151,7 @@ Delivery
 | DB-13 | 정지 중인 제한기 | 더 짧은 `Retry-After`가 들어온다 | 정지 시각이 앞당겨지지 않는다 |
 | DB-14 | 같은 `UNKNOWN` Delivery | 두 워커가 reconcile 결과를 차례로 저장한다 | 먼저 저장한 결과만 반영되고 늦은 결과는 저장되지 않는다 (조건부 갱신) |
 | DB-15 | 알림 상태 변경과 Delivery 또는 확장 작업 생성을 한 트랜잭션에서 진행 중 | 트랜잭션 도중 실패한다 | 알림 상태 변경과 함께 만든 Delivery·확장 작업이 모두 롤백된다 |
+| DB-16 | 여러 상태의 Delivery를 가진 알림과 다른 알림 | 알림의 상태별 Delivery 수를 조회한다 | 그 알림의 건만 상태마다 세고, 건이 없는 상태는 0이다 |
 
 ## EXT · 외부 API adapter (Testcontainers mock 서버)
 

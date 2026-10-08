@@ -1,5 +1,9 @@
 import type { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
-import { AlarmId, RecipientId } from '@/modules/notification/domain/alarm/alarm.type';
+import {
+  AlarmId,
+  DeliveryCount,
+  RecipientId,
+} from '@/modules/notification/domain/alarm/alarm.type';
 import { Brand } from '@/shared/domain/brand.type';
 
 export type DeliveryId = string & Brand<'DeliveryId'>;
@@ -145,3 +149,10 @@ export interface DeliveryRejected {
 }
 
 export type DeliveryTransition = DeliveryTransitioned | DeliveryReleased | DeliveryRejected;
+
+export interface DeliveryStatusTally {
+  readonly status: DeliveryStatus;
+  readonly count: number;
+}
+
+export type DeliveryStatusCounts = Readonly<Record<DeliveryStatus, DeliveryCount>>;
