@@ -5,6 +5,7 @@ import {
   portSchema,
   positiveMillisecondsSchema,
   processRoleSchema,
+  timerDelayMsSchema,
 } from '@/shared/config/primitive.schema';
 
 describe('primitive 스키마', () => {
@@ -31,6 +32,23 @@ describe('primitive 스키마', () => {
   it.each(['', '0', '-1'])('양수 밀리초는 "%s"를 거부한다', (raw: string) => {
     expect(positiveMillisecondsSchema.safeParse(raw).success).toBe(false);
   });
+
+  it.each(['-1', '1.5', '2147483648'])(
+    '타이머 대기 밀리초는 Node 타이머 상한을 넘거나 정수가 아닌 "%s"를 거부한다',
+    (raw: string): void => {
+      expect(timerDelayMsSchema.safeParse(raw).success).toBe(false);
+    },
+  );
+
+  it.each([
+    ['0', 0],
+    ['2147483647', 2_147_483_647],
+  ])(
+    '타이머 대기 밀리초는 0부터 Node 타이머 상한까지 허용한다 ("%s")',
+    (raw: string, delayMs: number): void => {
+      expect(timerDelayMsSchema.parse(raw)).toBe(delayMs);
+    },
+  );
 
   it('프로세스 역할은 api, worker, migrate만 허용한다', (): void => {
     expect(processRoleSchema.options).toEqual(['api', 'worker', 'migrate']);

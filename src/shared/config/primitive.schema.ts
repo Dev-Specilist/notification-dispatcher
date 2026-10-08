@@ -6,6 +6,8 @@ const integer = numericInput
   .transform((raw: number | string): number => Number(raw))
   .pipe(z.number().int());
 
+const MAX_TIMER_DELAY_MS: number = 2_147_483_647;
+
 export const hostSchema = z.string().trim().min(1).brand<'Host'>();
 
 export type HostSchema = typeof hostSchema;
@@ -27,6 +29,10 @@ export type Milliseconds = z.infer<MillisecondsSchema>;
 export const positiveMillisecondsSchema = integer.pipe(z.number().min(1)).brand<'Milliseconds'>();
 
 export type PositiveMillisecondsSchema = typeof positiveMillisecondsSchema;
+
+export const timerDelayMsSchema = integer
+  .pipe(z.number().min(0).max(MAX_TIMER_DELAY_MS))
+  .brand<'TimerDelayMs'>();
 
 export const databaseUrlSchema = z.url({ protocol: /^postgres(ql)?$/ }).brand<'DatabaseUrl'>();
 
