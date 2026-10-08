@@ -1,4 +1,37 @@
 services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: notification
+      POSTGRES_PASSWORD: notification
+      POSTGRES_DB: notification
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U notification -d notification']
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  mock:
+    image: ghcr.io/us-all/backend-assignment-api:1.2
+    ports:
+      - '4000:4000'
+
+  migrate:
+    build:
+      context: .
+      target: migrate
+    environment:
+      LOG_FORMAT: json
+      DATABASE_URL: postgres://notification:notification@postgres:5432/notification
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
   api:
     build:
       context: .
@@ -8,6 +41,11 @@ services:
       DATABASE_URL: postgres://notification:notification@postgres:5432/notification
     ports:
       - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     stop_grace_period: 35s
 
   worker:
@@ -17,4 +55,14 @@ services:
     environment:
       LOG_FORMAT: json
       DATABASE_URL: postgres://notification:notification@postgres:5432/notification
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      mock:
+        condition: service_healthy
     stop_grace_period: 35s
+
+volumes:
+  postgres_data:

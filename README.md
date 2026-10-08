@@ -217,6 +217,10 @@ docker compose up --build
 docker compose up --build --scale worker=3
 ```
 
+compose는 `postgres`가 healthy가 되면 일회성 `migrate`를 실행하고, `migrate`가 성공적으로 끝난 뒤 `api`와 `worker`를 띄웁니다. `worker`는 외부 발송 API인 `mock`이 healthy가 될 때까지도 기다립니다.
+
+PostgreSQL 데이터는 이름 있는 볼륨(`postgres_data`)에 저장되어 `docker compose down` 후에도 남습니다. 처음 상태로 되돌리려면 `docker compose down -v`로 볼륨까지 지웁니다.
+
 로컬 개발: 도구 버전(node 24.21.0, pnpm 10.34.5)은 `mise.toml`로 고정되어 있습니다.
 
 ```bash
@@ -225,6 +229,12 @@ mise install
 
 ```bash
 pnpm install
+```
+
+로컬 PostgreSQL은 compose의 `postgres` 서비스만 띄워서 씁니다.
+
+```bash
+docker compose up -d postgres
 ```
 
 api와 worker는 기동할 때 env를 검증하고, PostgreSQL 접속 주소 `DATABASE_URL`은 기본값 없는 필수값입니다. `.env` 파일은 읽지 않으므로 셸에서 지정합니다.

@@ -35,3 +35,7 @@ EXPOSE 3001
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
   CMD wget -qO- http://127.0.0.1:3001/readyz || exit 1
 CMD ["node", "dist/worker.js"]
+
+FROM runtime AS migrate
+COPY --chown=node:node drizzle ./drizzle
+CMD ["node", "dist/migrate.js"]
