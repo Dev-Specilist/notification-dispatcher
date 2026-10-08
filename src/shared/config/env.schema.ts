@@ -21,7 +21,7 @@ const DEFAULT_TIMEOUT: Milliseconds = positiveMillisecondsSchema.parse(25000);
 const DEFAULT_MOCK_API_URL: HttpUrl = httpUrlSchema.parse('http://localhost:4000');
 const DEFAULT_MAX_REQUEST: Milliseconds = positiveMillisecondsSchema.parse(5000);
 const DEFAULT_LEASE: Milliseconds = positiveMillisecondsSchema.parse(30000);
-const DEFAULT_RECONCILE_DELAY: Milliseconds = millisecondsSchema.parse(35000);
+const DEFAULT_RECONCILE_DELAY: Milliseconds = positiveMillisecondsSchema.parse(35000);
 const DEFAULT_RETRY_MAX_ATTEMPTS: PositiveInteger = positiveIntegerSchema.parse(5);
 const DEFAULT_RETRY_BASE_DELAY: Milliseconds = positiveMillisecondsSchema.parse(1000);
 const DEFAULT_RETRY_MAX_DELAY: Milliseconds = positiveMillisecondsSchema.parse(60000);
@@ -44,7 +44,7 @@ export const createEnvSchema = (defaultPort: Port): EnvSchema =>
     MOCK_API_URL: httpUrlSchema.default(DEFAULT_MOCK_API_URL),
     DISPATCH_MAX_REQUEST_MS: positiveMillisecondsSchema.default(DEFAULT_MAX_REQUEST),
     DISPATCH_LEASE_MS: positiveMillisecondsSchema.default(DEFAULT_LEASE),
-    RECONCILE_DELAY_MS: millisecondsSchema.default(DEFAULT_RECONCILE_DELAY),
+    RECONCILE_DELAY_MS: positiveMillisecondsSchema.default(DEFAULT_RECONCILE_DELAY),
     RETRY_MAX_ATTEMPTS: positiveIntegerSchema.default(DEFAULT_RETRY_MAX_ATTEMPTS),
     RETRY_BASE_DELAY_MS: positiveMillisecondsSchema.default(DEFAULT_RETRY_BASE_DELAY),
     RETRY_MAX_DELAY_MS: positiveMillisecondsSchema.default(DEFAULT_RETRY_MAX_DELAY),

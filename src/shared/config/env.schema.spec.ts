@@ -148,7 +148,7 @@ describe('환경변수 스키마', () => {
   it.each<WorkerSettingCase>([
     ['DISPATCH_MAX_REQUEST_MS', '0'],
     ['DISPATCH_LEASE_MS', '0'],
-    ['RECONCILE_DELAY_MS', '-1'],
+    ['RECONCILE_DELAY_MS', '0'],
     ['RETRY_MAX_ATTEMPTS', '0'],
     ['RETRY_BASE_DELAY_MS', '0'],
     ['RETRY_MAX_DELAY_MS', '0'],

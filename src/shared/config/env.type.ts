@@ -23,7 +23,7 @@ export type EnvShape = {
   readonly MOCK_API_URL: z.ZodDefault<HttpUrlSchema>;
   readonly DISPATCH_MAX_REQUEST_MS: z.ZodDefault<PositiveMillisecondsSchema>;
   readonly DISPATCH_LEASE_MS: z.ZodDefault<PositiveMillisecondsSchema>;
-  readonly RECONCILE_DELAY_MS: z.ZodDefault<MillisecondsSchema>;
+  readonly RECONCILE_DELAY_MS: z.ZodDefault<PositiveMillisecondsSchema>;
   readonly RETRY_MAX_ATTEMPTS: z.ZodDefault<PositiveIntegerSchema>;
   readonly RETRY_BASE_DELAY_MS: z.ZodDefault<PositiveMillisecondsSchema>;
   readonly RETRY_MAX_DELAY_MS: z.ZodDefault<PositiveMillisecondsSchema>;
