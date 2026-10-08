@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
 import { Pool } from 'pg';
-import { ClockPort } from '@/modules/notification/application/port/clock.port';
-import { IdGeneratorPort } from '@/modules/notification/application/port/id-generator.port';
-import { UnitOfWorkPort } from '@/modules/notification/application/port/unit-of-work.port';
-import { CreateAlarmUseCase } from '@/modules/notification/application/use-case/create-alarm.use-case';
+import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
+import { IdGeneratorPort } from '@/modules/notification/application/port/out/id-generator.port';
+import { UnitOfWorkPort } from '@/modules/notification/application/port/out/unit-of-work.port';
+import { CreateAlarmUseCase } from '@/modules/notification/application/port/in/create-alarm.use-case';
+import { CreateAlarmService } from '@/modules/notification/application/service/create-alarm.service';
 import { DrizzleUnitOfWorkAdapter } from '@/modules/notification/infrastructure/adapter/drizzle-unit-of-work.adapter';
 import { RandomIdGeneratorAdapter } from '@/modules/notification/infrastructure/adapter/random-id-generator.adapter';
 import { SystemClockAdapter } from '@/modules/notification/infrastructure/adapter/system-clock.adapter';
@@ -28,7 +29,7 @@ import { AlarmController } from '@/modules/notification/presentation/alarm.contr
         unitOfWork: UnitOfWorkPort,
         idGenerator: IdGeneratorPort,
         clock: ClockPort,
-      ): CreateAlarmUseCase => new CreateAlarmUseCase(unitOfWork, idGenerator, clock),
+      ): CreateAlarmUseCase => new CreateAlarmService(unitOfWork, idGenerator, clock),
     },
   ],
 })

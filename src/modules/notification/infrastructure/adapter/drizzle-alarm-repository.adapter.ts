@@ -2,7 +2,7 @@ import { SQL, and, desc, eq, sql } from 'drizzle-orm';
 import { PgColumn } from 'drizzle-orm/pg-core';
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmId, AlarmSnapshot } from '@/modules/notification/domain/alarm/alarm.type';
-import { AlarmRepositoryPort } from '@/modules/notification/application/port/alarm-repository.port';
+import { AlarmRepositoryPort } from '@/modules/notification/application/port/out/alarm-repository.port';
 import {
   AlarmLookup,
   AlarmPage,
@@ -10,7 +10,7 @@ import {
   AlarmPageStart,
   AlarmPosition,
   ValueFilter,
-} from '@/modules/notification/application/port/alarm-repository.type';
+} from '@/modules/notification/application/port/out/alarm-repository.type';
 import { alarms } from '@/modules/notification/infrastructure/persistence/alarm.table';
 import { AlarmRowMapper } from '@/modules/notification/infrastructure/persistence/alarm-row.mapper';
 import {

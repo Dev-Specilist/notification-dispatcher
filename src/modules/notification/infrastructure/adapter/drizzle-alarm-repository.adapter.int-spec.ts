@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { AlarmCreation, AlarmTransition } from '@/modules/notification/domain/alarm/alarm.type';
-import { AlarmRepositoryContract } from '@/modules/notification/application/port/alarm-repository.contract';
+import { AlarmRepositoryContract } from '@/modules/notification/application/port/out/alarm-repository.contract';
 import { DrizzleAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/drizzle-alarm-repository.adapter';
 import { NotificationDatabaseFactory } from '@/modules/notification/infrastructure/persistence/notification-database.factory';
 import { TestDatabase } from '@/shared/database/testing/test-database';

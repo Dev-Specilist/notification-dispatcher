@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { UnitOfWorkPort } from '@/modules/notification/application/port/unit-of-work.port';
-import { TransactionWork } from '@/modules/notification/application/port/unit-of-work.type';
+import { UnitOfWorkPort } from '@/modules/notification/application/port/out/unit-of-work.port';
+import { TransactionWork } from '@/modules/notification/application/port/out/unit-of-work.type';
 import { DrizzleAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/drizzle-alarm-repository.adapter';
 import { DrizzleDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/drizzle-delivery-repository.adapter';
 import { DrizzleExpansionJobRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/drizzle-expansion-job-repository.adapter';

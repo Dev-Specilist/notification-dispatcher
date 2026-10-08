@@ -1,5 +1,5 @@
 import { describe } from 'vitest';
-import { ExpansionJobRepositoryContract } from '@/modules/notification/application/port/expansion-job-repository.contract';
+import { ExpansionJobRepositoryContract } from '@/modules/notification/application/port/out/expansion-job-repository.contract';
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-expansion-job-repository.adapter';
 

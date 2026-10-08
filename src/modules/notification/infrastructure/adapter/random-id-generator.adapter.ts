@@ -4,7 +4,7 @@ import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predi
 import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import { DeliveryId } from '@/modules/notification/domain/delivery/delivery.type';
-import { IdGeneratorPort } from '@/modules/notification/application/port/id-generator.port';
+import { IdGeneratorPort } from '@/modules/notification/application/port/out/id-generator.port';
 
 @Injectable()
 export class RandomIdGeneratorAdapter implements IdGeneratorPort {

@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import { RetryAfterMs } from '@/modules/notification/domain/delivery/delivery.type';
-import { MessageSenderPort } from '@/modules/notification/application/port/message-sender.port';
+import { MessageSenderPort } from '@/modules/notification/application/port/out/message-sender.port';
 import {
   OutgoingMessage,
   SendOutcome,
-} from '@/modules/notification/application/port/message-sender.type';
+} from '@/modules/notification/application/port/out/message-sender.type';
 import {
   acceptedBodySchema,
   rejectedBodySchema,

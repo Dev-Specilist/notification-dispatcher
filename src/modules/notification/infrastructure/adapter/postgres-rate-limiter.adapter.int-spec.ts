@@ -3,7 +3,7 @@ import { SQL, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import { RetryAfterMs } from '@/modules/notification/domain/delivery/delivery.type';
-import { SendPermit } from '@/modules/notification/application/port/send-permit.type';
+import { SendPermit } from '@/modules/notification/application/port/out/send-permit.type';
 import { PostgresRateLimiterAdapter } from '@/modules/notification/infrastructure/adapter/postgres-rate-limiter.adapter';
 import {
   DatabaseClock,

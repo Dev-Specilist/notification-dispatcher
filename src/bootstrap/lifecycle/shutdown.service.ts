@@ -6,7 +6,7 @@ import {
   OnApplicationShutdown,
 } from '@nestjs/common';
 import { Pool } from 'pg';
-import { ReadinessPort } from '@/modules/health/application/port/readiness.port';
+import { ReadinessPort } from '@/modules/health/application/port/out/readiness.port';
 import { Milliseconds } from '@/shared/config/primitive.schema';
 import { TypedConfigService } from '@/shared/config/typed-config.service';
 

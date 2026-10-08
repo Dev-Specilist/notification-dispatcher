@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { HealthIndicatorResult, HealthIndicatorService } from '@nestjs/terminus';
-import { ReadinessPort } from '@/modules/health/application/port/readiness.port';
+import { ReadinessPort } from '@/modules/health/application/port/out/readiness.port';
 
 type ReadinessIndicatorKey = 'lifecycle';
 

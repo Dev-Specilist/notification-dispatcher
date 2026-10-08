@@ -7,7 +7,7 @@ import {
   OutgoingMessage,
   SendOutcome,
   SendOutcomeKind,
-} from '@/modules/notification/application/port/message-sender.type';
+} from '@/modules/notification/application/port/out/message-sender.type';
 import { MockApiPredicates } from '@/modules/notification/infrastructure/adapter/mock-api.predicate';
 import { RequestTimeoutMs } from '@/modules/notification/infrastructure/adapter/mock-api.type';
 import { MockMessageSenderAdapter } from '@/modules/notification/infrastructure/adapter/mock-message-sender.adapter';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ReadinessPort } from '@/modules/health/application/port/readiness.port';
+import { ReadinessPort } from '@/modules/health/application/port/out/readiness.port';
 import { InMemoryReadinessAdapter } from '@/modules/health/infrastructure/adapter/in-memory-readiness.adapter';
 
 describe('InMemoryReadinessAdapter', () => {

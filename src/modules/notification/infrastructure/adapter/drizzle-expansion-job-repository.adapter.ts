@@ -1,10 +1,10 @@
 import { eq, sql } from 'drizzle-orm';
 import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
-import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/expansion-job-repository.port';
+import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/out/expansion-job-repository.port';
 import {
   ExpansionJobLookup,
   ExpansionProgress,
-} from '@/modules/notification/application/port/expansion-job-repository.type';
+} from '@/modules/notification/application/port/out/expansion-job-repository.type';
 import { expansionJobs } from '@/modules/notification/infrastructure/persistence/expansion-job.table';
 import { ExpansionJobRowMapper } from '@/modules/notification/infrastructure/persistence/expansion-job-row.mapper';
 import {

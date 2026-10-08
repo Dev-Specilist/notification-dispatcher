@@ -4,12 +4,12 @@ import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predi
 import { AlarmId, DeliveryCount } from '@/modules/notification/domain/alarm/alarm.type';
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
 import { DeliverySnapshot, LeaseToken } from '@/modules/notification/domain/delivery/delivery.type';
-import { DeliveryRepositoryPort } from '@/modules/notification/application/port/delivery-repository.port';
+import { DeliveryRepositoryPort } from '@/modules/notification/application/port/out/delivery-repository.port';
 import {
   DeliveryCandidate,
   LeasedSave,
   ReconciledSave,
-} from '@/modules/notification/application/port/delivery-repository.type';
+} from '@/modules/notification/application/port/out/delivery-repository.type';
 import { deliveries } from '@/modules/notification/infrastructure/persistence/delivery.table';
 import { DeliveryRowMapper } from '@/modules/notification/infrastructure/persistence/delivery-row.mapper';
 import {

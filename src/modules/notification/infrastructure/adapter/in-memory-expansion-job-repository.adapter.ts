@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
-import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/expansion-job-repository.port';
+import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/out/expansion-job-repository.port';
 import {
   ExpansionJob,
   ExpansionJobFound,
   ExpansionJobLookup,
   ExpansionProgress,
-} from '@/modules/notification/application/port/expansion-job-repository.type';
-import { PageCursor } from '@/modules/notification/application/port/recipient-directory.type';
+} from '@/modules/notification/application/port/out/expansion-job-repository.type';
+import { PageCursor } from '@/modules/notification/application/port/out/recipient-directory.type';
 import { Rollback } from '@/modules/notification/infrastructure/adapter/rollback.type';
 
 @Injectable()

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { QueryResult } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ExpansionJobRepositoryContract } from '@/modules/notification/application/port/expansion-job-repository.contract';
+import { ExpansionJobRepositoryContract } from '@/modules/notification/application/port/out/expansion-job-repository.contract';
 import { DrizzleAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/drizzle-alarm-repository.adapter';
 import { DrizzleExpansionJobRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/drizzle-expansion-job-repository.adapter';
 import { NotificationDatabaseFactory } from '@/modules/notification/infrastructure/persistence/notification-database.factory';

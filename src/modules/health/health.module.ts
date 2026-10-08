@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TerminusModule } from '@nestjs/terminus';
-import { ReadinessPort } from '@/modules/health/application/port/readiness.port';
+import { ReadinessPort } from '@/modules/health/application/port/out/readiness.port';
 import { InMemoryReadinessAdapter } from '@/modules/health/infrastructure/adapter/in-memory-readiness.adapter';
 import { DatabaseHealthIndicator } from '@/modules/health/infrastructure/database.health-indicator';
 import { ReadinessHealthIndicator } from '@/modules/health/infrastructure/readiness.health-indicator';

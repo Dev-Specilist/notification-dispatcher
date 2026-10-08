@@ -1,6 +1,6 @@
 import { SQL, sql } from 'drizzle-orm';
-import { SendPermitPort } from '@/modules/notification/application/port/send-permit.port';
-import { SendPermit } from '@/modules/notification/application/port/send-permit.type';
+import { SendPermitPort } from '@/modules/notification/application/port/out/send-permit.port';
+import { SendPermit } from '@/modules/notification/application/port/out/send-permit.type';
 import {
   DatabaseClock,
   RateLimiterSettings,

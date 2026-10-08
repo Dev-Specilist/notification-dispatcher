@@ -4,7 +4,7 @@ import { HealthCheckResult } from '@nestjs/terminus';
 import { Test, TestingModule } from '@nestjs/testing';
 import { request, spec } from 'pactum';
 import { Pool } from 'pg';
-import { ReadinessPort } from '@/modules/health/application/port/readiness.port';
+import { ReadinessPort } from '@/modules/health/application/port/out/readiness.port';
 import { ProcessRole } from '@/shared/config/primitive.schema';
 import { TestDatabase } from '@/shared/database/testing/test-database';
 

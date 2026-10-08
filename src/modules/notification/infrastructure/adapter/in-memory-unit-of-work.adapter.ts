@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { UnitOfWorkPort } from '@/modules/notification/application/port/unit-of-work.port';
-import { TransactionWork } from '@/modules/notification/application/port/unit-of-work.type';
+import { UnitOfWorkPort } from '@/modules/notification/application/port/out/unit-of-work.port';
+import { TransactionWork } from '@/modules/notification/application/port/out/unit-of-work.type';
 import { InMemoryRepositories } from '@/modules/notification/infrastructure/adapter/in-memory-unit-of-work.type';
 import { Rollback } from '@/modules/notification/infrastructure/adapter/rollback.type';
 

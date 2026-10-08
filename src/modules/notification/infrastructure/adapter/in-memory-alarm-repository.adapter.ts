@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmId, AlarmSnapshot } from '@/modules/notification/domain/alarm/alarm.type';
-import { AlarmRepositoryPort } from '@/modules/notification/application/port/alarm-repository.port';
+import { AlarmRepositoryPort } from '@/modules/notification/application/port/out/alarm-repository.port';
 import {
   AlarmFound,
   AlarmLookup,
@@ -10,7 +10,7 @@ import {
   AlarmPageStart,
   AlarmPosition,
   ValueFilter,
-} from '@/modules/notification/application/port/alarm-repository.type';
+} from '@/modules/notification/application/port/out/alarm-repository.type';
 import { Rollback } from '@/modules/notification/infrastructure/adapter/rollback.type';
 
 @Injectable()

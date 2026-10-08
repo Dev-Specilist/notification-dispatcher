@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ReadinessPort } from '@/modules/health/application/port/readiness.port';
+import { ReadinessPort } from '@/modules/health/application/port/out/readiness.port';
 
 @Injectable()
 export class InMemoryReadinessAdapter implements ReadinessPort {

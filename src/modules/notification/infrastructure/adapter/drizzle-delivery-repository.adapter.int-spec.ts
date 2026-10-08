@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DeliveryRepositoryContract } from '@/modules/notification/application/port/delivery-repository.contract';
+import { DeliveryRepositoryContract } from '@/modules/notification/application/port/out/delivery-repository.contract';
 import { DrizzleAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/drizzle-alarm-repository.adapter';
 import { DrizzleDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/drizzle-delivery-repository.adapter';
 import { NotificationDatabaseFactory } from '@/modules/notification/infrastructure/persistence/notification-database.factory';

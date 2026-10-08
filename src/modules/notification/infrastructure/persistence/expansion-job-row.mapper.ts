@@ -4,7 +4,7 @@ import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
 import {
   ExpansionJob,
   ExpansionProgress,
-} from '@/modules/notification/application/port/expansion-job-repository.type';
+} from '@/modules/notification/application/port/out/expansion-job-repository.type';
 import { ExpansionJobRow } from '@/modules/notification/infrastructure/persistence/notification-database.type';
 
 interface ProgressColumns {

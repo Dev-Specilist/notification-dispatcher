@@ -1,7 +1,7 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { z } from 'zod';
 import { AlarmCreation } from '@/modules/notification/domain/alarm/alarm.type';
-import { CreateAlarmUseCase } from '@/modules/notification/application/use-case/create-alarm.use-case';
+import { CreateAlarmUseCase } from '@/modules/notification/application/port/in/create-alarm.use-case';
 import { AlarmResponse } from '@/modules/notification/presentation/alarm-response.type';
 import { AlarmPresenter } from '@/modules/notification/presentation/alarm.presenter';
 import { createAlarmSchema } from '@/modules/notification/presentation/create-alarm.schema';

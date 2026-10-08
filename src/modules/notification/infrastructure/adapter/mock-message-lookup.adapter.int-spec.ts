@@ -3,11 +3,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import { DeliveryId, RecordedMessage } from '@/modules/notification/domain/delivery/delivery.type';
-import { MessageLookupResult } from '@/modules/notification/application/port/message-lookup.type';
+import { MessageLookupResult } from '@/modules/notification/application/port/out/message-lookup.type';
 import {
   OutgoingMessage,
   SendOutcome,
-} from '@/modules/notification/application/port/message-sender.type';
+} from '@/modules/notification/application/port/out/message-sender.type';
 import { MockApiPredicates } from '@/modules/notification/infrastructure/adapter/mock-api.predicate';
 import { RequestTimeoutMs } from '@/modules/notification/infrastructure/adapter/mock-api.type';
 import { MockMessageLookupAdapter } from '@/modules/notification/infrastructure/adapter/mock-message-lookup.adapter';

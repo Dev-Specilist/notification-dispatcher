@@ -12,8 +12,8 @@ import {
   DeliveryCandidate,
   LeasedSave,
   ReconciledSave,
-} from '@/modules/notification/application/port/delivery-repository.type';
-import { DeliveryRepositoryPort } from '@/modules/notification/application/port/delivery-repository.port';
+} from '@/modules/notification/application/port/out/delivery-repository.type';
+import { DeliveryRepositoryPort } from '@/modules/notification/application/port/out/delivery-repository.port';
 import { Rollback } from '@/modules/notification/infrastructure/adapter/rollback.type';
 
 @Injectable()

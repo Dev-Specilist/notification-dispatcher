@@ -10,7 +10,7 @@ import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import { DeliveryId } from '@/modules/notification/domain/delivery/delivery.type';
 import { Rollback } from '@/modules/notification/infrastructure/adapter/rollback.type';
-import { TransactionRepositories } from '@/modules/notification/application/port/unit-of-work.type';
+import { TransactionRepositories } from '@/modules/notification/application/port/out/unit-of-work.type';
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-expansion-job-repository.adapter';

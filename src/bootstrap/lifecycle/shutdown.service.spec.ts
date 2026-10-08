@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'v
 import { Test, TestingModule } from '@nestjs/testing';
 import { Pool } from 'pg';
 import { ShutdownService } from '@/bootstrap/lifecycle/shutdown.service';
-import { ReadinessPort } from '@/modules/health/application/port/readiness.port';
+import { ReadinessPort } from '@/modules/health/application/port/out/readiness.port';
 import { InMemoryReadinessAdapter } from '@/modules/health/infrastructure/adapter/in-memory-readiness.adapter';
 import { createEnvSchema } from '@/shared/config/env.schema';
 import { portSchema } from '@/shared/config/primitive.schema';

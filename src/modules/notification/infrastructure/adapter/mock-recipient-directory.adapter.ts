@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { RecipientId } from '@/modules/notification/domain/alarm/alarm.type';
-import { RecipientDirectoryPort } from '@/modules/notification/application/port/recipient-directory.port';
+import { RecipientDirectoryPort } from '@/modules/notification/application/port/out/recipient-directory.port';
 import {
   FollowingPage,
   PageCursor,
   RecipientPage,
-} from '@/modules/notification/application/port/recipient-directory.type';
+} from '@/modules/notification/application/port/out/recipient-directory.type';
 import { MockApiHttp } from '@/modules/notification/infrastructure/adapter/mock-api-http.util';
 import { usersBodySchema } from '@/modules/notification/infrastructure/adapter/mock-api.schema';
 import { RecipientDirectorySettings } from '@/modules/notification/infrastructure/adapter/mock-api.type';

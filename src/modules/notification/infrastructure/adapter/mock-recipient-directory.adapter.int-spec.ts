@@ -5,7 +5,7 @@ import {
   NextPage,
   PageCursor,
   RecipientPage,
-} from '@/modules/notification/application/port/recipient-directory.type';
+} from '@/modules/notification/application/port/out/recipient-directory.type';
 import { MockApiPredicates } from '@/modules/notification/infrastructure/adapter/mock-api.predicate';
 import {
   RecipientDirectorySettings,

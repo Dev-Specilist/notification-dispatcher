@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import { DeliveryId, RecordedMessage } from '@/modules/notification/domain/delivery/delivery.type';
-import { MessageLookupPort } from '@/modules/notification/application/port/message-lookup.port';
-import { MessageLookupResult } from '@/modules/notification/application/port/message-lookup.type';
+import { MessageLookupPort } from '@/modules/notification/application/port/out/message-lookup.port';
+import { MessageLookupResult } from '@/modules/notification/application/port/out/message-lookup.type';
 import { MockApiHttp } from '@/modules/notification/infrastructure/adapter/mock-api-http.util';
 import { lookupBodySchema } from '@/modules/notification/infrastructure/adapter/mock-api.schema';
 import { MockApiSettings } from '@/modules/notification/infrastructure/adapter/mock-api.type';

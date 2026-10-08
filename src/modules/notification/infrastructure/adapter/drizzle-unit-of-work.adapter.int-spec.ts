@@ -21,36 +21,36 @@ import { RetryPolicy } from '@/modules/notification/domain/delivery/retry-policy
 import { RetryPolicyCreation } from '@/modules/notification/domain/delivery/retry-policy.type';
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
-import { AlarmLookup } from '@/modules/notification/application/port/alarm-repository.type';
-import { ExpansionJobLookup } from '@/modules/notification/application/port/expansion-job-repository.type';
-import { ClockPort } from '@/modules/notification/application/port/clock.port';
-import { DispatchSettingsPort } from '@/modules/notification/application/port/dispatch-settings.port';
-import { IdGeneratorPort } from '@/modules/notification/application/port/id-generator.port';
-import { JitterSourcePort } from '@/modules/notification/application/port/jitter-source.port';
-import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/lease-token-generator.port';
-import { MessageSenderPort } from '@/modules/notification/application/port/message-sender.port';
+import { AlarmLookup } from '@/modules/notification/application/port/out/alarm-repository.type';
+import { ExpansionJobLookup } from '@/modules/notification/application/port/out/expansion-job-repository.type';
+import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
+import { DispatchSettingsPort } from '@/modules/notification/application/port/out/dispatch-settings.port';
+import { IdGeneratorPort } from '@/modules/notification/application/port/out/id-generator.port';
+import { JitterSourcePort } from '@/modules/notification/application/port/out/jitter-source.port';
+import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/out/lease-token-generator.port';
+import { MessageSenderPort } from '@/modules/notification/application/port/out/message-sender.port';
 import {
   OutgoingMessage,
   SendOutcome,
-} from '@/modules/notification/application/port/message-sender.type';
-import { RecipientDirectoryPort } from '@/modules/notification/application/port/recipient-directory.port';
+} from '@/modules/notification/application/port/out/message-sender.type';
+import { RecipientDirectoryPort } from '@/modules/notification/application/port/out/recipient-directory.port';
 import {
   PageCursor,
   RecipientPage,
-} from '@/modules/notification/application/port/recipient-directory.type';
-import { SendPermitPort } from '@/modules/notification/application/port/send-permit.port';
-import { SendPermit } from '@/modules/notification/application/port/send-permit.type';
-import { TransactionRepositories } from '@/modules/notification/application/port/unit-of-work.type';
+} from '@/modules/notification/application/port/out/recipient-directory.type';
+import { SendPermitPort } from '@/modules/notification/application/port/out/send-permit.port';
+import { SendPermit } from '@/modules/notification/application/port/out/send-permit.type';
+import { TransactionRepositories } from '@/modules/notification/application/port/out/unit-of-work.type';
 import {
   CancelAlarmResult,
   StartDispatchResult,
-} from '@/modules/notification/application/use-case/alarm-result.type';
-import { CancelAlarmUseCase } from '@/modules/notification/application/use-case/cancel-alarm.use-case';
-import { ExpansionResult } from '@/modules/notification/application/use-case/expand-recipients.type';
-import { ExpandRecipientsUseCase } from '@/modules/notification/application/use-case/expand-recipients.use-case';
-import { SendAttempt } from '@/modules/notification/application/use-case/send-next-delivery.type';
-import { SendNextDeliveryUseCase } from '@/modules/notification/application/use-case/send-next-delivery.use-case';
-import { StartDispatchUseCase } from '@/modules/notification/application/use-case/start-dispatch.use-case';
+} from '@/modules/notification/application/port/in/alarm-result.type';
+import { CancelAlarmService } from '@/modules/notification/application/service/cancel-alarm.service';
+import { ExpansionResult } from '@/modules/notification/application/port/in/expand-recipients.type';
+import { ExpandRecipientsService } from '@/modules/notification/application/service/expand-recipients.service';
+import { SendAttempt } from '@/modules/notification/application/port/in/send-next-delivery.type';
+import { SendNextDeliveryService } from '@/modules/notification/application/service/send-next-delivery.service';
+import { StartDispatchService } from '@/modules/notification/application/service/start-dispatch.service';
 import { DrizzleUnitOfWorkAdapter } from '@/modules/notification/infrastructure/adapter/drizzle-unit-of-work.adapter';
 import { NotificationDatabaseFactory } from '@/modules/notification/infrastructure/persistence/notification-database.factory';
 import { QueryResult } from 'pg';
@@ -232,7 +232,7 @@ class BothWorkersFetchFirstDirectory implements RecipientDirectoryPort {
   }
 }
 
-const drainAll = async (useCase: SendNextDeliveryUseCase): Promise<void> => {
+const drainAll = async (useCase: SendNextDeliveryService): Promise<void> => {
   let attempt: SendAttempt = await useCase.execute();
   while (attempt.kind !== 'idle') {
     attempt = await useCase.execute();
@@ -290,8 +290,8 @@ describe('DrizzleUnitOfWorkAdapter', () => {
       { timeout: 2_000, interval: 10 },
     );
 
-  const startDispatch = (): StartDispatchUseCase =>
-    new StartDispatchUseCase(unitOfWork, new RandomIdGenerator(), new FixedClock());
+  const startDispatch = (): StartDispatchService =>
+    new StartDispatchService(unitOfWork, new RandomIdGenerator(), new FixedClock());
 
   it('DB-15 알림 상태 변경과 Delivery 생성을 한 트랜잭션에서 진행 중 / 트랜잭션 도중 실패한다 → 알림 상태 변경과 Delivery 생성이 함께 롤백된다', async (): Promise<void> => {
     const alarm: Alarm = urgentDraft();
@@ -397,7 +397,7 @@ describe('DrizzleUnitOfWorkAdapter', () => {
 
     const [started, cancelled]: StartAndCancelResults = await Promise.all([
       startDispatch().execute(id),
-      new CancelAlarmUseCase(unitOfWork, new FixedClock()).execute(id),
+      new CancelAlarmService(unitOfWork, new FixedClock()).execute(id),
     ]);
     const outcome: OutcomePair = [started.kind, cancelled.kind];
     const deliveryStatuses: ReadonlyArray<string> = (await deliveriesOf(id)).map(
@@ -436,8 +436,8 @@ describe('DrizzleUnitOfWorkAdapter', () => {
       ),
     );
     const sender: RecordingMessageSender = new RecordingMessageSender();
-    const worker = (): SendNextDeliveryUseCase =>
-      new SendNextDeliveryUseCase(
+    const worker = (): SendNextDeliveryService =>
+      new SendNextDeliveryService(
         unitOfWork,
         new AlwaysGrantedPermit(),
         sender,
@@ -463,8 +463,8 @@ describe('DrizzleUnitOfWorkAdapter', () => {
     const { id }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
     await startDispatch().execute(id);
     const directory: BothWorkersFetchFirstDirectory = new BothWorkersFetchFirstDirectory();
-    const expander = (): ExpandRecipientsUseCase =>
-      new ExpandRecipientsUseCase(unitOfWork, directory, new RandomIdGenerator(), new FixedClock());
+    const expander = (): ExpandRecipientsService =>
+      new ExpandRecipientsService(unitOfWork, directory, new RandomIdGenerator(), new FixedClock());
 
     const results: ReadonlyArray<ExpansionResult> = await Promise.all([
       expander().execute(id),
