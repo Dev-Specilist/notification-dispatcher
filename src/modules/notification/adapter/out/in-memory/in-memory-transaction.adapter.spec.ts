@@ -164,6 +164,25 @@ describe('InMemoryTransactionAdapter', () => {
     await expect(failed).rejects.toThrow('first transaction failed');
     expect(await next).toBe('ran');
   });
+
+  it('DB-18 트랜잭션이 실패하면 그 안에서 건 확장 작업 lease도 되돌아가 바로 다시 claim할 수 있다', async (): Promise<void> => {
+    const { expansionJobRepository, transaction }: Fixture = fixture();
+    const claimedAt: Date = new Date('2026-10-07T09:06:00.000Z');
+    const leaseUntil: Date = new Date('2026-10-07T09:06:30.000Z');
+    await expansionJobRepository.enqueue(alarmId(FIRST_ID), new Date(ENQUEUED_ISO));
+
+    await expect(
+      transaction.run(async ({ expansionQueue }: TransactionRepositories): Promise<void> => {
+        await expansionQueue.claimNext(claimedAt, leaseUntil);
+        throw new Error('expansion failed after claim');
+      }),
+    ).rejects.toThrow('expansion failed after claim');
+
+    expect(await expansionJobRepository.claimNext(claimedAt, leaseUntil)).toEqual({
+      kind: 'claimed',
+      alarmId: FIRST_ID,
+    });
+  });
 });
 
 describe('InMemoryDeliveryRepositoryAdapter', () => {

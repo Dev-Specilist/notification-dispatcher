@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { QueryResult } from 'pg';
+import { Pool, QueryResult } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ExpansionJobRepositoryContract } from '@/modules/notification/testing/contract/expansion-job-repository.contract';
 import { DrizzleAlarmRepositoryAdapter } from '@/modules/notification/adapter/out/persistence/drizzle-alarm-repository.adapter';
 import { DrizzleExpansionJobRepositoryAdapter } from '@/modules/notification/adapter/out/persistence/drizzle-expansion-job-repository.adapter';
+import { DrizzleTransactionAdapter } from '@/modules/notification/adapter/out/persistence/drizzle-transaction.adapter';
+import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
 import { NotificationDatabaseFactory } from '@/modules/notification/adapter/out/persistence/notification-database.factory';
 import { NotificationDatabase } from '@/modules/notification/adapter/out/persistence/notification-database.type';
 import { TestDatabase } from '@/shared/database/testing/test-database';
@@ -21,6 +23,21 @@ interface CursorColumns {
 }
 
 type InvalidStateCase = Readonly<[string, string]>;
+
+interface Gate {
+  readonly opened: Promise<void>;
+  readonly open: () => void;
+}
+
+const NOT_YET_OPENED: () => void = (): void => {};
+
+const createGate = (): Gate => {
+  let release: () => void = NOT_YET_OPENED;
+  const opened: Promise<void> = new Promise<void>((resolve: () => void): void => {
+    release = resolve;
+  });
+  return { opened, open: (): void => release() };
+};
 
 describe('DrizzleExpansionJobRepositoryAdapter', () => {
   let testDatabase: TestDatabase;
@@ -79,6 +96,71 @@ describe('DrizzleExpansionJobRepositoryAdapter', () => {
         .map((claim: ExpansionClaim): string => (claim.kind === 'claimed' ? claim.alarmId : 'none'))
         .toSorted(),
     ).toEqual([...enqueuedAlarmIds].toSorted());
+  });
+
+  it('DB-18 한 워커가 확장 작업을 잡고 커밋하기 전에도 다른 워커는 기다리지 않고 다음 작업을 가져간다 (SKIP LOCKED)', async (): Promise<void> => {
+    await testDatabase.pool.query('TRUNCATE alarms CASCADE');
+    const olderAlarmId: string = await storedAlarmId();
+    const newerAlarmId: string = await storedAlarmId();
+    await testDatabase.pool.query(
+      `INSERT INTO expansion_jobs (alarm_id, enqueued_at, status, cursor_kind) VALUES ($1, now() - interval '1 minute', 'IN_PROGRESS', 'FIRST'), ($2, now(), 'IN_PROGRESS', 'FIRST')`,
+      [olderAlarmId, newerAlarmId],
+    );
+    const claimedAt: Date = new Date();
+    const leaseUntil: Date = new Date(claimedAt.getTime() + 30_000);
+    const holding: Gate = createGate();
+    const release: Gate = createGate();
+    const holder: Promise<ExpansionClaim> = new DrizzleTransactionAdapter(
+      NotificationDatabaseFactory.create(testDatabase.pool),
+    ).run(async ({ expansionQueue }: TransactionRepositories): Promise<ExpansionClaim> => {
+      const heldClaim: ExpansionClaim = await expansionQueue.claimNext(claimedAt, leaseUntil);
+      holding.open();
+      await release.opened;
+      return heldClaim;
+    });
+    await holding.opened;
+    const lockTimeoutPool: Pool = new Pool({
+      connectionString: testDatabase.databaseUrl,
+      options: '-c lock_timeout=2000',
+    });
+
+    try {
+      expect(
+        await new DrizzleExpansionJobRepositoryAdapter(
+          NotificationDatabaseFactory.create(lockTimeoutPool),
+        ).claimNext(claimedAt, leaseUntil),
+      ).toEqual({ kind: 'claimed', alarmId: newerAlarmId });
+    } finally {
+      release.open();
+      await Promise.allSettled([holder]);
+      await lockTimeoutPool.end();
+    }
+    expect(await holder).toEqual({ kind: 'claimed', alarmId: olderAlarmId });
+  });
+
+  it('DB-18 트랜잭션이 실패하면 그 안에서 건 확장 작업 lease도 롤백되어 바로 다시 claim할 수 있다', async (): Promise<void> => {
+    await testDatabase.pool.query('TRUNCATE alarms CASCADE');
+    const enqueuedAlarmId: string = await storedAlarmId();
+    await testDatabase.pool.query(
+      `INSERT INTO expansion_jobs (alarm_id, enqueued_at, status, cursor_kind) VALUES ($1, now(), 'IN_PROGRESS', 'FIRST')`,
+      [enqueuedAlarmId],
+    );
+    const database: NotificationDatabase = NotificationDatabaseFactory.create(testDatabase.pool);
+    const claimedAt: Date = new Date();
+    const leaseUntil: Date = new Date(claimedAt.getTime() + 30_000);
+
+    await expect(
+      new DrizzleTransactionAdapter(database).run(
+        async ({ expansionQueue }: TransactionRepositories): Promise<void> => {
+          await expansionQueue.claimNext(claimedAt, leaseUntil);
+          throw new Error('expansion failed after claim');
+        },
+      ),
+    ).rejects.toThrow('expansion failed after claim');
+
+    expect(
+      await new DrizzleExpansionJobRepositoryAdapter(database).claimNext(claimedAt, leaseUntil),
+    ).toEqual({ kind: 'claimed', alarmId: enqueuedAlarmId });
   });
 
   it('UC-06 완료로 바뀌면 이전 cursor 열을 비운다', async (): Promise<void> => {
