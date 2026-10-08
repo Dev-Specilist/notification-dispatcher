@@ -1,9 +1,13 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
 import { z } from 'zod';
-import { AlarmResult } from '@/modules/notification/application/port/in/alarm-result.type';
+import {
+  AlarmResult,
+  StartDispatchResult,
+} from '@/modules/notification/application/port/in/alarm-result.type';
 import { CreateAlarmResult } from '@/modules/notification/application/port/in/create-alarm.type';
 import { CreateAlarmUseCase } from '@/modules/notification/application/port/in/create-alarm.use-case';
 import { GetAlarmUseCase } from '@/modules/notification/application/port/in/get-alarm.use-case';
+import { StartDispatchUseCase } from '@/modules/notification/application/port/in/start-dispatch.use-case';
 import { alarmIdParamSchema } from '@/modules/notification/adapter/in/web/alarm-id-param.schema';
 import {
   AlarmDetailResponse,
@@ -22,6 +26,7 @@ export class AlarmController {
   constructor(
     private readonly createAlarm: CreateAlarmUseCase,
     private readonly getAlarm: GetAlarmUseCase,
+    private readonly startDispatch: StartDispatchUseCase,
   ) {}
 
   @Post()
@@ -42,5 +47,17 @@ export class AlarmController {
       throw AlarmPresenter.problemOf(result.error);
     }
     return AlarmPresenter.toDetailResponse(result.alarm, result.deliveries);
+  }
+
+  @Post(':id/dispatch')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async dispatch(
+    @Param({ schema: alarmIdParamSchema }) { id: alarmId }: AlarmIdParam,
+  ): Promise<AlarmResponse> {
+    const result: StartDispatchResult = await this.startDispatch.execute({ alarmId });
+    if (result.kind !== 'dispatched') {
+      throw AlarmPresenter.problemOf(result.error);
+    }
+    return AlarmPresenter.toResponse(result.alarm);
   }
 }

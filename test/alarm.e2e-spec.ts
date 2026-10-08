@@ -22,6 +22,10 @@ const createdAlarmSchema = z.object({
 
 type CreatedAlarm = z.infer<typeof createdAlarmSchema>;
 
+const dispatchedAlarmSchema = createdAlarmSchema.extend({ dispatchedAt: z.string() });
+
+type DispatchedAlarm = z.infer<typeof dispatchedAlarmSchema>;
+
 const alarmDetailSchema = createdAlarmSchema.extend({
   deliveries: z.object({
     total: z.number(),
@@ -44,11 +48,29 @@ interface StatusRow {
   readonly status: string;
 }
 
+interface ExpansionJobCountRow {
+  readonly jobs: number;
+}
+
 const UUID: RegExp = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const PROBLEM_JSON: string = 'application/problem+json; charset=utf-8';
 
 const ISO_UTC: RegExp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+const createUrgentAlarm = async (recipientIds: ReadonlyArray<string>): Promise<CreatedAlarm> =>
+  createdAlarmSchema.parse(
+    await spec()
+      .post('/alarms')
+      .withJson({
+        title: '서버 점검',
+        body: '10분 뒤 점검이 시작됩니다',
+        kind: 'URGENT',
+        recipientIds,
+      })
+      .expectStatus(201)
+      .returns('res.body'),
+  );
 
 describe('알림 REST API', () => {
   let testDatabase: TestDatabase;
@@ -80,8 +102,19 @@ describe('알림 REST API', () => {
     return status;
   };
 
+  const expansionJobCountOf = async (alarmId: string): Promise<number> => {
+    const result: QueryResult<ExpansionJobCountRow> = await app
+      .get(Pool)
+      .query<ExpansionJobCountRow>(
+        'SELECT count(*)::int AS jobs FROM expansion_jobs WHERE alarm_id = $1',
+        [alarmId],
+      );
+    const [{ jobs }]: ReadonlyArray<ExpansionJobCountRow> = result.rows;
+    return jobs;
+  };
+
   it('API-01 유효한 본문 / POST /alarms → 201과 알림 리소스', async (): Promise<void> => {
-    const created: CreatedAlarm = createdAlarmSchema.parse(
+    const createdAlarm: CreatedAlarm = createdAlarmSchema.parse(
       await spec()
         .post('/alarms')
         .withJson({
@@ -94,7 +127,7 @@ describe('알림 REST API', () => {
         .returns('res.body'),
     );
 
-    expect(created).toEqual({
+    expect(createdAlarm).toEqual({
       id: expect.stringMatching(UUID),
       title: '서버 점검',
       body: '10분 뒤 점검이 시작됩니다',
@@ -103,11 +136,11 @@ describe('알림 REST API', () => {
       status: 'DRAFT',
       createdAt: expect.stringMatching(ISO_UTC),
     });
-    expect(await storedStatus(created.id)).toBe('DRAFT');
+    expect(await storedStatus(createdAlarm.id)).toBe('DRAFT');
   });
 
   it('API-01 수신자를 생략한 대량 알림은 전체 사용자 대상으로 만들어진다', async (): Promise<void> => {
-    const created: CreatedAlarm = createdAlarmSchema.parse(
+    const createdAlarm: CreatedAlarm = createdAlarmSchema.parse(
       await spec()
         .post('/alarms')
         .withJson({ title: '추석 이벤트', body: '연휴 쿠폰이 도착했어요', kind: 'BULK' })
@@ -115,8 +148,8 @@ describe('알림 REST API', () => {
         .returns('res.body'),
     );
 
-    expect(created).toMatchObject({ kind: 'BULK', recipientIds: [], status: 'DRAFT' });
-    expect(await storedStatus(created.id)).toBe('DRAFT');
+    expect(createdAlarm).toMatchObject({ kind: 'BULK', recipientIds: [], status: 'DRAFT' });
+    expect(await storedStatus(createdAlarm.id)).toBe('DRAFT');
   });
 
   it.each<InvalidBodyCase>([
@@ -169,7 +202,7 @@ describe('알림 REST API', () => {
     'API-03 알림 여러 개 / GET /alarms?status=&kind=&cursor=&limit= → 200 { items, page: { nextCursor } } (마지막 페이지는 nextCursor 필드 없음)',
   );
   it('API-04 있는 알림 / GET /alarms/:id → 200과 Delivery 상태별 집계', async (): Promise<void> => {
-    const created: CreatedAlarm = createdAlarmSchema.parse(
+    const createdAlarm: CreatedAlarm = createdAlarmSchema.parse(
       await spec()
         .post('/alarms')
         .withJson({ title: '추석 이벤트', body: '연휴 쿠폰이 도착했어요', kind: 'BULK' })
@@ -178,11 +211,11 @@ describe('알림 REST API', () => {
     );
 
     const fetchedAlarm: AlarmDetail = alarmDetailSchema.parse(
-      await spec().get(`/alarms/${created.id}`).expectStatus(200).returns('res.body'),
+      await spec().get(`/alarms/${createdAlarm.id}`).expectStatus(200).returns('res.body'),
     );
 
     expect(fetchedAlarm).toEqual({
-      ...created,
+      ...createdAlarm,
       deliveries: {
         total: 0,
         byStatus: {
@@ -234,10 +267,103 @@ describe('알림 REST API', () => {
     });
     expect(problem.errors).toContainEqual({ field: 'id', message: expect.any(String) });
   });
-  it.todo('API-07 DRAFT 알림 / POST /alarms/:id/dispatch → 202와 DISPATCHING 알림');
-  it.todo(
-    'API-08 이미 시작한 알림 / POST /alarms/:id/dispatch → 409 Problem Details (ALARM_STATE_CONFLICT)',
-  );
+  it('API-07 DRAFT 알림 / POST /alarms/:id/dispatch → 202와 DISPATCHING 알림', async (): Promise<void> => {
+    const createdAlarm: CreatedAlarm = await createUrgentAlarm(['u_000001', 'u_000002']);
+
+    const dispatchedAlarm: DispatchedAlarm = dispatchedAlarmSchema.parse(
+      await spec()
+        .post(`/alarms/${createdAlarm.id}/dispatch`)
+        .expectStatus(202)
+        .returns('res.body'),
+    );
+
+    expect(dispatchedAlarm).toEqual({
+      ...createdAlarm,
+      status: 'DISPATCHING',
+      dispatchedAt: expect.stringMatching(ISO_UTC),
+    });
+    expect(await storedStatus(createdAlarm.id)).toBe('DISPATCHING');
+  });
+
+  it('API-07 대량 DRAFT 알림 / POST /alarms/:id/dispatch → 202와 DISPATCHING 알림, 확장 작업이 생기고 Delivery는 아직 없다', async (): Promise<void> => {
+    const createdAlarm: CreatedAlarm = createdAlarmSchema.parse(
+      await spec()
+        .post('/alarms')
+        .withJson({ title: '추석 이벤트', body: '연휴 쿠폰이 도착했어요', kind: 'BULK' })
+        .expectStatus(201)
+        .returns('res.body'),
+    );
+
+    const dispatchedAlarm: DispatchedAlarm = dispatchedAlarmSchema.parse(
+      await spec()
+        .post(`/alarms/${createdAlarm.id}/dispatch`)
+        .expectStatus(202)
+        .returns('res.body'),
+    );
+
+    expect(dispatchedAlarm).toMatchObject({ kind: 'BULK', status: 'DISPATCHING' });
+    expect(await expansionJobCountOf(createdAlarm.id)).toBe(1);
+    expect(
+      alarmDetailSchema.parse(
+        await spec().get(`/alarms/${createdAlarm.id}`).expectStatus(200).returns('res.body'),
+      ).deliveries.total,
+    ).toBe(0);
+  });
+
+  it('API-08 이미 시작한 알림 / POST /alarms/:id/dispatch → 409 Problem Details (ALARM_STATE_CONFLICT)', async (): Promise<void> => {
+    const createdAlarm: CreatedAlarm = await createUrgentAlarm(['u_000001']);
+    await spec().post(`/alarms/${createdAlarm.id}/dispatch`).expectStatus(202);
+
+    const problem: Problem = problemSchema.parse(
+      await spec()
+        .post(`/alarms/${createdAlarm.id}/dispatch`)
+        .expectStatus(409)
+        .expectHeader('content-type', PROBLEM_JSON)
+        .returns('res.body'),
+    );
+
+    expect(problem).toEqual({
+      status: 409,
+      code: 'ALARM_STATE_CONFLICT',
+      instance: `/alarms/${createdAlarm.id}/dispatch`,
+      errors: [],
+    });
+  });
+
+  it('없는 알림 / POST /alarms/:id/dispatch → 404 Problem Details (ALARM_NOT_FOUND)', async (): Promise<void> => {
+    const missingAlarmId: string = '7d3f1e2a-4b5c-4d6e-8f70-1a2b3c4d5e6f';
+
+    const problem: Problem = problemSchema.parse(
+      await spec().post(`/alarms/${missingAlarmId}/dispatch`).expectStatus(404).returns('res.body'),
+    );
+
+    expect(problem).toMatchObject({ status: 404, code: 'ALARM_NOT_FOUND' });
+  });
+
+  it('API-04 발송을 시작한 긴급 알림은 수신자 수만큼 PENDING으로 집계되고 다른 알림의 Delivery는 세지 않는다', async (): Promise<void> => {
+    const targetAlarm: CreatedAlarm = await createUrgentAlarm(['u_000001', 'u_000002']);
+    const otherAlarm: CreatedAlarm = await createUrgentAlarm(['u_000001', 'u_000002', 'u_000003']);
+    await spec().post(`/alarms/${targetAlarm.id}/dispatch`).expectStatus(202);
+    await spec().post(`/alarms/${otherAlarm.id}/dispatch`).expectStatus(202);
+
+    const fetchedAlarm: AlarmDetail = alarmDetailSchema.parse(
+      await spec().get(`/alarms/${targetAlarm.id}`).expectStatus(200).returns('res.body'),
+    );
+
+    expect(fetchedAlarm.deliveries).toEqual({
+      total: 2,
+      byStatus: {
+        PENDING: 2,
+        IN_FLIGHT: 0,
+        RETRY_WAIT: 0,
+        UNKNOWN: 0,
+        SENT: 0,
+        FAILED: 0,
+        UNCONFIRMED: 0,
+        CANCELLED: 0,
+      },
+    });
+  });
   it.todo('API-09 DRAFT·DISPATCHING 알림 / POST /alarms/:id/cancel → 200과 CANCELLED 알림');
   it.todo(
     'API-10 종결된 알림 / POST /alarms/:id/cancel → 409 Problem Details (ALARM_STATE_CONFLICT)',

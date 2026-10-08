@@ -3,7 +3,10 @@ import {
   AlarmView,
   AlarmViewState,
 } from '@/modules/notification/application/port/in/alarm-view.type';
-import { AlarmNotFoundError } from '@/modules/notification/application/port/in/alarm-result.type';
+import {
+  AlarmNotFoundError,
+  AlarmStateConflictError,
+} from '@/modules/notification/application/port/in/alarm-result.type';
 import { AlarmCreationError } from '@/modules/notification/application/port/in/create-alarm.type';
 import { DeliveryProgressView } from '@/modules/notification/application/port/in/delivery-progress-view.type';
 import {
@@ -17,6 +20,8 @@ import { ProblemException } from '@/shared/http/problem.exception';
 type StateCase = Readonly<[string, AlarmViewState, AlarmResponse]>;
 
 type ViolationCase = Readonly<[AlarmCreationError, FieldViolation]>;
+
+type ConflictCase = Readonly<[action: AlarmStateConflictError['action'], detail: string]>;
 
 const CREATED_ISO: string = '2026-10-08T09:00:00.000Z';
 const DISPATCHED_ISO: string = '2026-10-08T09:05:00.000Z';
@@ -172,4 +177,25 @@ describe('AlarmPresenter', () => {
     expect(problem.code).toBe('ALARM_NOT_FOUND');
     expect(problem.message).toBe('알림을 찾을 수 없습니다: 7d3f1e2a-4b5c-4d6e-8f70-1a2b3c4d5e6f');
   });
+
+  it.each<ConflictCase>([
+    ['dispatch', 'DISPATCHING 상태의 알림은 발송을 시작할 수 없습니다'],
+    ['cancel', 'DISPATCHING 상태의 알림은 취소할 수 없습니다'],
+    ['complete', 'DISPATCHING 상태의 알림은 완료할 수 없습니다'],
+  ])(
+    '%s 상태 충돌을 409 ALARM_STATE_CONFLICT 문제로 바꾸고 현재 상태와 막힌 동작을 설명에 담는다',
+    (action: AlarmStateConflictError['action'], detail: string): void => {
+      const error: AlarmStateConflictError = {
+        code: 'ALARM_STATE_CONFLICT',
+        status: 'DISPATCHING',
+        action,
+      };
+
+      const problem: ProblemException = AlarmPresenter.problemOf(error);
+
+      expect(problem.getStatus()).toBe(409);
+      expect(problem.code).toBe('ALARM_STATE_CONFLICT');
+      expect(problem.message).toBe(detail);
+    },
+  );
 });

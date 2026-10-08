@@ -2,7 +2,11 @@ import {
   AlarmView,
   AlarmViewState,
 } from '@/modules/notification/application/port/in/alarm-view.type';
-import { AlarmNotFoundError } from '@/modules/notification/application/port/in/alarm-result.type';
+import {
+  AlarmActionName,
+  AlarmNotFoundError,
+  AlarmStateConflictError,
+} from '@/modules/notification/application/port/in/alarm-result.type';
 import { AlarmCreationError } from '@/modules/notification/application/port/in/create-alarm.type';
 import { DeliveryProgressView } from '@/modules/notification/application/port/in/delivery-progress-view.type';
 import {
@@ -15,6 +19,12 @@ import { FieldViolation } from '@/shared/http/problem-details.type';
 import { ProblemException } from '@/shared/http/problem.exception';
 
 export class AlarmPresenter {
+  private static readonly BLOCKED_ACTION_PHRASES: Readonly<Record<AlarmActionName, string>> = {
+    dispatch: '발송을 시작할 수 없습니다',
+    cancel: '취소할 수 없습니다',
+    complete: '완료할 수 없습니다',
+  };
+
   static toResponse(view: Readonly<AlarmView>): AlarmResponse {
     const { id, title, body, kind, recipientIds, state, createdAt }: Readonly<AlarmView> = view;
     const base: AlarmResponseBase = {
@@ -57,8 +67,19 @@ export class AlarmPresenter {
     return { field: 'recipientIds', message: `수신자 id 형식이 잘못되었습니다: ${error.value}` };
   }
 
-  static problemOf({ code, alarmId }: AlarmNotFoundError): ProblemException {
-    return new ProblemException(HttpStatus.NOT_FOUND, code, `알림을 찾을 수 없습니다: ${alarmId}`);
+  static problemOf(error: AlarmNotFoundError | AlarmStateConflictError): ProblemException {
+    if (error.code === 'ALARM_NOT_FOUND') {
+      return new ProblemException(
+        HttpStatus.NOT_FOUND,
+        error.code,
+        `알림을 찾을 수 없습니다: ${error.alarmId}`,
+      );
+    }
+    return new ProblemException(
+      HttpStatus.CONFLICT,
+      error.code,
+      `${error.status} 상태의 알림은 ${AlarmPresenter.BLOCKED_ACTION_PHRASES[error.action]}`,
+    );
   }
 
   private static withState(base: AlarmResponseBase, state: AlarmViewState): AlarmResponse {
