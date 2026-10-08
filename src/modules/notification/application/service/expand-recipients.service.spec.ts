@@ -51,7 +51,7 @@ interface Fixture {
   readonly deliveryRepository: InMemoryDeliveryRepositoryAdapter;
   readonly expansionJobRepository: InMemoryExpansionJobRepositoryAdapter;
   readonly directory: PagedRecipientDirectory;
-  readonly useCase: ExpandRecipientsService;
+  readonly service: ExpandRecipientsService;
   readonly newWorker: () => ExpandRecipientsService;
 }
 
@@ -264,7 +264,7 @@ const fixture = async (
     deliveryRepository,
     expansionJobRepository,
     directory,
-    useCase: newWorker(),
+    service: newWorker(),
     newWorker,
   };
 };
@@ -291,10 +291,10 @@ const pendingBulk = (recipientId: string): DeliverySummary => {
 
 describe('ExpandRecipientsService', () => {
   it('UC-06 확장 대기 중인 대량 알림 / 확장 유스케이스가 사용자 API를 cursor 끝까지 읽는다 → 페이지마다 Delivery 생성과 cursor 저장이 한 트랜잭션으로 커밋된다', async (): Promise<void> => {
-    const { deliveryRepository, expansionJobRepository, directory, useCase }: Fixture =
+    const { deliveryRepository, expansionJobRepository, directory, service }: Fixture =
       await fixture(TWO_PAGES);
 
-    const result: ExpansionResult = await useCase.execute(alarmId(ALARM_ID));
+    const result: ExpansionResult = await service.execute(alarmId(ALARM_ID));
 
     expect(result).toEqual({ kind: 'completed' });
     expect(directory.requested).toEqual(['first', 'next:Mw']);
@@ -314,12 +314,12 @@ describe('ExpandRecipientsService', () => {
   });
 
   it('UC-06 한 페이지의 cursor 저장이 실패하면 그 페이지의 Delivery도 롤백되고 앞 페이지는 커밋된 채 남는다', async (): Promise<void> => {
-    const { deliveryRepository, expansionJobRepository, useCase }: Fixture = await fixture(
+    const { deliveryRepository, expansionJobRepository, service }: Fixture = await fixture(
       TWO_PAGES,
       new FailingOnSecondProgressRepository(),
     );
 
-    await expect(useCase.execute(alarmId(ALARM_ID))).rejects.toThrow(
+    await expect(service.execute(alarmId(ALARM_ID))).rejects.toThrow(
       'expansion progress storage is unavailable',
     );
     expect(await summaries(deliveryRepository)).toEqual([
@@ -332,11 +332,11 @@ describe('ExpandRecipientsService', () => {
   });
 
   it('UC-06 수신자가 0명이면 Delivery 없이 확장을 완료한다', async (): Promise<void> => {
-    const { deliveryRepository, expansionJobRepository, useCase }: Fixture = await fixture([
+    const { deliveryRepository, expansionJobRepository, service }: Fixture = await fixture([
       ['first', { recipientIds: [], next: { kind: 'end' } }],
     ]);
 
-    expect(await useCase.execute(alarmId(ALARM_ID))).toEqual({ kind: 'completed' });
+    expect(await service.execute(alarmId(ALARM_ID))).toEqual({ kind: 'completed' });
     expect(await summaries(deliveryRepository)).toEqual([]);
     expect(await expansionJobRepository.findByAlarmId(alarmId(ALARM_ID))).toMatchObject({
       job: { progress: { kind: 'completed' } },
@@ -344,17 +344,17 @@ describe('ExpandRecipientsService', () => {
   });
 
   it('UC-06 이미 완료된 확장은 사용자 API를 다시 읽지 않는다', async (): Promise<void> => {
-    const { directory, useCase }: Fixture = await fixture(TWO_PAGES);
-    await useCase.execute(alarmId(ALARM_ID));
+    const { directory, service }: Fixture = await fixture(TWO_PAGES);
+    await service.execute(alarmId(ALARM_ID));
 
-    expect(await useCase.execute(alarmId(ALARM_ID))).toEqual({ kind: 'completed' });
+    expect(await service.execute(alarmId(ALARM_ID))).toEqual({ kind: 'completed' });
     expect(directory.requested).toEqual(['first', 'next:Mw']);
   });
 
   it('UC-06 확장 작업이 없는 알림은 not-found를 반환한다', async (): Promise<void> => {
-    const { directory, useCase }: Fixture = await fixture(TWO_PAGES);
+    const { directory, service }: Fixture = await fixture(TWO_PAGES);
 
-    expect(await useCase.execute(alarmId(MISSING_ALARM_ID))).toEqual({
+    expect(await service.execute(alarmId(MISSING_ALARM_ID))).toEqual({
       kind: 'not-found',
       alarmId: MISSING_ALARM_ID,
     });
@@ -362,13 +362,13 @@ describe('ExpandRecipientsService', () => {
   });
 
   it('UC-07 확장 도중 워커가 멈췄다 / 다른 워커가 확장을 이어받는다 → 저장된 cursor부터 이어서 읽고 같은 수신자의 Delivery는 중복 생성되지 않는다', async (): Promise<void> => {
-    const { deliveryRepository, directory, useCase, newWorker }: Fixture = await fixture(
+    const { deliveryRepository, directory, service, newWorker }: Fixture = await fixture(
       TWO_PAGES,
       new InMemoryExpansionJobRepositoryAdapter(),
       new InMemoryAlarmRepositoryAdapter(),
       new FailingOnceDirectory(TWO_PAGES, 'next:Mw'),
     );
-    await expect(useCase.execute(alarmId(ALARM_ID))).rejects.toThrow('user API is unavailable');
+    await expect(service.execute(alarmId(ALARM_ID))).rejects.toThrow('user API is unavailable');
 
     const result: ExpansionResult = await newWorker().execute(alarmId(ALARM_ID));
 
@@ -382,11 +382,11 @@ describe('ExpandRecipientsService', () => {
   });
 
   it('UC-07 cursor 저장에 실패한 뒤 다른 워커가 이어받아도 Delivery는 중복 생성되지 않는다', async (): Promise<void> => {
-    const { deliveryRepository, useCase, newWorker }: Fixture = await fixture(
+    const { deliveryRepository, service, newWorker }: Fixture = await fixture(
       TWO_PAGES,
       new FailingOnSecondProgressRepository(),
     );
-    await expect(useCase.execute(alarmId(ALARM_ID))).rejects.toThrow(
+    await expect(service.execute(alarmId(ALARM_ID))).rejects.toThrow(
       'expansion progress storage is unavailable',
     );
 
@@ -399,10 +399,10 @@ describe('ExpandRecipientsService', () => {
   });
 
   it('UC-07 같은 알림을 두 워커가 동시에 확장하면 한 워커만 진행하고 Delivery는 중복 생성되지 않는다', async (): Promise<void> => {
-    const { deliveryRepository, useCase, newWorker }: Fixture = await fixture(TWO_PAGES);
+    const { deliveryRepository, service, newWorker }: Fixture = await fixture(TWO_PAGES);
 
     const results: ReadonlyArray<ExpansionResult> = await Promise.all([
-      useCase.execute(alarmId(ALARM_ID)),
+      service.execute(alarmId(ALARM_ID)),
       newWorker().execute(alarmId(ALARM_ID)),
     ]);
 
@@ -419,7 +419,7 @@ describe('ExpandRecipientsService', () => {
 
   it('UC-08 확장 중 알림이 취소됐다 / 다음 페이지를 처리한다 → 확장을 멈추고 더 이상 Delivery를 만들지 않는다', async (): Promise<void> => {
     const alarmRepository: InMemoryAlarmRepositoryAdapter = new InMemoryAlarmRepositoryAdapter();
-    const { deliveryRepository, expansionJobRepository, directory, useCase }: Fixture =
+    const { deliveryRepository, expansionJobRepository, directory, service }: Fixture =
       await fixture(
         TWO_PAGES,
         new InMemoryExpansionJobRepositoryAdapter(),
@@ -427,7 +427,7 @@ describe('ExpandRecipientsService', () => {
         new CancellingDirectory(TWO_PAGES, 'next:Mw', alarmRepository),
       );
 
-    const result: ExpansionResult = await useCase.execute(alarmId(ALARM_ID));
+    const result: ExpansionResult = await service.execute(alarmId(ALARM_ID));
 
     expect(result).toEqual({ kind: 'cancelled' });
     expect(directory.requested).toEqual(['first', 'next:Mw']);
@@ -442,13 +442,13 @@ describe('ExpandRecipientsService', () => {
 
   it('UC-08 페이지 조회 중 취소 유스케이스가 실행되면 이미 만든 Delivery는 취소되고 새 Delivery는 만들어지지 않는다', async (): Promise<void> => {
     const directory: PausingDirectory = new PausingDirectory(TWO_PAGES, 'next:Mw');
-    const { deliveryRepository, unitOfWork, useCase }: Fixture = await fixture(
+    const { deliveryRepository, unitOfWork, service }: Fixture = await fixture(
       TWO_PAGES,
       new InMemoryExpansionJobRepositoryAdapter(),
       new InMemoryAlarmRepositoryAdapter(),
       directory,
     );
-    const expansion: Promise<ExpansionResult> = useCase.execute(alarmId(ALARM_ID));
+    const expansion: Promise<ExpansionResult> = service.execute(alarmId(ALARM_ID));
     await directory.paused.opened;
 
     await new CancelAlarmService(unitOfWork, new FixedClock()).execute(alarmId(ALARM_ID));
@@ -466,19 +466,19 @@ describe('ExpandRecipientsService', () => {
   });
 
   it('UC-08 이미 취소된 알림은 사용자 API를 호출하지 않고 확장을 멈춘다', async (): Promise<void> => {
-    const { alarmRepository, deliveryRepository, directory, useCase }: Fixture =
+    const { alarmRepository, deliveryRepository, directory, service }: Fixture =
       await fixture(TWO_PAGES);
     await cancelStoredAlarm(alarmRepository);
 
-    expect(await useCase.execute(alarmId(ALARM_ID))).toEqual({ kind: 'cancelled' });
+    expect(await service.execute(alarmId(ALARM_ID))).toEqual({ kind: 'cancelled' });
     expect(directory.requested).toEqual([]);
     expect(await summaries(deliveryRepository)).toEqual([]);
   });
 
   it('UC-08 멈춘 확장은 다시 실행해도 사용자 API를 호출하지 않는다', async (): Promise<void> => {
-    const { alarmRepository, directory, useCase, newWorker }: Fixture = await fixture(TWO_PAGES);
+    const { alarmRepository, directory, service, newWorker }: Fixture = await fixture(TWO_PAGES);
     await cancelStoredAlarm(alarmRepository);
-    await useCase.execute(alarmId(ALARM_ID));
+    await service.execute(alarmId(ALARM_ID));
 
     expect(await newWorker().execute(alarmId(ALARM_ID))).toEqual({ kind: 'cancelled' });
     expect(directory.requested).toEqual([]);

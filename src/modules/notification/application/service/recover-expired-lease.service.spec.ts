@@ -48,7 +48,7 @@ interface Fixture {
   readonly deliveryRepository: InMemoryDeliveryRepositoryAdapter;
   readonly unitOfWork: InMemoryUnitOfWorkAdapter;
   readonly clock: AdjustableClock;
-  readonly useCase: RecoverExpiredLeaseService;
+  readonly service: RecoverExpiredLeaseService;
 }
 
 const CREATED_ISO: string = '2026-10-08T09:00:00.000Z';
@@ -265,7 +265,7 @@ const fixture = async (deliveries: ReadonlyArray<Delivery>): Promise<Fixture> =>
     deliveryRepository,
     unitOfWork,
     clock,
-    useCase: new RecoverExpiredLeaseService(unitOfWork, clock, new FixedRecoverySettings()),
+    service: new RecoverExpiredLeaseService(unitOfWork, clock, new FixedRecoverySettings()),
   };
 };
 
@@ -278,10 +278,10 @@ const storedState = async (
 
 describe('RecoverExpiredLeaseService', () => {
   it('DLV-14 lease가 만료된 IN_FLIGHT Delivery를 재전송 없이 UNKNOWN으로 넘기고 lease 만료 + RECONCILE_DELAY_MS를 reconcile 가능 시각으로 기록한다', async (): Promise<void> => {
-    const { deliveryRepository, clock, useCase }: Fixture = await fixture([requestStarted()]);
+    const { deliveryRepository, clock, service }: Fixture = await fixture([requestStarted()]);
     clock.moveTo(LEASE_EXPIRES_ISO);
 
-    expect(await useCase.execute()).toEqual({ kind: 'recovered', deliveryId: deliveryId() });
+    expect(await service.execute()).toEqual({ kind: 'recovered', deliveryId: deliveryId() });
     expect(await storedState(deliveryRepository)).toEqual({
       status: 'UNKNOWN',
       unknownSince: at(LEASE_EXPIRES_ISO),
@@ -291,21 +291,21 @@ describe('RecoverExpiredLeaseService', () => {
   });
 
   it('DLV-14 lease가 아직 남은 IN_FLIGHT Delivery는 복구하지 않는다', async (): Promise<void> => {
-    const { deliveryRepository, clock, useCase }: Fixture = await fixture([requestStarted()]);
+    const { deliveryRepository, clock, service }: Fixture = await fixture([requestStarted()]);
     clock.moveTo('2026-10-08T09:01:59.999Z');
 
-    expect(await useCase.execute()).toEqual({ kind: 'idle' });
+    expect(await service.execute()).toEqual({ kind: 'idle' });
     expect((await storedState(deliveryRepository)).status).toBe('IN_FLIGHT');
   });
 
   it('DLV-14 lease가 만료된 Delivery가 여러 건이면 가장 먼저 만료된 1건만 복구한다', async (): Promise<void> => {
-    const { deliveryRepository, clock, useCase }: Fixture = await fixture([
+    const { deliveryRepository, clock, service }: Fixture = await fixture([
       requestStarted(1, '2026-10-08T09:01:00.500Z'),
       requestStarted(2, STARTED_ISO),
     ]);
     clock.moveTo('2026-10-08T09:02:01.000Z');
 
-    expect(await useCase.execute()).toEqual({ kind: 'recovered', deliveryId: deliveryId(2) });
+    expect(await service.execute()).toEqual({ kind: 'recovered', deliveryId: deliveryId(2) });
     expect(
       (await deliveryRepository.findByAlarmId(alarmId())).map(
         (delivery: Delivery): string => delivery.snapshot().state.status,
@@ -314,7 +314,7 @@ describe('RecoverExpiredLeaseService', () => {
   });
 
   it('UC-15 외부 발송이 성공한 직후 결과 저장 전에 워커가 멈췄다 / lease 만료 후 복구와 reconcile을 실행한다 → 재전송 없이 SENT로 확정된다', async (): Promise<void> => {
-    const { deliveryRepository, unitOfWork, clock, useCase }: Fixture = await fixture([
+    const { deliveryRepository, unitOfWork, clock, service }: Fixture = await fixture([
       requestStarted(),
     ]);
     const sender: RecordingMessageSender = new RecordingMessageSender();
@@ -336,7 +336,7 @@ describe('RecoverExpiredLeaseService', () => {
     );
     clock.moveTo(LEASE_EXPIRES_ISO);
 
-    expect(await useCase.execute()).toMatchObject({ kind: 'recovered' });
+    expect(await service.execute()).toMatchObject({ kind: 'recovered' });
     expect(await sendWorker.execute()).toEqual({ kind: 'idle' });
     expect(await reconcileWorker.execute()).toEqual({ kind: 'idle' });
     clock.advanceBy(RECONCILE_DELAY_MS);

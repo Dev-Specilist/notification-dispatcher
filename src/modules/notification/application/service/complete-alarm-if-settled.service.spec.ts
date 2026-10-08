@@ -34,7 +34,7 @@ type DeliveryBuilder = (index: number) => Delivery;
 interface Fixture {
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
   readonly expansionJobRepository: InMemoryExpansionJobRepositoryAdapter;
-  readonly useCase: CompleteAlarmIfSettledService;
+  readonly service: CompleteAlarmIfSettledService;
 }
 
 const CREATED_ISO: string = '2026-10-08T09:00:00.000Z';
@@ -189,7 +189,7 @@ const fixture = async (alarm: Alarm, deliveries: ReadonlyArray<Delivery>): Promi
   return {
     alarmRepository,
     expansionJobRepository,
-    useCase: new CompleteAlarmIfSettledService(
+    service: new CompleteAlarmIfSettledService(
       new InMemoryUnitOfWorkAdapter({
         alarmRepository,
         deliveryRepository,
@@ -222,14 +222,14 @@ const storedState = async (
 
 describe('CompleteAlarmIfSettledService', () => {
   it('UC-12 발송 결과 확정 · reconcile 확정 · 확장 완료(수신자 0명 포함) / 완료 판정 유스케이스 → 확장 완료이고 미종결 Delivery가 0건이면(UNCONFIRMED는 종결로 셈) 알림이 COMPLETED가 된다', async (): Promise<void> => {
-    const { alarmRepository, useCase }: Fixture = await fixture(dispatchedUrgent(), [
+    const { alarmRepository, service }: Fixture = await fixture(dispatchedUrgent(), [
       sent(1),
       failed(2),
       unconfirmed(3),
       cancelled(4),
     ]);
 
-    expect(await useCase.execute(alarmId(ALARM_ID))).toEqual({ kind: 'completed' });
+    expect(await service.execute(alarmId(ALARM_ID))).toEqual({ kind: 'completed' });
     expect(await storedState(alarmRepository)).toEqual({
       status: 'COMPLETED',
       dispatchedAt: at(DISPATCHED_ISO),
@@ -238,59 +238,59 @@ describe('CompleteAlarmIfSettledService', () => {
   });
 
   it('UC-12 미종결 Delivery가 남아 있으면 알림은 DISPATCHING으로 남는다', async (): Promise<void> => {
-    const { alarmRepository, useCase }: Fixture = await fixture(dispatchedUrgent(), [
+    const { alarmRepository, service }: Fixture = await fixture(dispatchedUrgent(), [
       sent(1),
       started(2),
     ]);
 
-    expect(await useCase.execute(alarmId(ALARM_ID))).toEqual({ kind: 'not-yet' });
+    expect(await service.execute(alarmId(ALARM_ID))).toEqual({ kind: 'not-yet' });
     expect((await storedState(alarmRepository)).status).toBe('DISPATCHING');
   });
 
   it('UC-12 대량 알림의 확장이 끝나지 않았으면 Delivery가 모두 종결돼도 완료하지 않는다', async (): Promise<void> => {
-    const { alarmRepository, expansionJobRepository, useCase }: Fixture = await fixture(
+    const { alarmRepository, expansionJobRepository, service }: Fixture = await fixture(
       dispatchedBulk(),
       [transitioned(pendingWith('BULK')(1).cancel(at(SETTLED_ISO)))],
     );
     await expansionJobRepository.enqueue(alarmId(ALARM_ID), at(DISPATCHED_ISO));
 
-    expect(await useCase.execute(alarmId(ALARM_ID))).toEqual({ kind: 'not-yet' });
+    expect(await service.execute(alarmId(ALARM_ID))).toEqual({ kind: 'not-yet' });
     expect((await storedState(alarmRepository)).status).toBe('DISPATCHING');
   });
 
   it('UC-12 수신자가 0명인 대량 알림은 확장이 끝나면 바로 완료된다', async (): Promise<void> => {
-    const { alarmRepository, expansionJobRepository, useCase }: Fixture = await fixture(
+    const { alarmRepository, expansionJobRepository, service }: Fixture = await fixture(
       dispatchedBulk(),
       [],
     );
     await completeExpansion(expansionJobRepository);
 
-    expect(await useCase.execute(alarmId(ALARM_ID))).toEqual({ kind: 'completed' });
+    expect(await service.execute(alarmId(ALARM_ID))).toEqual({ kind: 'completed' });
     expect((await storedState(alarmRepository)).status).toBe('COMPLETED');
   });
 
   it('UC-12 확장 작업이 없는 대량 알림은 확장이 끝나지 않은 것으로 본다', async (): Promise<void> => {
-    const { useCase }: Fixture = await fixture(dispatchedBulk(), []);
+    const { service }: Fixture = await fixture(dispatchedBulk(), []);
 
-    expect(await useCase.execute(alarmId(ALARM_ID))).toEqual({ kind: 'not-yet' });
+    expect(await service.execute(alarmId(ALARM_ID))).toEqual({ kind: 'not-yet' });
   });
 
   it('UC-12 DISPATCHING이 아닌 알림은 상태 충돌을 반환한다', async (): Promise<void> => {
-    const { useCase }: Fixture = await fixture(
+    const { service }: Fixture = await fixture(
       transitionedAlarm(dispatchedUrgent().cancel(at(SETTLED_ISO))),
       [],
     );
 
-    expect(await useCase.execute(alarmId(ALARM_ID))).toEqual({
+    expect(await service.execute(alarmId(ALARM_ID))).toEqual({
       kind: 'conflict',
       error: { code: 'ALARM_STATE_CONFLICT', status: 'CANCELLED', action: 'complete' },
     });
   });
 
   it('UC-02 없는 알림은 알림 없음 오류를 반환한다', async (): Promise<void> => {
-    const { useCase }: Fixture = await fixture(dispatchedUrgent(), []);
+    const { service }: Fixture = await fixture(dispatchedUrgent(), []);
 
-    const result: CompleteAlarmResult = await useCase.execute(alarmId(MISSING_ALARM_ID));
+    const result: CompleteAlarmResult = await service.execute(alarmId(MISSING_ALARM_ID));
 
     expect(result).toEqual({
       kind: 'not-found',

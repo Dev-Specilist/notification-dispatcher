@@ -52,7 +52,7 @@ interface Fixture {
   readonly deliveryRepository: InMemoryDeliveryRepositoryAdapter;
   readonly lookup: ScriptedMessageLookup;
   readonly clock: AdjustableClock;
-  readonly useCase: ReconcileNextDeliveryService;
+  readonly service: ReconcileNextDeliveryService;
 }
 
 const CREATED_ISO: string = '2026-10-08T09:00:00.000Z';
@@ -279,7 +279,7 @@ const fixture = async (
     deliveryRepository,
     lookup,
     clock,
-    useCase: new ReconcileNextDeliveryService(
+    service: new ReconcileNextDeliveryService(
       unitOfWork,
       lookup,
       clock,
@@ -310,7 +310,7 @@ const statuses = async (
 
 describe('ReconcileNextDeliveryService', () => {
   it('UC-14 reconcile 가능 시각이 지난 UNKNOWN Delivery 여러 건 / reconcile 유스케이스 → 건마다 발송 내역을 조회해 DLV-09~13, DLV-19, DLV-21 규칙대로 확정한다', async (): Promise<void> => {
-    const { deliveryRepository, useCase }: Fixture = await fixture(
+    const { deliveryRepository, service }: Fixture = await fixture(
       [
         unknownDelivery(1),
         unknownDelivery(2),
@@ -326,12 +326,12 @@ describe('ReconcileNextDeliveryService', () => {
     );
 
     const attempts: ReadonlyArray<ReconcileAttempt> = [
-      await useCase.execute(),
-      await useCase.execute(),
-      await useCase.execute(),
-      await useCase.execute(),
-      await useCase.execute(),
-      await useCase.execute(),
+      await service.execute(),
+      await service.execute(),
+      await service.execute(),
+      await service.execute(),
+      await service.execute(),
+      await service.execute(),
     ];
 
     expect(attempts.map((attempt: ReconcileAttempt): string => attempt.kind)).toEqual([
@@ -366,24 +366,24 @@ describe('ReconcileNextDeliveryService', () => {
   });
 
   it('UC-14 reconcile 가능 시각 전의 UNKNOWN Delivery는 발송 내역을 조회하지 않는다', async (): Promise<void> => {
-    const { lookup, clock, useCase }: Fixture = await fixture(
+    const { lookup, clock, service }: Fixture = await fixture(
       [unknownDelivery(1)],
       new ScriptedMessageLookup([]),
     );
     clock.advanceBy(-10_000);
 
-    expect(await useCase.execute()).toEqual({ kind: 'idle' });
+    expect(await service.execute()).toEqual({ kind: 'idle' });
     expect(lookup.requested).toEqual([]);
   });
 
   it('UC-14 발송 내역이 없고 시도 횟수를 다 썼으면 FAILED(RETRY_EXHAUSTED)로 확정한다', async (): Promise<void> => {
-    const { deliveryRepository, useCase }: Fixture = await fixture(
+    const { deliveryRepository, service }: Fixture = await fixture(
       [unknownDelivery(1)],
       new ScriptedMessageLookup([]),
       new FixedReconcileSettings(1),
     );
 
-    await useCase.execute();
+    await service.execute();
 
     expect(await stateOf(deliveryRepository)).toEqual({
       status: 'FAILED',
@@ -392,13 +392,13 @@ describe('ReconcileNextDeliveryService', () => {
   });
 
   it('UC-14 조회가 실패했고 확인 기간이 지났으면 UNCONFIRMED로 종결한다', async (): Promise<void> => {
-    const { deliveryRepository, clock, useCase }: Fixture = await fixture(
+    const { deliveryRepository, clock, service }: Fixture = await fixture(
       [unknownDelivery(1)],
       new ScriptedMessageLookup([[deliveryId(1), { kind: 'lookup-failed' }]]),
     );
     clock.advanceBy(UNCONFIRMED_AFTER_MS);
 
-    await useCase.execute();
+    await service.execute();
 
     expect(await stateOf(deliveryRepository)).toEqual({
       status: 'UNCONFIRMED',
@@ -408,13 +408,13 @@ describe('ReconcileNextDeliveryService', () => {
   });
 
   it('UC-14 확인 기간이 지났어도 발송 내역이 나오면 UNCONFIRMED가 아니라 SENT로 확정한다', async (): Promise<void> => {
-    const { deliveryRepository, clock, useCase }: Fixture = await fixture(
+    const { deliveryRepository, clock, service }: Fixture = await fixture(
       [unknownDelivery(1)],
       new ScriptedMessageLookup([[deliveryId(1), found(['m_1', TIMED_OUT_ISO])]]),
     );
     clock.advanceBy(UNCONFIRMED_AFTER_MS);
 
-    await useCase.execute();
+    await service.execute();
 
     expect((await stateOf(deliveryRepository)).status).toBe('SENT');
   });
@@ -423,8 +423,8 @@ describe('ReconcileNextDeliveryService', () => {
     const lookup: PausingMessageLookup = new PausingMessageLookup([
       [deliveryId(1), found(['m_1', TIMED_OUT_ISO])],
     ]);
-    const { deliveryRepository, useCase }: Fixture = await fixture([unknownDelivery(1)], lookup);
-    const attempt: Promise<ReconcileAttempt> = useCase.execute();
+    const { deliveryRepository, service }: Fixture = await fixture([unknownDelivery(1)], lookup);
+    const attempt: Promise<ReconcileAttempt> = service.execute();
     await lookup.looking.opened;
 
     const otherWorkerResult: Delivery = transitioned(
@@ -442,11 +442,11 @@ describe('ReconcileNextDeliveryService', () => {
 
   it('UC-14 조회하는 동안 알림이 취소되고 발송 내역이 없으면 재시도 대신 CANCELLED로 확정한다', async (): Promise<void> => {
     const lookup: PausingMessageLookup = new PausingMessageLookup([]);
-    const { unitOfWork, deliveryRepository, clock, useCase }: Fixture = await fixture(
+    const { unitOfWork, deliveryRepository, clock, service }: Fixture = await fixture(
       [unknownDelivery(1)],
       lookup,
     );
-    const attempt: Promise<ReconcileAttempt> = useCase.execute();
+    const attempt: Promise<ReconcileAttempt> = service.execute();
     await lookup.looking.opened;
 
     await new CancelAlarmService(unitOfWork, clock).execute(alarmId(ACTIVE_ALARM_ID));

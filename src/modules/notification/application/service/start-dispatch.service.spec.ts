@@ -101,7 +101,7 @@ interface Fixture {
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
   readonly deliveryRepository: InMemoryDeliveryRepositoryAdapter;
   readonly expansionJobRepository: InMemoryExpansionJobRepositoryAdapter;
-  readonly useCase: StartDispatchService;
+  readonly service: StartDispatchService;
 }
 
 const fixture = async (
@@ -120,7 +120,7 @@ const fixture = async (
     alarmRepository,
     deliveryRepository,
     expansionJobRepository,
-    useCase: new StartDispatchService(unitOfWork, new SequentialIdGenerator(), new FixedClock()),
+    service: new StartDispatchService(unitOfWork, new SequentialIdGenerator(), new FixedClock()),
   };
 };
 
@@ -129,20 +129,20 @@ const storedStatus = async (alarmRepository: InMemoryAlarmRepositoryAdapter): Pr
 
 describe('StartDispatchService', () => {
   it('UC-02 없는 알림 id / 조회·발송 시작·취소 → 알림 없음 오류가 난다', async (): Promise<void> => {
-    const { useCase }: Fixture = await fixture([bulkDraft()]);
+    const { service }: Fixture = await fixture([bulkDraft()]);
 
-    expect(await useCase.execute(alarmId(MISSING_ALARM_ID))).toEqual({
+    expect(await service.execute(alarmId(MISSING_ALARM_ID))).toEqual({
       kind: 'not-found',
       error: { code: 'ALARM_NOT_FOUND', alarmId: MISSING_ALARM_ID },
     });
   });
 
   it('UC-03 긴급 DRAFT 알림 / 발송 시작 → 같은 트랜잭션에서 상태 변경과 수신자별 Delivery 생성이 함께 커밋된다', async (): Promise<void> => {
-    const { alarmRepository, deliveryRepository, useCase }: Fixture = await fixture([
+    const { alarmRepository, deliveryRepository, service }: Fixture = await fixture([
       urgentDraft(),
     ]);
 
-    const result: StartDispatchResult = await useCase.execute(alarmId(ALARM_ID));
+    const result: StartDispatchResult = await service.execute(alarmId(ALARM_ID));
     const deliveries: ReadonlyArray<Delivery> = await deliveryRepository.findByAlarmId(
       alarmId(ALARM_ID),
     );
@@ -174,10 +174,10 @@ describe('StartDispatchService', () => {
   });
 
   it('UC-04 대량 DRAFT 알림 / 발송 시작 → 같은 트랜잭션에서 상태 변경과 확장 작업 생성이 함께 커밋된다', async (): Promise<void> => {
-    const { alarmRepository, deliveryRepository, expansionJobRepository, useCase }: Fixture =
+    const { alarmRepository, deliveryRepository, expansionJobRepository, service }: Fixture =
       await fixture([bulkDraft()]);
 
-    const result: StartDispatchResult = await useCase.execute(alarmId(ALARM_ID));
+    const result: StartDispatchResult = await service.execute(alarmId(ALARM_ID));
 
     expect(result.kind).toBe('dispatched');
     expect(await storedStatus(alarmRepository)).toBe('DISPATCHING');
@@ -193,25 +193,25 @@ describe('StartDispatchService', () => {
   });
 
   it('UC-05 발송 시작 중 / 작업 생성이 실패한다 → 전체가 롤백되어 알림은 DRAFT로 남는다', async (): Promise<void> => {
-    const { alarmRepository, useCase }: Fixture = await fixture(
+    const { alarmRepository, service }: Fixture = await fixture(
       [bulkDraft()],
       new InMemoryDeliveryRepositoryAdapter(),
       new FailingExpansionJobRepository(),
     );
 
-    await expect(useCase.execute(alarmId(ALARM_ID))).rejects.toThrow(
+    await expect(service.execute(alarmId(ALARM_ID))).rejects.toThrow(
       'expansion job storage is unavailable',
     );
     expect(await storedStatus(alarmRepository)).toBe('DRAFT');
   });
 
   it('UC-05 긴급 알림의 Delivery 생성이 실패해도 전체가 롤백되어 알림은 DRAFT로 남는다', async (): Promise<void> => {
-    const { alarmRepository, useCase }: Fixture = await fixture(
+    const { alarmRepository, service }: Fixture = await fixture(
       [urgentDraft()],
       new FailingDeliveryRepository(),
     );
 
-    await expect(useCase.execute(alarmId(ALARM_ID))).rejects.toThrow(
+    await expect(service.execute(alarmId(ALARM_ID))).rejects.toThrow(
       'delivery storage is unavailable',
     );
     expect(await storedStatus(alarmRepository)).toBe('DRAFT');
@@ -220,12 +220,12 @@ describe('StartDispatchService', () => {
   it('UC-05 Delivery를 일부만 저장한 뒤 실패해도 저장한 Delivery까지 롤백된다', async (): Promise<void> => {
     const deliveryRepository: PartiallySavingDeliveryRepository =
       new PartiallySavingDeliveryRepository();
-    const { alarmRepository, useCase }: Fixture = await fixture(
+    const { alarmRepository, service }: Fixture = await fixture(
       [urgentDraft()],
       deliveryRepository,
     );
 
-    await expect(useCase.execute(alarmId(ALARM_ID))).rejects.toThrow(
+    await expect(service.execute(alarmId(ALARM_ID))).rejects.toThrow(
       'delivery storage failed midway',
     );
     expect(await storedStatus(alarmRepository)).toBe('DRAFT');
@@ -233,11 +233,11 @@ describe('StartDispatchService', () => {
   });
 
   it('UC-03 같은 알림의 발송 시작이 동시에 두 번 들어오면 하나만 성공하고 Delivery는 한 번만 만들어진다', async (): Promise<void> => {
-    const { deliveryRepository, useCase }: Fixture = await fixture([urgentDraft()]);
+    const { deliveryRepository, service }: Fixture = await fixture([urgentDraft()]);
 
     const results: ReadonlyArray<StartDispatchResult> = await Promise.all([
-      useCase.execute(alarmId(ALARM_ID)),
-      useCase.execute(alarmId(ALARM_ID)),
+      service.execute(alarmId(ALARM_ID)),
+      service.execute(alarmId(ALARM_ID)),
     ]);
 
     expect(results.map((result: StartDispatchResult): string => result.kind)).toEqual([
@@ -248,12 +248,12 @@ describe('StartDispatchService', () => {
   });
 
   it('UC-03 DRAFT가 아닌 알림은 상태 충돌을 반환하고 Delivery나 확장 작업을 만들지 않는다', async (): Promise<void> => {
-    const { deliveryRepository, expansionJobRepository, useCase }: Fixture = await fixture([
+    const { deliveryRepository, expansionJobRepository, service }: Fixture = await fixture([
       urgentDraft(),
     ]);
-    await useCase.execute(alarmId(ALARM_ID));
+    await service.execute(alarmId(ALARM_ID));
 
-    const second: StartDispatchResult = await useCase.execute(alarmId(ALARM_ID));
+    const second: StartDispatchResult = await service.execute(alarmId(ALARM_ID));
 
     expect(second).toEqual({
       kind: 'conflict',

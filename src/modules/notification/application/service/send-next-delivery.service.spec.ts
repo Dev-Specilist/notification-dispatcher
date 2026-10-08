@@ -58,7 +58,7 @@ interface Fixture {
   readonly unitOfWork: InMemoryUnitOfWorkAdapter;
   readonly sender: RecordingMessageSender;
   readonly clock: AdjustableClock;
-  readonly useCase: SendNextDeliveryService;
+  readonly service: SendNextDeliveryService;
   readonly newWorker: (permit: SendPermitPort) => SendNextDeliveryService;
 }
 
@@ -433,7 +433,7 @@ const fixture = async (
         settings,
         new ZeroJitter(),
       ),
-    useCase: new SendNextDeliveryService(
+    service: new SendNextDeliveryService(
       unitOfWork,
       permit,
       sender,
@@ -467,12 +467,12 @@ const storedState = async (
 
 describe('SendNextDeliveryService', () => {
   it('UC-09 대기 중 Delivery 여러 건 / 발송 유스케이스 → 발송 허가를 먼저 얻고, 그 시점에 발송 가능한 건 중 우선순위가 가장 높은 1건을 claim해 바로 보내며 결과를 fencing 조건으로 기록한다', async (): Promise<void> => {
-    const { deliveryRepository, sender, useCase }: Fixture = await fixture([
+    const { deliveryRepository, sender, service }: Fixture = await fixture([
       pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO),
       pendingDelivery(2, URGENT_ALARM_ID, 'URGENT', DISPATCHED_ISO),
     ]);
 
-    const attempt: SendAttempt = await useCase.execute();
+    const attempt: SendAttempt = await service.execute();
 
     expect(attempt).toEqual({ kind: 'recorded', deliveryId: deliveryId(2), outcome: 'accepted' });
     expect(sender.sent).toEqual([
@@ -494,12 +494,12 @@ describe('SendNextDeliveryService', () => {
   });
 
   it('UC-09 같은 우선순위에서는 먼저 만들어진 Delivery를 먼저 보낸다', async (): Promise<void> => {
-    const { sender, useCase }: Fixture = await fixture([
+    const { sender, service }: Fixture = await fixture([
       pendingDelivery(1, BULK_ALARM_ID, 'BULK', DISPATCHED_ISO),
       pendingDelivery(2, BULK_ALARM_ID, 'BULK', CREATED_ISO),
     ]);
 
-    await useCase.execute();
+    await service.execute();
 
     expect(sender.sent.map((message: OutgoingMessage): string => message.clientRef)).toEqual([
       deliveryId(2),
@@ -507,12 +507,12 @@ describe('SendNextDeliveryService', () => {
   });
 
   it('UC-09 재시도 시각 전의 긴급 Delivery는 대량 Delivery의 발송을 막지 않는다', async (): Promise<void> => {
-    const { sender, useCase }: Fixture = await fixture([
+    const { sender, service }: Fixture = await fixture([
       retryWaitingUntil(pendingDelivery(1, URGENT_ALARM_ID, 'URGENT', CREATED_ISO), 600_000),
       pendingDelivery(2, BULK_ALARM_ID, 'BULK', CREATED_ISO),
     ]);
 
-    await useCase.execute();
+    await service.execute();
 
     expect(sender.sent.map((message: OutgoingMessage): string => message.clientRef)).toEqual([
       deliveryId(2),
@@ -520,11 +520,11 @@ describe('SendNextDeliveryService', () => {
   });
 
   it('UC-09 재시도 시각이 지난 RETRY_WAIT Delivery는 다시 claim해 보낸다', async (): Promise<void> => {
-    const { sender, useCase }: Fixture = await fixture([
+    const { sender, service }: Fixture = await fixture([
       retryWaitingUntil(pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO), 1_000),
     ]);
 
-    expect(await useCase.execute()).toEqual({
+    expect(await service.execute()).toEqual({
       kind: 'recorded',
       deliveryId: deliveryId(1),
       outcome: 'accepted',
@@ -533,42 +533,42 @@ describe('SendNextDeliveryService', () => {
   });
 
   it('UC-09 발송할 Delivery가 없으면 아무것도 보내지 않는다', async (): Promise<void> => {
-    const { sender, useCase }: Fixture = await fixture([]);
+    const { sender, service }: Fixture = await fixture([]);
 
-    expect(await useCase.execute()).toEqual({ kind: 'idle' });
+    expect(await service.execute()).toEqual({ kind: 'idle' });
     expect(sender.sent).toEqual([]);
   });
 
   it('UC-10 발송 허가를 얻지 못했다 / 발송 유스케이스 → claim하지 않고 다음 주기를 기다린다 (claim한 채 허가를 기다리지 않는다)', async (): Promise<void> => {
-    const { deliveryRepository, sender, useCase }: Fixture = await fixture(
+    const { deliveryRepository, sender, service }: Fixture = await fixture(
       [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
       { permit: new StubSendPermit({ kind: 'denied' }) },
     );
 
-    expect(await useCase.execute()).toEqual({ kind: 'no-permit' });
+    expect(await service.execute()).toEqual({ kind: 'no-permit' });
     expect(sender.sent).toEqual([]);
     expect(await statuses(deliveryRepository, BULK_ALARM_ID)).toEqual([['u_000001', 'PENDING']]);
   });
 
   it('UC-09 취소된 알림의 대기 Delivery는 보내지 않고 CANCELLED로 정리한다', async (): Promise<void> => {
     const cancelledBulk: Alarm = transitionedAlarm(bulkAlarm().cancel(at(NOW_ISO)));
-    const { deliveryRepository, sender, useCase }: Fixture = await fixture(
+    const { deliveryRepository, sender, service }: Fixture = await fixture(
       [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
       { alarms: [cancelledBulk, urgentAlarm()] },
     );
 
-    expect(await useCase.execute()).toEqual({ kind: 'skipped', deliveryId: deliveryId(1) });
+    expect(await service.execute()).toEqual({ kind: 'skipped', deliveryId: deliveryId(1) });
     expect(sender.sent).toEqual([]);
     expect(await statuses(deliveryRepository, BULK_ALARM_ID)).toEqual([['u_000001', 'CANCELLED']]);
   });
 
   it('UC-09 허가를 기다리는 동안 들어온 긴급 Delivery가 먼저 claim된다', async (): Promise<void> => {
     const permit: GatedSendPermit = new GatedSendPermit();
-    const { deliveryRepository, sender, useCase }: Fixture = await fixture(
+    const { deliveryRepository, sender, service }: Fixture = await fixture(
       [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
       { permit },
     );
-    const attempt: Promise<SendAttempt> = useCase.execute();
+    const attempt: Promise<SendAttempt> = service.execute();
     await permit.requested.opened;
 
     await deliveryRepository.saveAll([pendingDelivery(2, URGENT_ALARM_ID, 'URGENT', NOW_ISO)]);
@@ -587,7 +587,7 @@ describe('SendNextDeliveryService', () => {
   it('UC-09 claim 트랜잭션을 기다리는 동안 시간이 흐르면 실제로 claim한 시각으로 lease와 요청 시작을 기록한다', async (): Promise<void> => {
     const sender: PausingMessageSender = new PausingMessageSender();
     const secondRunRequested: Gate = createGate();
-    const { deliveryRepository, unitOfWork, clock, useCase }: Fixture = await fixture(
+    const { deliveryRepository, unitOfWork, clock, service }: Fixture = await fixture(
       [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
       {
         sender,
@@ -603,7 +603,7 @@ describe('SendNextDeliveryService', () => {
     });
     await blockerHolding.opened;
 
-    const attempt: Promise<SendAttempt> = useCase.execute();
+    const attempt: Promise<SendAttempt> = service.execute();
     await secondRunRequested.opened;
     clock.advanceBy(70_000);
     blockerReleased.open();
@@ -630,11 +630,11 @@ describe('SendNextDeliveryService', () => {
   it('UC-09 claim 트랜잭션 안에서 저장소 조회가 늦어지면 조회가 끝난 시각으로 lease와 요청 시작을 기록한다', async (): Promise<void> => {
     const sender: PausingMessageSender = new PausingMessageSender();
     const alarmRepository: SlowAlarmRepository = new SlowAlarmRepository();
-    const { deliveryRepository, clock, useCase }: Fixture = await fixture(
+    const { deliveryRepository, clock, service }: Fixture = await fixture(
       [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
       { sender, alarmRepository },
     );
-    const attempt: Promise<SendAttempt> = useCase.execute();
+    const attempt: Promise<SendAttempt> = service.execute();
     await alarmRepository.lookingUp.opened;
 
     clock.advanceBy(70_000);
@@ -660,11 +660,11 @@ describe('SendNextDeliveryService', () => {
 
   it('UC-09 발송 응답을 기다리는 동안 다른 워커가 같은 Delivery를 이어받았으면 늦은 결과를 저장하지 않는다', async (): Promise<void> => {
     const sender: PausingMessageSender = new PausingMessageSender();
-    const { deliveryRepository, useCase }: Fixture = await fixture(
+    const { deliveryRepository, service }: Fixture = await fixture(
       [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
       { sender },
     );
-    const attempt: Promise<SendAttempt> = useCase.execute();
+    const attempt: Promise<SendAttempt> = service.execute();
     await sender.sending.opened;
 
     const reclaimed: Delivery = transitionedDelivery(
@@ -688,7 +688,7 @@ describe('SendNextDeliveryService', () => {
   });
 
   it('UC-09 400 응답이면 재시도 없이 사유 코드와 함께 FAILED로 기록한다', async (): Promise<void> => {
-    const { deliveryRepository, useCase }: Fixture = await fixture(
+    const { deliveryRepository, service }: Fixture = await fixture(
       [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
       {
         sender: new RecordingMessageSender((): SendOutcome => ({
@@ -698,7 +698,7 @@ describe('SendNextDeliveryService', () => {
       },
     );
 
-    expect(await useCase.execute()).toEqual({
+    expect(await service.execute()).toEqual({
       kind: 'recorded',
       deliveryId: deliveryId(1),
       outcome: 'permanent-failure',
@@ -710,12 +710,12 @@ describe('SendNextDeliveryService', () => {
   });
 
   it('UC-09 500/503 응답이면 지수 백오프 뒤 다시 보내도록 RETRY_WAIT로 기록한다', async (): Promise<void> => {
-    const { deliveryRepository, useCase }: Fixture = await fixture(
+    const { deliveryRepository, service }: Fixture = await fixture(
       [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
       { sender: new RecordingMessageSender((): SendOutcome => ({ kind: 'transient-failure' })) },
     );
 
-    expect(await useCase.execute()).toMatchObject({ outcome: 'transient-failure' });
+    expect(await service.execute()).toMatchObject({ outcome: 'transient-failure' });
     expect(await storedState(deliveryRepository)).toEqual({
       status: 'RETRY_WAIT',
       retryAt: new Date(at(NOW_ISO).getTime() + 500),
@@ -724,7 +724,7 @@ describe('SendNextDeliveryService', () => {
   });
 
   it('UC-09 500/503 응답이 최대 시도 횟수에 도달하면 FAILED(RETRY_EXHAUSTED)로 기록한다', async (): Promise<void> => {
-    const { deliveryRepository, useCase }: Fixture = await fixture(
+    const { deliveryRepository, service }: Fixture = await fixture(
       [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
       {
         settings: new FixedDispatchSettings(1),
@@ -732,7 +732,7 @@ describe('SendNextDeliveryService', () => {
       },
     );
 
-    await useCase.execute();
+    await service.execute();
 
     expect(await storedState(deliveryRepository)).toEqual({
       status: 'FAILED',
@@ -741,12 +741,12 @@ describe('SendNextDeliveryService', () => {
   });
 
   it('UC-09 응답 타임아웃이면 재전송하지 않고 reconcile 가능 시각과 함께 UNKNOWN으로 기록한다', async (): Promise<void> => {
-    const { deliveryRepository, useCase }: Fixture = await fixture(
+    const { deliveryRepository, service }: Fixture = await fixture(
       [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
       { sender: new RecordingMessageSender((): SendOutcome => ({ kind: 'indeterminate' })) },
     );
 
-    expect(await useCase.execute()).toMatchObject({ outcome: 'indeterminate' });
+    expect(await service.execute()).toMatchObject({ outcome: 'indeterminate' });
     expect(await storedState(deliveryRepository)).toEqual({
       status: 'UNKNOWN',
       unknownSince: at(NOW_ISO),
@@ -767,11 +767,11 @@ describe('SendNextDeliveryService', () => {
     'UC-09 발송 응답을 기다리는 동안 알림이 취소되고 %s 응답이 오면 Delivery는 %s가 된다',
     async (_label: string, expectedStatus: string, reply: Reply): Promise<void> => {
       const sender: PausingMessageSender = new PausingMessageSender(reply);
-      const { deliveryRepository, unitOfWork, clock, useCase }: Fixture = await fixture(
+      const { deliveryRepository, unitOfWork, clock, service }: Fixture = await fixture(
         [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
         { sender },
       );
-      const attempt: Promise<SendAttempt> = useCase.execute();
+      const attempt: Promise<SendAttempt> = service.execute();
       await sender.sending.opened;
 
       await new CancelAlarmService(unitOfWork, clock).execute(alarmId(BULK_ALARM_ID));
@@ -785,12 +785,12 @@ describe('SendNextDeliveryService', () => {
   );
 
   it('UC-09 lease가 HTTP 최대 실행 시간보다 짧으면 요청을 시작하지 않고 lease를 반납한다', async (): Promise<void> => {
-    const { deliveryRepository, sender, useCase }: Fixture = await fixture(
+    const { deliveryRepository, sender, service }: Fixture = await fixture(
       [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
       { settings: new FixedDispatchSettings(3, 5_000) },
     );
 
-    expect(await useCase.execute()).toEqual({ kind: 'released', deliveryId: deliveryId(1) });
+    expect(await service.execute()).toEqual({ kind: 'released', deliveryId: deliveryId(1) });
     expect(sender.sent).toEqual([]);
     const [stored]: ReadonlyArray<Delivery> = await deliveryRepository.findByAlarmId(
       alarmId(BULK_ALARM_ID),
@@ -801,7 +801,7 @@ describe('SendNextDeliveryService', () => {
   it('UC-11 429 응답 / 발송 유스케이스 → 공유 처리량 제한기에 Retry-After만큼 정지가 걸려 모든 워커가 함께 멈춘다', async (): Promise<void> => {
     const clock: AdjustableClock = new AdjustableClock();
     const sharedPermit: SharedSendPermit = new SharedSendPermit(clock);
-    const { deliveryRepository, useCase, newWorker }: Fixture = await fixture(
+    const { deliveryRepository, service, newWorker }: Fixture = await fixture(
       [
         pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO),
         pendingDelivery(2, BULK_ALARM_ID, 'BULK', DISPATCHED_ISO),
@@ -818,7 +818,7 @@ describe('SendNextDeliveryService', () => {
     );
     const otherWorker: SendNextDeliveryService = newWorker(sharedPermit);
 
-    expect(await useCase.execute()).toMatchObject({ outcome: 'rate-limited' });
+    expect(await service.execute()).toMatchObject({ outcome: 'rate-limited' });
     const [limited]: ReadonlyArray<Delivery> = await deliveryRepository.findByAlarmId(
       alarmId(BULK_ALARM_ID),
     );
@@ -839,7 +839,7 @@ describe('SendNextDeliveryService', () => {
 
   it('UC-11 429 응답이면 Retry-After 값만큼 공유 제한기를 멈춘다', async (): Promise<void> => {
     const permit: StubSendPermit = new StubSendPermit({ kind: 'granted' });
-    const { useCase }: Fixture = await fixture(
+    const { service }: Fixture = await fixture(
       [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
       {
         permit,
@@ -850,7 +850,7 @@ describe('SendNextDeliveryService', () => {
       },
     );
 
-    await useCase.execute();
+    await service.execute();
 
     expect(permit.holds).toEqual([3_000]);
   });

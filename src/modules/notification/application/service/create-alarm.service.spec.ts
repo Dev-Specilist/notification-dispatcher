@@ -99,7 +99,7 @@ const createGate = (): Gate => {
 interface Fixture {
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
   readonly unitOfWork: InMemoryUnitOfWorkAdapter;
-  readonly useCase: CreateAlarmService;
+  readonly service: CreateAlarmService;
 }
 
 const fixture = (
@@ -113,15 +113,15 @@ const fixture = (
   return {
     alarmRepository,
     unitOfWork,
-    useCase: new CreateAlarmService(unitOfWork, new FixedIdGenerator(), new FixedClock()),
+    service: new CreateAlarmService(unitOfWork, new FixedIdGenerator(), new FixedClock()),
   };
 };
 
 describe('CreateAlarmService', () => {
   it('UC-01 유효한 요청 / 알림 생성 유스케이스 → 저장소에 DRAFT 알림이 저장되고 반환된다', async (): Promise<void> => {
-    const { alarmRepository, useCase }: Fixture = fixture();
+    const { alarmRepository, service }: Fixture = fixture();
 
-    const view: AlarmView = created(await useCase.execute(BULK_DRAFT));
+    const view: AlarmView = created(await service.execute(BULK_DRAFT));
     const stored: Alarm = found(await alarmRepository.findById(alarmId()));
 
     expect(view).toEqual(AlarmViewMapper.toView(stored));
@@ -133,13 +133,13 @@ describe('CreateAlarmService', () => {
   });
 
   it('UC-01 저장에 실패하면 생성 성공을 반환하지 않고 저장 오류를 그대로 전달한다', async (): Promise<void> => {
-    const { useCase }: Fixture = fixture(new FailingAlarmRepository());
+    const { service }: Fixture = fixture(new FailingAlarmRepository());
 
-    await expect(useCase.execute(BULK_DRAFT)).rejects.toThrow('alarm storage is unavailable');
+    await expect(service.execute(BULK_DRAFT)).rejects.toThrow('alarm storage is unavailable');
   });
 
   it('UC-01 진행 중인 다른 트랜잭션이 실패해 롤백돼도 그사이 생성한 알림은 남는다', async (): Promise<void> => {
-    const { alarmRepository, unitOfWork, useCase }: Fixture = fixture();
+    const { alarmRepository, unitOfWork, service }: Fixture = fixture();
     const transactionStarted: Gate = createGate();
     const failureReleased: Gate = createGate();
     const failing: Promise<void> = unitOfWork.run(async (): Promise<void> => {
@@ -149,7 +149,7 @@ describe('CreateAlarmService', () => {
     });
     await transactionStarted.opened;
 
-    const pending: Promise<CreateAlarmResult> = useCase.execute(BULK_DRAFT);
+    const pending: Promise<CreateAlarmResult> = service.execute(BULK_DRAFT);
     failureReleased.open();
 
     await expect(failing).rejects.toThrow('other transaction failed');
@@ -158,9 +158,9 @@ describe('CreateAlarmService', () => {
   });
 
   it('UC-01 검증에 실패한 요청은 저장하지 않고 거부 사유를 반환한다', async (): Promise<void> => {
-    const { alarmRepository, useCase }: Fixture = fixture();
+    const { alarmRepository, service }: Fixture = fixture();
 
-    const result: CreateAlarmResult = await useCase.execute({ ...BULK_DRAFT, title: ' ' });
+    const result: CreateAlarmResult = await service.execute({ ...BULK_DRAFT, title: ' ' });
 
     expect(result).toEqual({ kind: 'rejected', error: { code: 'EMPTY_TITLE' } });
     expect(await alarmRepository.findById(alarmId())).toEqual({ kind: 'missing' });

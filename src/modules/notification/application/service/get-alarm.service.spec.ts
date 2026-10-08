@@ -40,7 +40,7 @@ const createGate = (): Gate => {
 interface Fixture {
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
   readonly unitOfWork: InMemoryUnitOfWorkAdapter;
-  readonly query: GetAlarmService;
+  readonly service: GetAlarmService;
 }
 
 const alarmId = (value: string): AlarmId => {
@@ -78,25 +78,25 @@ const fixture = (): Fixture => {
     deliveryRepository: new InMemoryDeliveryRepositoryAdapter(),
     expansionJobRepository: new InMemoryExpansionJobRepositoryAdapter(),
   });
-  return { alarmRepository, unitOfWork, query: new GetAlarmService(unitOfWork) };
+  return { alarmRepository, unitOfWork, service: new GetAlarmService(unitOfWork) };
 };
 
 describe('GetAlarmService', () => {
   it('UC-02 저장된 알림 id로 조회하면 그 알림을 반환한다', async (): Promise<void> => {
-    const { alarmRepository, query }: Fixture = fixture();
+    const { alarmRepository, service }: Fixture = fixture();
     const alarm: Alarm = storedAlarm();
     await alarmRepository.save(alarm);
 
-    const result: AlarmResult = await query.execute(alarmId(STORED_ID));
+    const result: AlarmResult = await service.execute(alarmId(STORED_ID));
 
     expect(found(result)).toEqual(AlarmViewMapper.toView(alarm));
   });
 
   it('UC-02 없는 알림 id / 조회·발송 시작·취소 → 알림 없음 오류가 난다', async (): Promise<void> => {
-    const { alarmRepository, query }: Fixture = fixture();
+    const { alarmRepository, service }: Fixture = fixture();
     await alarmRepository.save(storedAlarm());
 
-    const result: AlarmResult = await query.execute(alarmId(MISSING_ID));
+    const result: AlarmResult = await service.execute(alarmId(MISSING_ID));
 
     expect(result).toEqual({
       kind: 'not-found',
@@ -105,7 +105,7 @@ describe('GetAlarmService', () => {
   });
 
   it('UC-02 커밋되지 않은 다른 트랜잭션의 저장은 조회되지 않는다', async (): Promise<void> => {
-    const { unitOfWork, query }: Fixture = fixture();
+    const { unitOfWork, service }: Fixture = fixture();
     const uncommittedSaved: Gate = createGate();
     const failureReleased: Gate = createGate();
     const failing: Promise<void> = unitOfWork.run(
@@ -118,7 +118,7 @@ describe('GetAlarmService', () => {
     );
     await uncommittedSaved.opened;
 
-    const result: Promise<AlarmResult> = query.execute(alarmId(STORED_ID));
+    const result: Promise<AlarmResult> = service.execute(alarmId(STORED_ID));
     failureReleased.open();
 
     await expect(failing).rejects.toThrow('other transaction failed');

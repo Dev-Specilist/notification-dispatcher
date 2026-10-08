@@ -36,7 +36,7 @@ type StatusByRecipient = Readonly<[string, DeliveryStatus]>;
 interface Fixture {
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
   readonly deliveryRepository: InMemoryDeliveryRepositoryAdapter;
-  readonly useCase: CancelAlarmService;
+  readonly service: CancelAlarmService;
 }
 
 const CREATED_ISO: string = '2026-10-07T09:00:00.000Z';
@@ -199,7 +199,7 @@ const fixture = async (
   return {
     alarmRepository,
     deliveryRepository,
-    useCase: new CancelAlarmService(unitOfWork, new FixedClock()),
+    service: new CancelAlarmService(unitOfWork, new FixedClock()),
   };
 };
 
@@ -219,21 +219,21 @@ const storedStatus = async (alarmRepository: InMemoryAlarmRepositoryAdapter): Pr
 
 describe('CancelAlarmService', () => {
   it('UC-02 없는 알림 id / 조회·발송 시작·취소 → 알림 없음 오류가 난다', async (): Promise<void> => {
-    const { useCase }: Fixture = await fixture([urgentAlarm(ALARM_ID)], []);
+    const { service }: Fixture = await fixture([urgentAlarm(ALARM_ID)], []);
 
-    expect(await useCase.execute(alarmId(MISSING_ALARM_ID))).toEqual({
+    expect(await service.execute(alarmId(MISSING_ALARM_ID))).toEqual({
       kind: 'not-found',
       error: { code: 'ALARM_NOT_FOUND', alarmId: MISSING_ALARM_ID },
     });
   });
 
   it('UC-13 취소된 알림의 대기 Delivery / 취소 유스케이스 → 대기 Delivery가 한 번에 CANCELLED가 되고 처리 중인 건은 결과 확정 후 정리된다', async (): Promise<void> => {
-    const { alarmRepository, deliveryRepository, useCase }: Fixture = await fixture(
+    const { alarmRepository, deliveryRepository, service }: Fixture = await fixture(
       [dispatched(urgentAlarm(ALARM_ID))],
       [pending(1), retryWaiting(2), inFlight(3), started(4), sent(5)],
     );
 
-    const result: CancelAlarmResult = await useCase.execute(alarmId(ALARM_ID));
+    const result: CancelAlarmResult = await service.execute(alarmId(ALARM_ID));
 
     expect(result.kind).toBe('cancelled');
     expect(found(await alarmRepository.findById(alarmId(ALARM_ID))).snapshot().state).toEqual({
@@ -251,20 +251,20 @@ describe('CancelAlarmService', () => {
   });
 
   it('UC-13 다른 알림의 대기 Delivery는 취소되지 않는다', async (): Promise<void> => {
-    const { deliveryRepository, useCase }: Fixture = await fixture(
+    const { deliveryRepository, service }: Fixture = await fixture(
       [dispatched(urgentAlarm(ALARM_ID)), dispatched(urgentAlarm(OTHER_ALARM_ID))],
       [pending(1), pendingFor(OTHER_ALARM_ID)(2)],
     );
 
-    await useCase.execute(alarmId(ALARM_ID));
+    await service.execute(alarmId(ALARM_ID));
 
     expect(await statusesOf(deliveryRepository, OTHER_ALARM_ID)).toEqual([['u_000002', 'PENDING']]);
   });
 
   it('UC-13 발송 전 DRAFT 알림도 취소할 수 있다', async (): Promise<void> => {
-    const { alarmRepository, useCase }: Fixture = await fixture([urgentAlarm(ALARM_ID)], []);
+    const { alarmRepository, service }: Fixture = await fixture([urgentAlarm(ALARM_ID)], []);
 
-    expect((await useCase.execute(alarmId(ALARM_ID))).kind).toBe('cancelled');
+    expect((await service.execute(alarmId(ALARM_ID))).kind).toBe('cancelled');
     expect(found(await alarmRepository.findById(alarmId(ALARM_ID))).snapshot().state).toEqual({
       status: 'CANCELLED',
       cancelledAt: at(CANCELLED_ISO),
@@ -273,13 +273,13 @@ describe('CancelAlarmService', () => {
   });
 
   it('UC-13 이미 취소된 알림은 상태 충돌을 반환하고 Delivery는 바뀌지 않는다', async (): Promise<void> => {
-    const { deliveryRepository, useCase }: Fixture = await fixture(
+    const { deliveryRepository, service }: Fixture = await fixture(
       [dispatched(urgentAlarm(ALARM_ID))],
       [inFlight(1)],
     );
-    await useCase.execute(alarmId(ALARM_ID));
+    await service.execute(alarmId(ALARM_ID));
 
-    const second: CancelAlarmResult = await useCase.execute(alarmId(ALARM_ID));
+    const second: CancelAlarmResult = await service.execute(alarmId(ALARM_ID));
 
     expect(second).toEqual({
       kind: 'conflict',
@@ -291,13 +291,13 @@ describe('CancelAlarmService', () => {
   it('UC-13 대기 Delivery를 취소한 뒤 실패해도 취소한 Delivery까지 롤백된다', async (): Promise<void> => {
     const deliveryRepository: PartiallyCancellingDeliveryRepository =
       new PartiallyCancellingDeliveryRepository();
-    const { alarmRepository, useCase }: Fixture = await fixture(
+    const { alarmRepository, service }: Fixture = await fixture(
       [dispatched(urgentAlarm(ALARM_ID))],
       [pending(1), retryWaiting(2)],
       deliveryRepository,
     );
 
-    await expect(useCase.execute(alarmId(ALARM_ID))).rejects.toThrow(
+    await expect(service.execute(alarmId(ALARM_ID))).rejects.toThrow(
       'delivery storage failed midway',
     );
     expect(await storedStatus(alarmRepository)).toBe('DISPATCHING');
@@ -308,13 +308,13 @@ describe('CancelAlarmService', () => {
   });
 
   it('UC-13 대기 Delivery 취소에 실패하면 전체가 롤백되어 알림은 취소되지 않는다', async (): Promise<void> => {
-    const { alarmRepository, useCase }: Fixture = await fixture(
+    const { alarmRepository, service }: Fixture = await fixture(
       [dispatched(urgentAlarm(ALARM_ID))],
       [pending(1)],
       new FailingDeliveryRepository(),
     );
 
-    await expect(useCase.execute(alarmId(ALARM_ID))).rejects.toThrow(
+    await expect(service.execute(alarmId(ALARM_ID))).rejects.toThrow(
       'delivery storage is unavailable',
     );
     expect(await storedStatus(alarmRepository)).toBe('DISPATCHING');
