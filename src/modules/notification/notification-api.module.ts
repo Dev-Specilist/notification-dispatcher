@@ -21,7 +21,15 @@ import { AlarmController } from '@/modules/notification/presentation/alarm.contr
       useFactory: (pool: Pool): UnitOfWorkPort =>
         new DrizzleUnitOfWorkAdapter(NotificationDatabaseFactory.create(pool)),
     },
-    CreateAlarmUseCase,
+    {
+      provide: CreateAlarmUseCase,
+      inject: [UnitOfWorkPort, IdGeneratorPort, ClockPort],
+      useFactory: (
+        unitOfWork: UnitOfWorkPort,
+        idGenerator: IdGeneratorPort,
+        clock: ClockPort,
+      ): CreateAlarmUseCase => new CreateAlarmUseCase(unitOfWork, idGenerator, clock),
+    },
   ],
 })
 export class NotificationApiModule {}

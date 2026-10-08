@@ -1,4 +1,3 @@
-import { Injectable } from '@nestjs/common';
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import {
   AlarmCompletion,
@@ -15,7 +14,6 @@ import { UnitOfWorkPort } from '@/modules/notification/application/port/unit-of-
 import { TransactionRepositories } from '@/modules/notification/application/port/unit-of-work.type';
 import { CompleteAlarmResult } from '@/modules/notification/application/use-case/alarm-result.type';
 
-@Injectable()
 export class CompleteAlarmIfSettledUseCase {
   constructor(
     private readonly unitOfWork: UnitOfWorkPort,

@@ -1,4 +1,3 @@
-import { Injectable } from '@nestjs/common';
 import { AlarmId, RecipientId } from '@/modules/notification/domain/alarm/alarm.type';
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
 import { AlarmLookup } from '@/modules/notification/application/port/alarm-repository.type';
@@ -34,7 +33,6 @@ interface PageToFetch {
 
 type ExpansionStart = ExpansionResult | PageToFetch;
 
-@Injectable()
 export class ExpandRecipientsUseCase {
   constructor(
     private readonly unitOfWork: UnitOfWorkPort,

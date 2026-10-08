@@ -1,4 +1,3 @@
-import { Injectable } from '@nestjs/common';
 import {
   AlarmFound,
   AlarmLookup,
@@ -34,7 +33,6 @@ interface RequestReady {
 
 type ClaimStep = SendAttempt | RequestReady;
 
-@Injectable()
 export class SendNextDeliveryUseCase {
   constructor(
     private readonly unitOfWork: UnitOfWorkPort,

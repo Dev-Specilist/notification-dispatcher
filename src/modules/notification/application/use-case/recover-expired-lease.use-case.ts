@@ -1,4 +1,3 @@
-import { Injectable } from '@nestjs/common';
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
 import {
   DeliverySnapshot,
@@ -15,7 +14,6 @@ import { UnitOfWorkPort } from '@/modules/notification/application/port/unit-of-
 import { TransactionRepositories } from '@/modules/notification/application/port/unit-of-work.type';
 import { RecoveryAttempt } from '@/modules/notification/application/use-case/recover-expired-lease.type';
 
-@Injectable()
 export class RecoverExpiredLeaseUseCase {
   constructor(
     private readonly unitOfWork: UnitOfWorkPort,

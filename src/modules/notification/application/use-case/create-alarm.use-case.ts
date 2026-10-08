@@ -1,4 +1,3 @@
-import { Injectable } from '@nestjs/common';
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmCreation, AlarmDraft } from '@/modules/notification/domain/alarm/alarm.type';
 import { ClockPort } from '@/modules/notification/application/port/clock.port';
@@ -6,7 +5,6 @@ import { IdGeneratorPort } from '@/modules/notification/application/port/id-gene
 import { UnitOfWorkPort } from '@/modules/notification/application/port/unit-of-work.port';
 import { TransactionRepositories } from '@/modules/notification/application/port/unit-of-work.type';
 
-@Injectable()
 export class CreateAlarmUseCase {
   constructor(
     private readonly unitOfWork: UnitOfWorkPort,

@@ -1,11 +1,9 @@
-import { Injectable } from '@nestjs/common';
 import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
 import { AlarmLookup } from '@/modules/notification/application/port/alarm-repository.type';
 import { UnitOfWorkPort } from '@/modules/notification/application/port/unit-of-work.port';
 import { TransactionRepositories } from '@/modules/notification/application/port/unit-of-work.type';
 import { AlarmResult } from '@/modules/notification/application/use-case/alarm-result.type';
 
-@Injectable()
 export class GetAlarmQuery {
   constructor(private readonly unitOfWork: UnitOfWorkPort) {}
 
