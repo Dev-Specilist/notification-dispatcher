@@ -33,36 +33,72 @@
 - 별도 메시지 브로커 없이 **`deliveries` 테이블이 곧 작업 큐**입니다. 알림 상태 변경과 작업 생성이 한 트랜잭션에 들어가서, "상태는 바뀌었는데 작업은 없다" 같은 이중 쓰기 문제가 생기지 않습니다.
 - 워커는 몇 대로 늘려도 `FOR UPDATE SKIP LOCKED`로 서로 다른 Delivery를 가져가고, 처리량은 PostgreSQL의 제한기 행 하나를 함께 씁니다.
 
-## 레이어 구조
+## 아키텍처 원칙과 선택
+
+이 구조는 하나의 공인 규격이 아니라, 원칙을 이 과제에 적용한 결과입니다. 원칙과 적용 방식, 의도한 타협과 그 이유를 나눠 적습니다.
 
 ```
-┌─ presentation ─────────────────────┐      ┌─ infrastructure ───────────────────┐
-│ controllers · request schemas      │      │ drizzle repositories               │
-│ Problem Details · OpenAPI          │      │ postgres rate limiter              │
-│                                    │      │ mock API http adapters             │
-│                                    │      │ worker loops (Nest lifecycle)      │
-└─────────────────┬──────────────────┘      └─────────────────┬──────────────────┘
-                  │ calls use cases                           │ implements ports
-                  ▼                                           ▼
+┌─ adapter/in (driving) ─────────────┐      ┌─ adapter/out (driven) ─────────────┐
+│ web    : controller · schema       │      │ persistence : Drizzle repositories │
+│          presenter                 │      │               transaction          │
+│ worker : expand · send             │      │               rate limiter         │
+│          reconcile                 │      │ external-api: mock API adapters    │
+│          lease recovery loops      │      │ system      : clock · id generator │
+│                                    │      │ in-memory   : fakes for unit tests │
+└──────────────────┬─────────────────┘      └──────────────────┬─────────────────┘
+                   │ calls use cases                           │ implements ports
+                   ▼                                           ▼
 ┌─ application ──────────────────────────────────────────────────────────────────┐
-│ use cases : CreateAlarm · StartDispatch · CancelAlarm · GetAlarm · ListAlarms  │
-│             ExpandRecipients · SendDeliveries · ReconcileDeliveries            │
-│             CompleteAlarmIfSettled                                             │
-│ ports     : AlarmRepository · DeliveryRepository · RecipientDirectory          │
-│             MessageSender (+ SendOutcome union) · RateLimiter · Transaction    │
-│             Clock                                                              │
-└──────────────────────────────────────┬─────────────────────────────────────────┘
-                                       │ uses
-                                       ▼
+│ port/in  : CreateAlarm · GetAlarm · ListAlarms · StartDispatch · CancelAlarm   │
+│            ExpandRecipients · SendNextDelivery · ReconcileNextDelivery         │
+│            RecoverExpiredLease · CompleteAlarmIfSettled (+ result DTOs)        │
+│ service  : implements port/in with the domain model                            │
+│ port/out : AlarmRepository · ExpansionJobRepository · Transaction              │
+│            DeliveryCreation · DispatchQueue · LeaseRecoveryQueue               │
+│            ReconcileQueue · DeliveryCancellation · DeliveryProgress            │
+│            RecipientDirectory · MessageSender (+ SendOutcome union)            │
+│            MessageLookup · SendPermit · Clock · JitterSource                   │
+│            AlarmId · DeliveryId · LeaseToken generators · settings             │
+└────────────────────────────────────────┬───────────────────────────────────────┘
+                                         │ uses
+                                         ▼
 ┌─ domain ───────────────────────────────────────────────────────────────────────┐
 │ Alarm (aggregate) · Delivery (aggregate) · state transitions · RetryPolicy     │
 │ no Nest, no DB, no HTTP, no zod                                                │
 └────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- 의존성은 바깥에서 안쪽으로만 향합니다. domain은 아무것도 모르고, application은 port(abstract class)만 알고, infrastructure가 port를 구현합니다.
-- port를 abstract class로 정의해서 그 자체를 Nest DI 토큰으로 씁니다(`{ provide: AlarmRepository, useClass: DrizzleAlarmRepository }`).
-- 성공과 실패는 예외 대신 `kind`로 구분하는 discriminated union으로 표현합니다. 외부 발송 결과(`SendOutcome = Accepted | PermanentFailure | TransientFailure | RateLimited | Unknown`)는 발송 port의 계약이므로 application의 port 옆에 둡니다.
+### 원칙과 적용
+
+| 원칙 (출처) | 이 프로젝트의 적용 |
+| --- | --- |
+| 의존성은 안쪽으로만 향한다 (Clean Architecture) | domain과 application은 Nest · DB · HTTP · zod를 모릅니다. 서비스는 일반 클래스이고, Nest 모듈이 `useFactory`로 조립합니다. |
+| 애플리케이션과 바깥 기술을 port로 분리한다 (Ports & Adapters) | 모든 유스케이스는 들어오는 쪽 계약(`port/in`)을 갖고, controller와 워커 루프(driving adapter)는 이 계약에만 의존합니다. 나가는 쪽 계약은 `port/out`에 두고 driven adapter가 구현합니다. `port/in` · `adapter/out` 같은 폴더 이름은 원전이 정한 것이 아니라 이 프로젝트의 관례입니다. |
+| 경계를 넘는 데이터는 단순한 구조로 (Clean Architecture) | 유스케이스의 입력과 결과는 application이 소유한 readonly 데이터(command, 결과 DTO)입니다. driving adapter는 도메인 타입을 import하지 않고, presenter는 결과 DTO만 HTTP 응답으로 바꿉니다. 저장소 같은 driven adapter는 Aggregate를 저장하고 복원하는 것이 역할이므로 도메인 타입을 씁니다. |
+| Aggregate가 자기 불변식을 지킨다 (DDD) | Alarm은 상태 전이(DRAFT → DISPATCHING → COMPLETED / CANCELLED)를, Delivery는 시도 · lease · 결과 전이를 스스로 검사합니다. |
+| Repository는 Aggregate를 저장하고 복원한다 (Evans · Fowler) | 저장소 port는 Aggregate를 주고받습니다. 같은 계약 테스트(`testing/contract/`)를 in-memory fake와 Drizzle adapter에 함께 돌립니다. |
+| 쓰지 않는 의존성은 받지 않는다 (ISP) | port는 쓰는 쪽 기준으로 나눕니다. Delivery 저장소는 생성 · 발송 큐 · lease 복구 큐 · reconcile 큐 · 취소 · 진행 집계 port로 나뉘고, 구현 adapter 하나가 모두를 구현합니다. 메서드마다 port를 만들지는 않습니다. |
+
+- port는 abstract class라서 그 자체를 Nest DI 토큰으로 씁니다(`{ provide: ClockPort, useClass: SystemClockAdapter }`). 구현은 `implements`만 쓰고, 구현을 물려받을 필요가 없으면 `extends`하지 않습니다.
+- 성공과 실패는 예외 대신 `kind`로 구분하는 discriminated union으로 표현합니다. 외부 발송 결과(`SendOutcome = Accepted | PermanentFailure | TransientFailure | RateLimited | Unknown`)는 발송 port의 계약이므로 `port/out`에 둡니다.
+- 트랜잭션은 필요한 일관성으로 정합니다. 여러 변경이 함께 성공해야 하면 `TransactionPort`가 한 트랜잭션 안의 저장소를 넘겨줍니다. `TransactionPort`는 변경 추적이 없는 트랜잭션 실행기로, Fowler의 Unit of Work와는 범위가 다릅니다.
+
+### 의도한 타협
+
+| 타협 | 원칙 | 이유 |
+| --- | --- | --- |
+| 발송 시작(Alarm 상태 변경 + Delivery 또는 확장 작업 생성)과 수신자 확장 페이지(Alarm 상태 잠금 조회 + Delivery 생성 + cursor 저장)를 한 트랜잭션에 저장 | Aggregate 사이는 최종 일관성을 권장 (DDD, Vernon) | "알림은 발송 중인데 발송 작업이 없는" 이중 쓰기 불일치를 막기 위해서입니다. 단일 PostgreSQL이라 브로커 없이 원자성을 얻을 수 있고, 상태 변경과 작업 생성이 함께 성공해야 하는 명령에만 씁니다. |
+
+### 바깥 계층의 역할과 패키징 선택
+
+아래는 원칙에서 벗어난 것이 아니라, 바깥 계층이 원래 맡는 일이거나 파일 배치의 선택입니다.
+
+| 항목 | 설명 |
+| --- | --- |
+| 제한기 · claim · lease 복구의 시각을 DB 시계 기준으로 판정 | 여러 워커가 공유하는 상태라 서버마다 다른 시계로 판정하면 어긋납니다. 제한기는 persistence adapter의 SQL이 `clock_timestamp()`로 직접 판정하고, claim과 lease 복구는 application이 DB 시각을 받아 도메인 규칙과 조회 조건에 인자로 넘깁니다. 도메인 규칙은 여전히 시각을 인자로 받습니다. |
+| health의 DB 확인이 Pool에 직접 의존 | 비즈니스 규칙이 없는 기술 관심사라 driven adapter(`adapter/out/persistence`)가 직접 확인합니다. |
+| 종료 조율(bootstrap)이 Pool을 직접 닫음 | composition root의 일입니다. drain이 끝난 뒤, 감시 타이머가 살아 있는 동안 닫는 순서를 한 곳에서 보장합니다. |
+| in-memory fake가 `adapter/out/in-memory`에 있음 | 같은 계약 테스트를 fake와 실제 adapter 양쪽에 돌리기 위해서입니다. 운영 조립에는 쓰지 않습니다. |
 
 ## 파일 구조
 
@@ -71,9 +107,11 @@
 ├── 📂 src/
 │   ├── 📄 main.ts                                   api 엔트리포인트
 │   ├── 📄 worker.ts                                 worker 엔트리포인트
+│   ├── 📄 migrate.ts                                migration 엔트리포인트 (migrate 컨테이너)
 │   ├── 📂 bootstrap/                                composition root
 │   │   ├── 📄 api.module.ts
 │   │   ├── 📄 worker.module.ts
+│   │   ├── 📄 migrate.module.ts
 │   │   ├── 📂 lifecycle/
 │   │   │   ├── 📄 lifecycle.module.ts
 │   │   │   └── 📄 shutdown.service.ts               신호 즉시 readiness down · drain · watchdog
@@ -83,32 +121,28 @@
 │   │       └── 📄 listen-address.util.ts            Local/Network 주소 로그
 │   ├── 📂 modules/
 │   │   ├── 📂 health/                               /livez · /readyz · readiness 상태
-│   │   │   ├── 📂 application/port/readiness.port.ts
-│   │   │   ├── 📂 infrastructure/
-│   │   │   │   ├── 📄 adapter/in-memory-readiness.adapter.ts
-│   │   │   │   └── 📄 readiness.health-indicator.ts
-│   │   │   ├── 📂 presentation/
-│   │   │   │   ├── 📄 health.controller.ts
-│   │   │   │   └── 📄 health-check.filter.ts
+│   │   │   ├── 📂 application/port/out/             readiness.port.ts
+│   │   │   ├── 📂 adapter/
+│   │   │   │   ├── 📂 in/web/                       controller · filter · readiness indicator
+│   │   │   │   ├── 📂 out/persistence/              database.health-indicator (DB ping)
+│   │   │   │   └── 📂 out/in-memory/                in-memory-readiness.adapter
 │   │   │   └── 📄 health.module.ts
 │   │   └── 📂 notification/                         알림 bounded context
 │   │       ├── 📂 domain/
-│   │       │   ├── 📂 alarm/
-│   │       │   │   ├── 📄 alarm.entity.ts           상태 전이 · 불변식
-│   │       │   │   ├── 📄 alarm.type.ts             AlarmId · AlarmStatus · AlarmKind
-│   │       │   │   └── 📄 alarm.error.ts
-│   │       │   └── 📂 delivery/
-│   │       │       ├── 📄 delivery.entity.ts        상태 전이 · lease
-│   │       │       ├── 📄 delivery.type.ts          DeliveryId · DeliveryStatus
-│   │       │       └── 📄 retry-policy.ts           지수 백오프 + jitter
+│   │       │   ├── 📂 alarm/                        alarm.entity (상태 전이 · 불변식) · type · predicate
+│   │       │   └── 📂 delivery/                     delivery.entity (상태 전이 · lease) · retry-policy
 │   │       ├── 📂 application/
-│   │       │   ├── 📂 port/                         *.port.ts (abstract class) · send-outcome.type.ts
-│   │       │   └── 📂 use-case/                     *.use-case.ts · *.query.ts
-│   │       ├── 📂 infrastructure/
-│   │       │   ├── 📂 adapter/                      drizzle-* · postgres-rate-limiter · mock-*
-│   │       │   ├── 📂 persistence/                  drizzle 테이블 정의
-│   │       │   └── 📂 worker/                       expansion · dispatch · reconcile loop
-│   │       ├── 📂 presentation/                     alarm.controller.ts · alarm.schema.ts
+│   │       │   ├── 📂 port/in/                      *.use-case.ts (유스케이스 계약) · command · 결과 DTO
+│   │       │   ├── 📂 port/out/                     *.port.ts (저장소 · 트랜잭션 · 외부 API · 시계 · id)
+│   │       │   └── 📂 service/                      *.service.ts (port/in 구현) · alarm-view.mapper
+│   │       ├── 📂 adapter/
+│   │       │   ├── 📂 in/web/                       controller · 요청 schema · presenter
+│   │       │   ├── 📂 in/worker/                    확장 · 발송 · reconcile · lease 복구 루프
+│   │       │   ├── 📂 out/persistence/              Drizzle 저장소 · 트랜잭션 · 테이블 · PG 제한기
+│   │       │   ├── 📂 out/external-api/             mock 사용자 · 발송 · 조회 API adapter
+│   │       │   ├── 📂 out/system/                   시계 · id 생성기
+│   │       │   └── 📂 out/in-memory/                unit 테스트용 fake 저장소 · 트랜잭션
+│   │       ├── 📂 testing/                          계약 테스트(contract/) · mock 컨테이너 · stub 서버
 │   │       ├── 📄 notification-api.module.ts
 │   │       └── 📄 notification-worker.module.ts
 │   └── 📂 shared/
@@ -125,7 +159,7 @@
 └── 📄 README.md
 ```
 
-테스트는 구현 파일 옆에 둡니다.
+테스트는 구현 파일 옆에 두고, 여러 구현이 함께 쓰는 계약 테스트와 테스트용 컨테이너만 `testing/`에 모읍니다.
 
 | 종류 | 파일 | 실행 | 대상 | 컨테이너 |
 | --- | --- | --- | --- | --- |
@@ -135,7 +169,7 @@
 | e2e | `test/*.e2e-spec.ts` | `pnpm test:e2e` | HTTP 계약과 api + worker 전체 흐름 | PostgreSQL · mock (Testcontainers) |
 
 - 컨테이너는 vitest `globalSetup`에서 실행 단위마다 한 번만 띄우고, 테스트 파일마다 별도 database를 써서 서로 섞이지 않게 합니다. mock은 `RATE_LIMIT` · `ERROR_RATE` · `TIMEOUT_RATE` 설정별로 따로 띄웁니다.
-- 저장소 port의 계약 테스트 하나를 in-memory fake와 Drizzle adapter 양쪽에 돌려서, unit 테스트의 fake가 실제 구현과 같은 계약을 지킨다는 것을 보장합니다.
+- 저장소 port의 계약 테스트(`testing/contract/`) 하나를 in-memory fake와 Drizzle adapter 양쪽에 돌려서, unit 테스트의 fake가 실제 구현과 같은 계약을 지킨다는 것을 보장합니다.
 - pre-push hook이 integration과 e2e까지 돌리므로 push하려면 로컬에 Docker가 실행 중이어야 합니다.
 
 ## 발송 처리 설계
