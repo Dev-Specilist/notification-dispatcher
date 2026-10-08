@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
 import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/out/expansion-job-repository.port';
+import { ExpansionQueuePort } from '@/modules/notification/application/port/out/expansion-queue.port';
 import {
+  ExpansionClaim,
   ExpansionJob,
   ExpansionJobFound,
   ExpansionJobLookup,
@@ -10,12 +12,18 @@ import {
 import { PageCursor } from '@/modules/notification/application/port/out/recipient-directory.type';
 import { Rollback } from '@/modules/notification/adapter/out/in-memory/rollback.type';
 
+type LeaseEntry = [leasedAlarmId: AlarmId, leaseExpiresAt: Date];
+
 @Injectable()
-export class InMemoryExpansionJobRepositoryAdapter implements ExpansionJobRepositoryPort {
+export class InMemoryExpansionJobRepositoryAdapter
+  implements ExpansionJobRepositoryPort, ExpansionQueuePort
+{
   private readonly jobsByAlarmId: Map<AlarmId, ExpansionJobFound> = new Map<
     AlarmId,
     ExpansionJobFound
   >();
+
+  private readonly leaseExpiresAtByAlarmId: Map<AlarmId, Date> = new Map<AlarmId, Date>();
 
   enqueue(alarmId: AlarmId, now: Readonly<Date>): Promise<void> {
     if (this.jobsByAlarmId.has(alarmId)) {
@@ -56,19 +64,52 @@ export class InMemoryExpansionJobRepositoryAdapter implements ExpansionJobReposi
       kind: 'found',
       job: InMemoryExpansionJobRepositoryAdapter.copyJob({ ...lookup.job, progress }),
     });
+    this.leaseExpiresAtByAlarmId.delete(alarmId);
     return Promise.resolve();
+  }
+
+  claimNext(now: Readonly<Date>, leaseUntil: Readonly<Date>): Promise<ExpansionClaim> {
+    const claimable: ReadonlyArray<ExpansionJob> = [...this.jobsByAlarmId.values()]
+      .map(({ job }: ExpansionJobFound): ExpansionJob => job)
+      .filter(
+        ({ alarmId, progress }: ExpansionJob): boolean =>
+          progress.kind === 'in-progress' && !this.isLeasedAt(alarmId, now),
+      )
+      .toSorted(
+        (left: ExpansionJob, right: ExpansionJob): number =>
+          left.enqueuedAt.getTime() - right.enqueuedAt.getTime() ||
+          left.alarmId.localeCompare(right.alarmId),
+      );
+    if (claimable.length === 0) {
+      return Promise.resolve({ kind: 'none' });
+    }
+    const [{ alarmId }]: ReadonlyArray<ExpansionJob> = claimable;
+    this.leaseExpiresAtByAlarmId.set(alarmId, new Date(leaseUntil.getTime()));
+    return Promise.resolve({ kind: 'claimed', alarmId });
   }
 
   checkpoint(): Rollback {
     const saved: Map<AlarmId, ExpansionJobFound> = new Map<AlarmId, ExpansionJobFound>(
       this.jobsByAlarmId,
     );
+    const savedLeases: Map<AlarmId, Date> = new Map<AlarmId, Date>(this.leaseExpiresAtByAlarmId);
     return (): void => {
       this.jobsByAlarmId.clear();
       saved.forEach((value: ExpansionJobFound, key: AlarmId): void => {
         this.jobsByAlarmId.set(key, value);
       });
+      this.leaseExpiresAtByAlarmId.clear();
+      savedLeases.forEach((leaseExpiresAt: Date, leasedAlarmId: AlarmId): void => {
+        this.leaseExpiresAtByAlarmId.set(leasedAlarmId, leaseExpiresAt);
+      });
     };
+  }
+
+  private isLeasedAt(alarmId: AlarmId, now: Readonly<Date>): boolean {
+    return [...this.leaseExpiresAtByAlarmId.entries()].some(
+      ([leasedAlarmId, leaseExpiresAt]: LeaseEntry): boolean =>
+        leasedAlarmId === alarmId && leaseExpiresAt.getTime() > now.getTime(),
+    );
   }
 
   private static copyJob({ alarmId, enqueuedAt, progress }: ExpansionJob): ExpansionJob {

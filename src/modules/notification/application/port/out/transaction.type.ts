@@ -7,6 +7,7 @@ import { ReconcileQueuePort } from '@/modules/notification/application/port/out/
 import { DeliveryCancellationPort } from '@/modules/notification/application/port/out/delivery-cancellation.port';
 import { DeliveryProgressPort } from '@/modules/notification/application/port/out/delivery-progress.port';
 import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/out/expansion-job-repository.port';
+import { ExpansionQueuePort } from '@/modules/notification/application/port/out/expansion-queue.port';
 
 export interface TransactionRepositories {
   readonly alarmRepository: AlarmRepositoryPort;
@@ -17,6 +18,7 @@ export interface TransactionRepositories {
   readonly deliveryCancellation: DeliveryCancellationPort;
   readonly deliveryProgress: DeliveryProgressPort;
   readonly expansionJobRepository: ExpansionJobRepositoryPort;
+  readonly expansionQueue: ExpansionQueuePort;
 }
 
 export type TransactionWork<TResult> = (repositories: TransactionRepositories) => Promise<TResult>;

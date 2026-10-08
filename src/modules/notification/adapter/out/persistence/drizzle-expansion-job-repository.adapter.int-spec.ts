@@ -8,6 +8,7 @@ import { NotificationDatabaseFactory } from '@/modules/notification/adapter/out/
 import { NotificationDatabase } from '@/modules/notification/adapter/out/persistence/notification-database.type';
 import { TestDatabase } from '@/shared/database/testing/test-database';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
+import { ExpansionClaim } from '@/modules/notification/application/port/out/expansion-job-repository.type';
 
 interface DrizzleRepositories {
   readonly alarmRepository: DrizzleAlarmRepositoryAdapter;
@@ -32,12 +33,13 @@ describe('DrizzleExpansionJobRepositoryAdapter', () => {
     await testDatabase.drop();
   });
 
-  ExpansionJobRepositoryContract.verify((): Promise<DrizzleRepositories> => {
+  ExpansionJobRepositoryContract.verify(async (): Promise<DrizzleRepositories> => {
+    await testDatabase.pool.query('TRUNCATE alarms CASCADE');
     const database: NotificationDatabase = NotificationDatabaseFactory.create(testDatabase.pool);
-    return Promise.resolve({
+    return {
       alarmRepository: new DrizzleAlarmRepositoryAdapter(database),
       expansionJobRepository: new DrizzleExpansionJobRepositoryAdapter(database),
-    });
+    };
   });
 
   const storedAlarmId = async (): Promise<string> => {
@@ -48,6 +50,36 @@ describe('DrizzleExpansionJobRepositoryAdapter', () => {
     );
     return alarmId;
   };
+
+  it('DB-18 두 워커가 동시에 확장 작업을 claim하면 FOR UPDATE SKIP LOCKED로 서로 다른 작업을 가져간다', async (): Promise<void> => {
+    await testDatabase.pool.query('TRUNCATE alarms CASCADE');
+    const enqueuedAlarmIds: ReadonlyArray<string> = [await storedAlarmId(), await storedAlarmId()];
+    await Promise.all(
+      enqueuedAlarmIds.map((enqueuedAlarmId: string): Promise<QueryResult> =>
+        testDatabase.pool.query(
+          `INSERT INTO expansion_jobs (alarm_id, enqueued_at, status, cursor_kind) VALUES ($1, now(), 'IN_PROGRESS', 'FIRST')`,
+          [enqueuedAlarmId],
+        ),
+      ),
+    );
+    const claimedAt: Date = new Date();
+    const leaseUntil: Date = new Date(claimedAt.getTime() + 30_000);
+    const workerRepository = (): DrizzleExpansionJobRepositoryAdapter =>
+      new DrizzleExpansionJobRepositoryAdapter(
+        NotificationDatabaseFactory.create(testDatabase.pool),
+      );
+
+    const expansionClaims: ReadonlyArray<ExpansionClaim> = await Promise.all([
+      workerRepository().claimNext(claimedAt, leaseUntil),
+      workerRepository().claimNext(claimedAt, leaseUntil),
+    ]);
+
+    expect(
+      expansionClaims
+        .map((claim: ExpansionClaim): string => (claim.kind === 'claimed' ? claim.alarmId : 'none'))
+        .toSorted(),
+    ).toEqual([...enqueuedAlarmIds].toSorted());
+  });
 
   it('UC-06 완료로 바뀌면 이전 cursor 열을 비운다', async (): Promise<void> => {
     const alarmId: string = await storedAlarmId();

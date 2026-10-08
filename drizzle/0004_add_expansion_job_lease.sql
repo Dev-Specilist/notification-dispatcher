@@ -1,0 +1,2 @@
+ALTER TABLE "expansion_jobs" ADD COLUMN "lease_expires_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "expansion_jobs_claimable_idx" ON "expansion_jobs" USING btree ("enqueued_at","alarm_id") WHERE "expansion_jobs"."status" = 'IN_PROGRESS';

@@ -1,7 +1,10 @@
 import { eq, sql } from 'drizzle-orm';
+import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
 import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/out/expansion-job-repository.port';
+import { ExpansionQueuePort } from '@/modules/notification/application/port/out/expansion-queue.port';
 import {
+  ExpansionClaim,
   ExpansionJobLookup,
   ExpansionProgress,
 } from '@/modules/notification/application/port/out/expansion-job-repository.type';
@@ -16,7 +19,9 @@ interface UpdatedAlarmId {
   readonly alarmId: string;
 }
 
-export class DrizzleExpansionJobRepositoryAdapter implements ExpansionJobRepositoryPort {
+export class DrizzleExpansionJobRepositoryAdapter
+  implements ExpansionJobRepositoryPort, ExpansionQueuePort
+{
   constructor(private readonly database: NotificationDatabase) {}
 
   async enqueue(alarmId: AlarmId, now: Readonly<Date>): Promise<void> {
@@ -57,12 +62,42 @@ export class DrizzleExpansionJobRepositoryAdapter implements ExpansionJobReposit
   async recordProgress(alarmId: AlarmId, progress: ExpansionProgress): Promise<void> {
     const updated: ReadonlyArray<UpdatedAlarmId> = await this.database
       .update(expansionJobs)
-      .set({ ...ExpansionJobRowMapper.toProgressColumns(progress), updatedAt: sql`now()` })
+      .set({
+        ...ExpansionJobRowMapper.toProgressColumns(progress),
+        leaseExpiresAt: sql`NULL`,
+        updatedAt: sql`now()`,
+      })
       .where(eq(expansionJobs.alarmId, alarmId))
       .returning({ alarmId: expansionJobs.alarmId });
     if (updated.length === 0) {
       throw new Error(`expansion job for alarm ${alarmId} does not exist`);
     }
+  }
+
+  async claimNext(now: Readonly<Date>, leaseUntil: Readonly<Date>): Promise<ExpansionClaim> {
+    const claimed: ReadonlyArray<UpdatedAlarmId> = await this.database
+      .update(expansionJobs)
+      .set({ leaseExpiresAt: new Date(leaseUntil.getTime()), updatedAt: sql`now()` })
+      .where(
+        eq(
+          expansionJobs.alarmId,
+          sql`(SELECT ${expansionJobs.alarmId} FROM ${expansionJobs}
+            WHERE ${expansionJobs.status} = 'IN_PROGRESS'
+              AND (${expansionJobs.leaseExpiresAt} IS NULL OR ${expansionJobs.leaseExpiresAt} <= ${now.toISOString()}::timestamptz)
+            ORDER BY ${expansionJobs.enqueuedAt}, ${expansionJobs.alarmId}
+            LIMIT 1
+            FOR UPDATE SKIP LOCKED)`,
+        ),
+      )
+      .returning({ alarmId: expansionJobs.alarmId });
+    if (claimed.length === 0) {
+      return { kind: 'none' };
+    }
+    const [{ alarmId: rawAlarmId }]: ReadonlyArray<UpdatedAlarmId> = claimed;
+    if (!AlarmPredicates.isAlarmId(rawAlarmId)) {
+      throw new Error(`claimed expansion job has an invalid alarm id: ${rawAlarmId}`);
+    }
+    return { kind: 'claimed', alarmId: rawAlarmId };
   }
 
   private static toLookup(rows: ReadonlyArray<ExpansionJobRow>): ExpansionJobLookup {

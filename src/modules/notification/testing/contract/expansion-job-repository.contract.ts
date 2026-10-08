@@ -5,14 +5,18 @@ import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predi
 import { AlarmCreation, AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/out/alarm-repository.port';
 import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/out/expansion-job-repository.port';
+import { ExpansionQueuePort } from '@/modules/notification/application/port/out/expansion-queue.port';
 import {
+  ExpansionClaim,
   ExpansionJobLookup,
   ExpansionProgress,
 } from '@/modules/notification/application/port/out/expansion-job-repository.type';
 
+type ContractExpansionJobRepository = ExpansionJobRepositoryPort & ExpansionQueuePort;
+
 interface ContractRepositories {
   readonly alarmRepository: AlarmRepositoryPort;
-  readonly expansionJobRepository: ExpansionJobRepositoryPort;
+  readonly expansionJobRepository: ContractExpansionJobRepository;
 }
 
 interface Scenario extends ContractRepositories {
@@ -25,6 +29,11 @@ type ProgressCase = Readonly<[string, ExpansionProgress]>;
 
 const ENQUEUED_ISO: string = '2026-10-08T09:00:00.000Z';
 const FINISHED_ISO: string = '2026-10-08T09:10:00.000Z';
+const LATER_ENQUEUED_ISO: string = '2026-10-08T09:01:00.000Z';
+const CLAIMED_ISO: string = '2026-10-08T09:20:00.000Z';
+const LEASED_UNTIL_ISO: string = '2026-10-08T09:20:30.000Z';
+const AFTER_LEASE_ISO: string = '2026-10-08T09:20:31.000Z';
+const LEASE_MS: number = new Date(LEASED_UNTIL_ISO).getTime() - new Date(CLAIMED_ISO).getTime();
 
 export class ExpansionJobRepositoryContract {
   static verify(createRepositories: RepositoriesFactory): void {
@@ -63,6 +72,71 @@ export class ExpansionJobRepositoryContract {
         });
       },
     );
+
+    it('DB-18 진행 중인 확장 작업 여러 개 / 워커가 확장 작업을 claim한다 → lease가 없거나 만료된 작업 중 가장 먼저 만든 작업을 잡아 lease를 걸고, 잡힌 작업은 다른 워커가 가져가지 않는다', async (): Promise<void> => {
+      const { alarmRepository, expansionJobRepository, owner }: Scenario =
+        await ExpansionJobRepositoryContract.scenario(createRepositories);
+      const laterAlarmId: AlarmId =
+        await ExpansionJobRepositoryContract.storedAlarm(alarmRepository);
+      await expansionJobRepository.enqueue(laterAlarmId, new Date(LATER_ENQUEUED_ISO));
+      await expansionJobRepository.enqueue(owner, new Date(ENQUEUED_ISO));
+
+      const expansionClaims: ReadonlyArray<ExpansionClaim> = [
+        await ExpansionJobRepositoryContract.claimAt(expansionJobRepository, CLAIMED_ISO),
+        await ExpansionJobRepositoryContract.claimAt(expansionJobRepository, CLAIMED_ISO),
+        await ExpansionJobRepositoryContract.claimAt(expansionJobRepository, CLAIMED_ISO),
+      ];
+
+      expect(expansionClaims).toEqual([
+        { kind: 'claimed', alarmId: owner },
+        { kind: 'claimed', alarmId: laterAlarmId },
+        { kind: 'none' },
+      ]);
+    });
+
+    it('DB-18 lease가 만료된 확장 작업은 다른 워커가 다시 잡는다', async (): Promise<void> => {
+      const { expansionJobRepository, owner }: Scenario =
+        await ExpansionJobRepositoryContract.scenario(createRepositories);
+      await expansionJobRepository.enqueue(owner, new Date(ENQUEUED_ISO));
+      await ExpansionJobRepositoryContract.claimAt(expansionJobRepository, CLAIMED_ISO);
+
+      expect(
+        await ExpansionJobRepositoryContract.claimAt(expansionJobRepository, AFTER_LEASE_ISO),
+      ).toEqual({ kind: 'claimed', alarmId: owner });
+    });
+
+    it.each<ProgressCase>([
+      ['완료', { kind: 'completed', completedAt: new Date(FINISHED_ISO) }],
+      ['중단', { kind: 'stopped', stoppedAt: new Date(FINISHED_ISO) }],
+    ])(
+      'DB-18 %s된 확장 작업은 claim하지 않는다',
+      async (_label: string, progress: ExpansionProgress): Promise<void> => {
+        const { expansionJobRepository, owner }: Scenario =
+          await ExpansionJobRepositoryContract.scenario(createRepositories);
+        await expansionJobRepository.enqueue(owner, new Date(ENQUEUED_ISO));
+        await expansionJobRepository.recordProgress(owner, progress);
+
+        expect(
+          await ExpansionJobRepositoryContract.claimAt(expansionJobRepository, CLAIMED_ISO),
+        ).toEqual({ kind: 'none' });
+      },
+    );
+
+    it('DB-18 진행을 기록하면 lease가 풀려 lease 만료 전에도 다시 claim할 수 있다', async (): Promise<void> => {
+      const { expansionJobRepository, owner }: Scenario =
+        await ExpansionJobRepositoryContract.scenario(createRepositories);
+      await expansionJobRepository.enqueue(owner, new Date(ENQUEUED_ISO));
+      await ExpansionJobRepositoryContract.claimAt(expansionJobRepository, CLAIMED_ISO);
+
+      await expansionJobRepository.recordProgress(owner, {
+        kind: 'in-progress',
+        cursor: { kind: 'next', token: 'Mw' },
+      });
+
+      expect(
+        await ExpansionJobRepositoryContract.claimAt(expansionJobRepository, CLAIMED_ISO),
+      ).toEqual({ kind: 'claimed', alarmId: owner });
+    });
 
     it('UC-07 이미 있는 확장 작업을 다시 만들어도 기존 진행 상황을 유지한다', async (): Promise<void> => {
       const { expansionJobRepository, owner }: Scenario =
@@ -210,8 +284,23 @@ export class ExpansionJobRepositoryContract {
     });
   }
 
+  private static claimAt(
+    expansionQueue: ExpansionQueuePort,
+    claimedIso: string,
+  ): Promise<ExpansionClaim> {
+    const claimedAt: Date = new Date(claimedIso);
+    return expansionQueue.claimNext(claimedAt, new Date(claimedAt.getTime() + LEASE_MS));
+  }
+
   private static async scenario(createRepositories: RepositoriesFactory): Promise<Scenario> {
     const repositories: ContractRepositories = await createRepositories();
+    return {
+      ...repositories,
+      owner: await ExpansionJobRepositoryContract.storedAlarm(repositories.alarmRepository),
+    };
+  }
+
+  private static async storedAlarm(alarmRepository: AlarmRepositoryPort): Promise<AlarmId> {
     const rawAlarmId: string = randomUUID();
     if (!AlarmPredicates.isAlarmId(rawAlarmId)) {
       throw new Error(`generated ${rawAlarmId} is not a valid AlarmId`);
@@ -224,7 +313,7 @@ export class ExpansionJobRepositoryContract {
     if (creation.kind !== 'created') {
       throw new Error(`contract fixture alarm is invalid: ${creation.error.code}`);
     }
-    await repositories.alarmRepository.save(creation.alarm);
-    return { ...repositories, owner: rawAlarmId };
+    await alarmRepository.save(creation.alarm);
+    return rawAlarmId;
   }
 }

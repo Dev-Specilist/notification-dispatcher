@@ -34,3 +34,14 @@ export interface ExpansionJobMissing {
 }
 
 export type ExpansionJobLookup = ExpansionJobFound | ExpansionJobMissing;
+
+export interface ExpansionClaimed {
+  readonly kind: 'claimed';
+  readonly alarmId: AlarmId;
+}
+
+export interface NoExpansionToClaim {
+  readonly kind: 'none';
+}
+
+export type ExpansionClaim = ExpansionClaimed | NoExpansionToClaim;

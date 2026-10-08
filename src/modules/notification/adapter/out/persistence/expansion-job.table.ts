@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { check, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { check, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { alarms } from '@/modules/notification/adapter/out/persistence/alarm.table';
 
 export const expansionJobs = pgTable(
@@ -14,9 +14,13 @@ export const expansionJobs = pgTable(
     cursorToken: text('cursor_token'),
     completedAt: timestamp('completed_at', { withTimezone: true, mode: 'date' }),
     stoppedAt: timestamp('stopped_at', { withTimezone: true, mode: 'date' }),
+    leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true, mode: 'date' }),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   },
   (table) => [
+    index('expansion_jobs_claimable_idx')
+      .on(table.enqueuedAt, table.alarmId)
+      .where(sql`${table.status} = 'IN_PROGRESS'`),
     check(
       'expansion_jobs_status_check',
       sql`${table.status} IN ('IN_PROGRESS', 'COMPLETED', 'STOPPED')`,

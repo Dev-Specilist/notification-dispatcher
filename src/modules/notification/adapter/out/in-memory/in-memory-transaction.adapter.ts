@@ -51,6 +51,7 @@ export class InMemoryTransactionAdapter implements TransactionPort {
         deliveryCancellation: deliveryRepository,
         deliveryProgress: deliveryRepository,
         expansionJobRepository,
+        expansionQueue: expansionJobRepository,
       });
     } catch (error) {
       rollbacks.forEach((rollback: Rollback): void => rollback());
