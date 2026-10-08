@@ -285,11 +285,6 @@ describe('MockMessageSenderAdapter', () => {
 
     expect(outcome).toEqual({ kind: 'indeterminate' });
   });
-  it.todo('EXT-07 이미 발송된 clientRef / 발송 내역을 조회한다 → messageId가 담긴 내역이 나온다');
-  it.todo('EXT-08 발송하지 않은 clientRef / 발송 내역을 조회한다 → 빈 내역이 나온다');
-  it.todo(
-    'EXT-09 조회 API가 오류를 내거나 스키마와 다른 응답을 준다 / 발송 내역을 조회한다 → 빈 내역이 아니라 LookupFailed 결과가 나온다',
-  );
   it.todo(
     'EXT-10 기본 RATE_LIMIT mock / 제한기를 거쳐 2초 동안 연속 발송한다 → 429가 나오지 않는다 (mock 한도 구간 방식에 대한 특성 테스트)',
   );

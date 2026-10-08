@@ -11,6 +11,7 @@ import {
   rejectedBodySchema,
   retryAfterSecondsSchema,
 } from '@/modules/notification/infrastructure/adapter/mock-api.schema';
+import { MockApiHttp } from '@/modules/notification/infrastructure/adapter/mock-api-http.util';
 import { MockApiSettings } from '@/modules/notification/infrastructure/adapter/mock-api.type';
 
 type AcceptedBodyParse = z.ZodSafeParseResult<z.output<typeof acceptedBodySchema>>;
@@ -32,15 +33,10 @@ export class MockMessageSenderAdapter implements MessageSenderPort {
 
   constructor(private readonly settings: Readonly<MockApiSettings>) {}
 
-  async send(message: OutgoingMessage): Promise<SendOutcome> {
-    try {
-      return await this.request(message);
-    } catch (error) {
-      if (error instanceof TypeError || error instanceof DOMException) {
-        return { kind: 'indeterminate' };
-      }
-      throw error;
-    }
+  send(message: OutgoingMessage): Promise<SendOutcome> {
+    return MockApiHttp.attempt((): Promise<SendOutcome> => this.request(message), {
+      kind: 'indeterminate',
+    });
   }
 
   private async request(message: OutgoingMessage): Promise<SendOutcome> {
@@ -52,15 +48,15 @@ export class MockMessageSenderAdapter implements MessageSenderPort {
     });
     if (response.status === MockMessageSenderAdapter.ACCEPTED) {
       return MockMessageSenderAdapter.accepted(
-        await MockMessageSenderAdapter.parse(response, acceptedBodySchema),
+        await MockApiHttp.parse(response, acceptedBodySchema),
       );
     }
     if (response.status === MockMessageSenderAdapter.REJECTED) {
       return MockMessageSenderAdapter.rejected(
-        await MockMessageSenderAdapter.parse(response, rejectedBodySchema),
+        await MockApiHttp.parse(response, rejectedBodySchema),
       );
     }
-    await MockMessageSenderAdapter.discardBody(response);
+    await MockApiHttp.discardBody(response);
     if (MockMessageSenderAdapter.NOT_SENT_FAILURES.includes(response.status)) {
       return { kind: 'transient-failure' };
     }
@@ -95,18 +91,5 @@ export class MockMessageSenderAdapter implements MessageSenderPort {
 
   private static rejected(body: RejectedBodyParse): SendOutcome {
     return { kind: 'permanent-failure', code: body.success ? body.data.code : 'INVALID_REQUEST' };
-  }
-
-  private static async parse<TSchema extends z.ZodType>(
-    response: Response,
-    schema: TSchema,
-  ): Promise<z.ZodSafeParseResult<z.output<TSchema>>> {
-    return schema.safeParse(await response.json().catch((): string => ''));
-  }
-
-  private static async discardBody({ body }: Response): Promise<void> {
-    if (body instanceof ReadableStream) {
-      await body.cancel();
-    }
   }
 }

@@ -10,3 +10,7 @@ export const retryAfterSecondsSchema = z
   .string()
   .regex(/^\d+$/)
   .transform((seconds: string): number => Number(seconds));
+
+export const lookupBodySchema = z.object({
+  messages: z.array(z.object({ messageId: z.string(), sentAt: z.iso.datetime({ offset: true }) })),
+});
