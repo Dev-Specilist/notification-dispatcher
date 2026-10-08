@@ -15,10 +15,10 @@ import { AlarmViewMapper } from '@/modules/notification/application/service/alar
 import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
 import { AlarmIdGeneratorPort } from '@/modules/notification/application/port/out/alarm-id-generator.port';
 import { CreateAlarmService } from '@/modules/notification/application/service/create-alarm.service';
-import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
-import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-delivery-repository.adapter';
-import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-expansion-job-repository.adapter';
-import { InMemoryTransactionAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-transaction.adapter';
+import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-alarm-repository.adapter';
+import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-delivery-repository.adapter';
+import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-expansion-job-repository.adapter';
+import { InMemoryTransactionAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-transaction.adapter';
 
 const NOW_ISO: string = '2026-10-07T09:00:00.000Z';
 

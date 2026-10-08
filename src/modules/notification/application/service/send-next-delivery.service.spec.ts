@@ -39,11 +39,11 @@ import { SendPermit } from '@/modules/notification/application/port/out/send-per
 import { CancelAlarmService } from '@/modules/notification/application/service/cancel-alarm.service';
 import { SendAttempt } from '@/modules/notification/application/port/in/send-next-delivery.type';
 import { SendNextDeliveryService } from '@/modules/notification/application/service/send-next-delivery.service';
-import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
-import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-delivery-repository.adapter';
-import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-expansion-job-repository.adapter';
-import { InMemoryTransactionAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-transaction.adapter';
-import { InMemoryRepositories } from '@/modules/notification/infrastructure/adapter/in-memory-transaction.type';
+import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-alarm-repository.adapter';
+import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-delivery-repository.adapter';
+import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-expansion-job-repository.adapter';
+import { InMemoryTransactionAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-transaction.adapter';
+import { InMemoryRepositories } from '@/modules/notification/adapter/out/in-memory/in-memory-transaction.type';
 import { TransactionWork } from '@/modules/notification/application/port/out/transaction.type';
 
 type RecipientStatus = Readonly<[string, string]>;

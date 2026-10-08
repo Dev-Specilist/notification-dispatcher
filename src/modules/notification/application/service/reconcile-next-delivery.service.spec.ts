@@ -31,10 +31,10 @@ import { ReconcileSettingsPort } from '@/modules/notification/application/port/o
 import { CancelAlarmService } from '@/modules/notification/application/service/cancel-alarm.service';
 import { ReconcileAttempt } from '@/modules/notification/application/port/in/reconcile-next-delivery.type';
 import { ReconcileNextDeliveryService } from '@/modules/notification/application/service/reconcile-next-delivery.service';
-import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
-import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-delivery-repository.adapter';
-import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-expansion-job-repository.adapter';
-import { InMemoryTransactionAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-transaction.adapter';
+import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-alarm-repository.adapter';
+import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-delivery-repository.adapter';
+import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-expansion-job-repository.adapter';
+import { InMemoryTransactionAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-transaction.adapter';
 
 type LookupEntry = Readonly<[DeliveryId, MessageLookupResult]>;
 

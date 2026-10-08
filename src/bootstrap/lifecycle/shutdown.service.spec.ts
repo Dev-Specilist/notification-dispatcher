@@ -3,7 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Pool } from 'pg';
 import { ShutdownService } from '@/bootstrap/lifecycle/shutdown.service';
 import { ReadinessPort } from '@/modules/health/application/port/out/readiness.port';
-import { InMemoryReadinessAdapter } from '@/modules/health/infrastructure/adapter/in-memory-readiness.adapter';
+import { InMemoryReadinessAdapter } from '@/modules/health/adapter/out/in-memory/in-memory-readiness.adapter';
 import { createEnvSchema } from '@/shared/config/env.schema';
 import { portSchema } from '@/shared/config/primitive.schema';
 import { TypedConfigModule } from '@/shared/config/typed-config.module';

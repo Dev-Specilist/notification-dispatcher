@@ -5,11 +5,11 @@ import { AlarmIdGeneratorPort } from '@/modules/notification/application/port/ou
 import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
 import { CreateAlarmUseCase } from '@/modules/notification/application/port/in/create-alarm.use-case';
 import { CreateAlarmService } from '@/modules/notification/application/service/create-alarm.service';
-import { DrizzleTransactionAdapter } from '@/modules/notification/infrastructure/adapter/drizzle-transaction.adapter';
-import { RandomIdGeneratorAdapter } from '@/modules/notification/infrastructure/adapter/random-id-generator.adapter';
-import { SystemClockAdapter } from '@/modules/notification/infrastructure/adapter/system-clock.adapter';
-import { NotificationDatabaseFactory } from '@/modules/notification/infrastructure/persistence/notification-database.factory';
-import { AlarmController } from '@/modules/notification/presentation/alarm.controller';
+import { DrizzleTransactionAdapter } from '@/modules/notification/adapter/out/persistence/drizzle-transaction.adapter';
+import { RandomIdGeneratorAdapter } from '@/modules/notification/adapter/out/system/random-id-generator.adapter';
+import { SystemClockAdapter } from '@/modules/notification/adapter/out/system/system-clock.adapter';
+import { NotificationDatabaseFactory } from '@/modules/notification/adapter/out/persistence/notification-database.factory';
+import { AlarmController } from '@/modules/notification/adapter/in/web/alarm.controller';
 
 @Module({
   controllers: [AlarmController],
