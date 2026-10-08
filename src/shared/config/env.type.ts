@@ -5,6 +5,7 @@ import {
   PortSchema,
   PositiveMillisecondsSchema,
 } from '@/shared/config/primitive.schema';
+import { DatabaseUrlSchema } from '@/shared/config/primitive.type';
 import { LogFormatSchema, LogLevelSchema } from '@/shared/logging/logging.schema';
 
 export type EnvShape = {
@@ -14,6 +15,7 @@ export type EnvShape = {
   readonly SHUTDOWN_TIMEOUT_MS: z.ZodDefault<PositiveMillisecondsSchema>;
   readonly LOG_LEVEL: z.ZodDefault<LogLevelSchema>;
   readonly LOG_FORMAT: z.ZodDefault<LogFormatSchema>;
+  readonly DATABASE_URL: DatabaseUrlSchema;
 };
 
 export type EnvSchema = z.ZodObject<EnvShape>;

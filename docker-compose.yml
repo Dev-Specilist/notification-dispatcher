@@ -5,6 +5,7 @@ services:
       target: api
     environment:
       LOG_FORMAT: json
+      DATABASE_URL: postgres://notification:notification@postgres:5432/notification
     ports:
       - '3000:3000'
     stop_grace_period: 35s
@@ -15,4 +16,5 @@ services:
       target: worker
     environment:
       LOG_FORMAT: json
+      DATABASE_URL: postgres://notification:notification@postgres:5432/notification
     stop_grace_period: 35s

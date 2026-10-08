@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { EnvSchema } from '@/shared/config/env.type';
 import {
+  databaseUrlSchema,
   Host,
   hostSchema,
   Milliseconds,
@@ -23,4 +24,5 @@ export const createEnvSchema = (defaultPort: Port): EnvSchema =>
     SHUTDOWN_TIMEOUT_MS: positiveMillisecondsSchema.default(DEFAULT_TIMEOUT),
     LOG_LEVEL: logLevelSchema.default('log'),
     LOG_FORMAT: logFormatSchema.default('pretty'),
+    DATABASE_URL: databaseUrlSchema,
   });

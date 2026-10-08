@@ -227,6 +227,12 @@ mise install
 pnpm install
 ```
 
+api와 worker는 기동할 때 env를 검증하고, PostgreSQL 접속 주소 `DATABASE_URL`은 기본값 없는 필수값입니다. `.env` 파일은 읽지 않으므로 셸에서 지정합니다.
+
+```bash
+export DATABASE_URL=postgres://notification:notification@localhost:5432/notification
+```
+
 api와 worker를 함께 실행합니다. 처음 한 번 빌드한 뒤 SWC watch 하나가 `dist/`를 갱신하고, 두 프로세스가 변경을 감지해 재시작합니다.
 
 ```bash

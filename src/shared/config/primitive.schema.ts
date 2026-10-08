@@ -28,6 +28,8 @@ export const positiveMillisecondsSchema = integer.pipe(z.number().min(1)).brand<
 
 export type PositiveMillisecondsSchema = typeof positiveMillisecondsSchema;
 
+export const databaseUrlSchema = z.url({ protocol: /^postgres(ql)?$/ }).brand<'DatabaseUrl'>();
+
 export const processRoleSchema = z.enum(['api', 'worker']);
 
 export type ProcessRole = z.infer<typeof processRoleSchema>;

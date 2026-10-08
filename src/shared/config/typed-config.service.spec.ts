@@ -3,6 +3,7 @@ import { LogLevel } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { createEnvSchema } from '@/shared/config/env.schema';
 import { Host, Milliseconds, Port, portSchema } from '@/shared/config/primitive.schema';
+import { DatabaseUrl } from '@/shared/config/primitive.type';
 import { TypedConfigModule } from '@/shared/config/typed-config.module';
 import { TypedConfigService } from '@/shared/config/typed-config.service';
 import { LogFormat } from '@/shared/logging/logging.schema';
@@ -14,6 +15,7 @@ describe('TypedConfigService', () => {
   beforeEach(async (): Promise<void> => {
     vi.stubEnv('PORT', '4000');
     vi.stubEnv('LOG_LEVEL', 'debug');
+    vi.stubEnv('DATABASE_URL', 'postgres://app:secret@localhost:5432/notification');
     moduleRef = await Test.createTestingModule({
       imports: [TypedConfigModule.forRoot(createEnvSchema(portSchema.parse(3000)))],
     }).compile();
@@ -36,6 +38,7 @@ describe('TypedConfigService', () => {
     expectTypeOf(config.get('SHUTDOWN_DRAIN_MS')).toEqualTypeOf<Milliseconds>();
     expectTypeOf(config.get('LOG_LEVEL')).toExtend<LogLevel>();
     expectTypeOf(config.get('LOG_FORMAT')).toEqualTypeOf<LogFormat>();
+    expectTypeOf(config.get('DATABASE_URL')).toEqualTypeOf<DatabaseUrl>();
   });
 
   it('검증을 거치지 않은 원시 값은 도메인 타입 자리에 들어갈 수 없다', () => {

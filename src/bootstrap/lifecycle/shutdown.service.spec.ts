@@ -23,6 +23,7 @@ describe('ShutdownService', () => {
   beforeEach(async (): Promise<void> => {
     vi.stubEnv('SHUTDOWN_DRAIN_MS', String(DRAIN_MS));
     vi.stubEnv('SHUTDOWN_TIMEOUT_MS', String(TIMEOUT_MS));
+    vi.stubEnv('DATABASE_URL', 'postgres://app:secret@localhost:5432/notification');
     moduleRef = await Test.createTestingModule({
       imports: [TypedConfigModule.forRoot(createEnvSchema(portSchema.parse(3000)))],
       providers: [{ provide: ReadinessPort, useClass: InMemoryReadinessAdapter }, ShutdownService],
