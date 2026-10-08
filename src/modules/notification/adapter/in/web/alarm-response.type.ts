@@ -51,3 +51,16 @@ export interface DeliveriesSection {
 }
 
 export type AlarmDetailResponse = AlarmResponse & DeliveriesSection;
+
+export interface NextPageResponse {
+  readonly nextCursor: string;
+}
+
+export type LastPageResponse = Readonly<Record<string, never>>;
+
+export type ListPageResponse = NextPageResponse | LastPageResponse;
+
+export interface AlarmListResponse {
+  readonly items: ReadonlyArray<AlarmResponse>;
+  readonly page: ListPageResponse;
+}

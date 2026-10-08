@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
 import {
   AlarmResult,
@@ -9,14 +9,21 @@ import { CancelAlarmUseCase } from '@/modules/notification/application/port/in/c
 import { CreateAlarmResult } from '@/modules/notification/application/port/in/create-alarm.type';
 import { CreateAlarmUseCase } from '@/modules/notification/application/port/in/create-alarm.use-case';
 import { GetAlarmUseCase } from '@/modules/notification/application/port/in/get-alarm.use-case';
+import {
+  ListAlarmsQuery,
+  ListAlarmsResult,
+} from '@/modules/notification/application/port/in/list-alarms.type';
+import { ListAlarmsUseCase } from '@/modules/notification/application/port/in/list-alarms.use-case';
 import { StartDispatchUseCase } from '@/modules/notification/application/port/in/start-dispatch.use-case';
 import { alarmIdParamSchema } from '@/modules/notification/adapter/in/web/alarm-id-param.schema';
 import {
   AlarmDetailResponse,
+  AlarmListResponse,
   AlarmResponse,
 } from '@/modules/notification/adapter/in/web/alarm-response.type';
 import { AlarmPresenter } from '@/modules/notification/adapter/in/web/alarm.presenter';
 import { createAlarmSchema } from '@/modules/notification/adapter/in/web/create-alarm.schema';
+import { listAlarmsQuerySchema } from '@/modules/notification/adapter/in/web/list-alarms.schema';
 import { RequestValidationException } from '@/shared/http/request-validation.exception';
 
 type CreateAlarmBody = z.output<typeof createAlarmSchema>;
@@ -30,6 +37,7 @@ export class AlarmController {
     private readonly getAlarm: GetAlarmUseCase,
     private readonly startDispatch: StartDispatchUseCase,
     private readonly cancelAlarm: CancelAlarmUseCase,
+    private readonly listAlarms: ListAlarmsUseCase,
   ) {}
 
   @Post()
@@ -39,6 +47,17 @@ export class AlarmController {
       throw new RequestValidationException([AlarmPresenter.violationOf(result.error)]);
     }
     return AlarmPresenter.toResponse(result.alarm);
+  }
+
+  @Get()
+  async list(
+    @Query({ schema: listAlarmsQuerySchema }) query: ListAlarmsQuery,
+  ): Promise<AlarmListResponse> {
+    const result: ListAlarmsResult = await this.listAlarms.execute(query);
+    if (result.kind === 'rejected') {
+      throw new RequestValidationException([AlarmPresenter.listViolationOf(result.error)]);
+    }
+    return AlarmPresenter.toListResponse(result);
   }
 
   @Get(':id')

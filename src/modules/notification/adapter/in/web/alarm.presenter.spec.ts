@@ -9,8 +9,10 @@ import {
 } from '@/modules/notification/application/port/in/alarm-result.type';
 import { AlarmCreationError } from '@/modules/notification/application/port/in/create-alarm.type';
 import { DeliveryProgressView } from '@/modules/notification/application/port/in/delivery-progress-view.type';
+import { ListAlarmsError } from '@/modules/notification/application/port/in/list-alarms.type';
 import {
   AlarmDetailResponse,
+  AlarmListResponse,
   AlarmResponse,
 } from '@/modules/notification/adapter/in/web/alarm-response.type';
 import { AlarmPresenter } from '@/modules/notification/adapter/in/web/alarm.presenter';
@@ -20,6 +22,8 @@ import { ProblemException } from '@/shared/http/problem.exception';
 type StateCase = Readonly<[string, AlarmViewState, AlarmResponse]>;
 
 type ViolationCase = Readonly<[AlarmCreationError, FieldViolation]>;
+
+type ListViolationCase = Readonly<[error: ListAlarmsError, expected: FieldViolation]>;
 
 type ConflictCase = Readonly<[action: AlarmStateConflictError['action'], detail: string]>;
 
@@ -196,6 +200,55 @@ describe('AlarmPresenter', () => {
       expect(problem.getStatus()).toBe(409);
       expect(problem.code).toBe('ALARM_STATE_CONFLICT');
       expect(problem.message).toBe(detail);
+    },
+  );
+
+  it('다음 페이지가 있으면 결과 DTO 목록을 응답으로 바꾸고 다음 시작 위치를 생성 시각과 id를 담은 cursor로 준다', (): void => {
+    const view: AlarmView = urgentView({ status: 'DRAFT' });
+
+    const response: AlarmListResponse = AlarmPresenter.toListResponse({
+      kind: 'page',
+      items: [view],
+      next: {
+        kind: 'more',
+        after: {
+          createdAt: new Date(CREATED_ISO),
+          alarmId: '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10',
+        },
+      },
+    });
+
+    expect(response).toEqual({
+      items: [AlarmPresenter.toResponse(view)],
+      page: {
+        nextCursor: Buffer.from(
+          `${CREATED_ISO}|0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10`,
+          'utf8',
+        ).toString('base64url'),
+      },
+    });
+  });
+
+  it('마지막 페이지면 page에 nextCursor 필드를 두지 않는다', (): void => {
+    const response: AlarmListResponse = AlarmPresenter.toListResponse({
+      kind: 'page',
+      items: [],
+      next: { kind: 'last' },
+    });
+
+    expect(response).toEqual({ items: [], page: {} });
+  });
+
+  it.each<ListViolationCase>([
+    [{ code: 'INVALID_CURSOR' }, { field: 'cursor', message: 'cursor가 올바르지 않습니다' }],
+    [
+      { code: 'INVALID_LIMIT', limit: 0 },
+      { field: 'limit', message: 'limit은 1 이상의 정수여야 합니다 (현재 0)' },
+    ],
+  ])(
+    '목록 조회 거절 사유 %o를 요청 필드 오류로 바꾼다',
+    (error: ListAlarmsError, expected: FieldViolation): void => {
+      expect(AlarmPresenter.listViolationOf(error)).toEqual(expected);
     },
   );
 });

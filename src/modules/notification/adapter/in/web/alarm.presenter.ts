@@ -10,7 +10,13 @@ import {
 import { AlarmCreationError } from '@/modules/notification/application/port/in/create-alarm.type';
 import { DeliveryProgressView } from '@/modules/notification/application/port/in/delivery-progress-view.type';
 import {
+  AlarmListPage,
+  ListAlarmsError,
+} from '@/modules/notification/application/port/in/list-alarms.type';
+import { AlarmCursor } from '@/modules/notification/adapter/in/web/alarm-cursor.util';
+import {
   AlarmDetailResponse,
+  AlarmListResponse,
   AlarmResponse,
   AlarmResponseBase,
 } from '@/modules/notification/adapter/in/web/alarm-response.type';
@@ -45,6 +51,23 @@ export class AlarmPresenter {
     return {
       ...AlarmPresenter.toResponse(view),
       deliveries: { total, byStatus: { ...byStatus } },
+    };
+  }
+
+  static toListResponse({ items, next }: Readonly<AlarmListPage>): AlarmListResponse {
+    return {
+      items: items.map((view: AlarmView): AlarmResponse => AlarmPresenter.toResponse(view)),
+      page: next.kind === 'more' ? { nextCursor: AlarmCursor.encode(next.after) } : {},
+    };
+  }
+
+  static listViolationOf(error: ListAlarmsError): FieldViolation {
+    if (error.code === 'INVALID_CURSOR') {
+      return { field: 'cursor', message: 'cursor가 올바르지 않습니다' };
+    }
+    return {
+      field: 'limit',
+      message: `limit은 1 이상의 정수여야 합니다 (현재 ${error.limit})`,
     };
   }
 

@@ -7,10 +7,12 @@ import { TransactionPort } from '@/modules/notification/application/port/out/tra
 import { CancelAlarmUseCase } from '@/modules/notification/application/port/in/cancel-alarm.use-case';
 import { CreateAlarmUseCase } from '@/modules/notification/application/port/in/create-alarm.use-case';
 import { GetAlarmUseCase } from '@/modules/notification/application/port/in/get-alarm.use-case';
+import { ListAlarmsUseCase } from '@/modules/notification/application/port/in/list-alarms.use-case';
 import { StartDispatchUseCase } from '@/modules/notification/application/port/in/start-dispatch.use-case';
 import { CancelAlarmService } from '@/modules/notification/application/service/cancel-alarm.service';
 import { CreateAlarmService } from '@/modules/notification/application/service/create-alarm.service';
 import { GetAlarmService } from '@/modules/notification/application/service/get-alarm.service';
+import { ListAlarmsService } from '@/modules/notification/application/service/list-alarms.service';
 import { StartDispatchService } from '@/modules/notification/application/service/start-dispatch.service';
 import { DrizzleTransactionAdapter } from '@/modules/notification/adapter/out/persistence/drizzle-transaction.adapter';
 import { RandomIdGeneratorAdapter } from '@/modules/notification/adapter/out/system/random-id-generator.adapter';
@@ -45,6 +47,12 @@ import { AlarmController } from '@/modules/notification/adapter/in/web/alarm.con
       inject: [TransactionPort],
       useFactory: (transaction: TransactionPort): GetAlarmUseCase =>
         new GetAlarmService(transaction),
+    },
+    {
+      provide: ListAlarmsUseCase,
+      inject: [TransactionPort],
+      useFactory: (transaction: TransactionPort): ListAlarmsUseCase =>
+        new ListAlarmsService(transaction),
     },
     {
       provide: StartDispatchUseCase,

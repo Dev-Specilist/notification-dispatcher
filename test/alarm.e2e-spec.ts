@@ -6,6 +6,10 @@ import { Pool, QueryResult } from 'pg';
 import { z } from 'zod';
 import { TestDatabase } from '@/shared/database/testing/test-database';
 
+type InvalidListQueryCase = Readonly<
+  [label: string, query: Readonly<Record<string, string>>, field: string]
+>;
+
 type InvalidBodyCase = Readonly<
   [string, Readonly<Record<string, string | ReadonlyArray<string>>>, string]
 >;
@@ -45,6 +49,24 @@ const alarmDetailSchema = createdAlarmSchema.extend({
 
 type AlarmDetail = z.infer<typeof alarmDetailSchema>;
 
+const morePagesSchema = z.object({
+  items: z.array(createdAlarmSchema),
+  page: z.object({ nextCursor: z.string() }).strict(),
+});
+
+type MorePages = z.infer<typeof morePagesSchema>;
+
+const lastPageSchema = z.object({
+  items: z.array(createdAlarmSchema),
+  page: z.object({}).strict(),
+});
+
+type LastPage = z.infer<typeof lastPageSchema>;
+
+const anyPageSchema = z.union([morePagesSchema, lastPageSchema]);
+
+type AnyPage = z.infer<typeof anyPageSchema>;
+
 const problemSchema = z.object({
   status: z.number(),
   code: z.string(),
@@ -67,6 +89,15 @@ const UUID: RegExp = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const PROBLEM_JSON: string = 'application/problem+json; charset=utf-8';
 
 const ISO_UTC: RegExp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+const createBulkAlarm = async (title: string): Promise<CreatedAlarm> =>
+  createdAlarmSchema.parse(
+    await spec()
+      .post('/alarms')
+      .withJson({ title, body: '목록 조회 확인', kind: 'BULK' })
+      .expectStatus(201)
+      .returns('res.body'),
+  );
 
 const createUrgentAlarm = async (recipientIds: ReadonlyArray<string>): Promise<CreatedAlarm> =>
   createdAlarmSchema.parse(
@@ -208,9 +239,103 @@ describe('알림 REST API', () => {
     },
   );
 
-  it.todo(
-    'API-03 알림 여러 개 / GET /alarms?status=&kind=&cursor=&limit= → 200 { items, page: { nextCursor } } (마지막 페이지는 nextCursor 필드 없음)',
+  it('API-03 알림 여러 개 / GET /alarms?status=&kind=&cursor=&limit= → 200 { items, page: { nextCursor } } (마지막 페이지는 nextCursor 필드 없음)', async (): Promise<void> => {
+    const oldestAlarm: CreatedAlarm = await createBulkAlarm('목록 1');
+    const middleAlarm: CreatedAlarm = await createBulkAlarm('목록 2');
+    await createUrgentAlarm(['u_000001']);
+    const newestAlarm: CreatedAlarm = await createBulkAlarm('목록 3');
+    const dispatchedBulkAlarm: CreatedAlarm = await createBulkAlarm('목록 발송 중');
+    await spec().post(`/alarms/${dispatchedBulkAlarm.id}/dispatch`).expectStatus(202);
+
+    const firstPage: MorePages = morePagesSchema.parse(
+      await spec()
+        .get('/alarms')
+        .withQueryParams({ status: 'DRAFT', kind: 'BULK', limit: 2 })
+        .expectStatus(200)
+        .returns('res.body'),
+    );
+    const secondPage: AnyPage = anyPageSchema.parse(
+      await spec()
+        .get('/alarms')
+        .withQueryParams({
+          status: 'DRAFT',
+          kind: 'BULK',
+          limit: 2,
+          cursor: firstPage.page.nextCursor,
+        })
+        .expectStatus(200)
+        .returns('res.body'),
+    );
+
+    expect(firstPage.items).toEqual([newestAlarm, middleAlarm]);
+    expect(secondPage.items[0]).toEqual(oldestAlarm);
+  });
+
+  it('API-03 조건에 맞는 알림이 더 없으면 마지막 페이지로 nextCursor 필드 없이 응답한다', async (): Promise<void> => {
+    const cancelledBulkAlarm: CreatedAlarm = await createBulkAlarm('목록 취소');
+    await spec().post(`/alarms/${cancelledBulkAlarm.id}/cancel`).expectStatus(200);
+
+    const lastPage: LastPage = lastPageSchema.parse(
+      await spec()
+        .get('/alarms')
+        .withQueryParams({ status: 'CANCELLED', kind: 'BULK', limit: 100 })
+        .expectStatus(200)
+        .returns('res.body'),
+    );
+
+    expect(lastPage.items.map(({ id: alarmId }: CreatedAlarm): string => alarmId)).toContain(
+      cancelledBulkAlarm.id,
+    );
+    expect(lastPage.page).toEqual({});
+  });
+
+  it('API-03 발급한 cursor 뒤에 base64url 밖의 문자를 붙이면 400 Problem Details', async (): Promise<void> => {
+    await createBulkAlarm('목록 cursor 확인 1');
+    await createBulkAlarm('목록 cursor 확인 2');
+    const firstPage: MorePages = morePagesSchema.parse(
+      await spec()
+        .get('/alarms')
+        .withQueryParams({ status: 'DRAFT', kind: 'BULK', limit: 1 })
+        .expectStatus(200)
+        .returns('res.body'),
+    );
+
+    const problem: Problem = problemSchema.parse(
+      await spec()
+        .get('/alarms')
+        .withQueryParams({ status: 'DRAFT', kind: 'BULK', cursor: `${firstPage.page.nextCursor}!` })
+        .expectStatus(400)
+        .returns('res.body'),
+    );
+
+    expect(problem.errors).toContainEqual({ field: 'cursor', message: expect.any(String) });
+  });
+
+  it.each<InvalidListQueryCase>([
+    ['해석할 수 없는 cursor', { cursor: 'not-a-cursor' }, 'cursor'],
+    ['범위를 벗어난 limit', { limit: '0' }, 'limit'],
+    ['정해지지 않은 상태 필터', { status: 'UNKNOWN' }, 'status'],
+  ])(
+    'API-03 %s / GET /alarms → 400 Problem Details',
+    async (
+      _label: string,
+      query: Readonly<Record<string, string>>,
+      field: string,
+    ): Promise<void> => {
+      const problem: Problem = problemSchema.parse(
+        await spec()
+          .get('/alarms')
+          .withQueryParams(query)
+          .expectStatus(400)
+          .expectHeader('content-type', PROBLEM_JSON)
+          .returns('res.body'),
+      );
+
+      expect(problem).toMatchObject({ status: 400, code: 'VALIDATION_FAILED' });
+      expect(problem.errors).toContainEqual({ field, message: expect.any(String) });
+    },
   );
+
   it('API-04 있는 알림 / GET /alarms/:id → 200과 Delivery 상태별 집계', async (): Promise<void> => {
     const createdAlarm: CreatedAlarm = createdAlarmSchema.parse(
       await spec()
