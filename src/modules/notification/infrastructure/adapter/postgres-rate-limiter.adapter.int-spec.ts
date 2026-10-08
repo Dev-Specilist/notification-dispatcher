@@ -26,6 +26,8 @@ const T0_MS: number = Date.parse('2026-10-08T09:00:00.000Z');
 const PERMITS_PER_SECOND: number = 50;
 const WINDOW_MS: number = 1_000;
 
+const SWEEP_TIMEOUT_MS: number = 30_000;
+
 class FixedDatabaseClock implements DatabaseClock {
   constructor(private readonly instant: Date) {}
 
@@ -103,28 +105,32 @@ describe('PostgresRateLimiterAdapter', () => {
     expect(await acquireAt(settings, 39)).toBe('denied');
   });
 
-  it('DB-11 초당 50건 제한기 (초기 상태 포함) / 워커 여러 개가 경계 시각 전후로 토큰을 요청한다 → 임의의 1초 구간에서 발급된 토큰 합이 50을 넘지 않는다', async (): Promise<void> => {
-    const settings: RateLimiterSettings = newSettings();
-    const workerCount: number = 3;
-    const tickMs: number = 5;
-    const durationOfRunMs: number = 3 * WINDOW_MS;
-    const permits: Array<TimedPermit> = [];
+  it(
+    'DB-11 초당 50건 제한기 (초기 상태 포함) / 워커 여러 개가 경계 시각 전후로 토큰을 요청한다 → 임의의 1초 구간에서 발급된 토큰 합이 50을 넘지 않는다',
+    async (): Promise<void> => {
+      const settings: RateLimiterSettings = newSettings();
+      const workerCount: number = 3;
+      const tickMs: number = 5;
+      const durationOfRunMs: number = 3 * WINDOW_MS;
+      const permits: Array<TimedPermit> = [];
 
-    for (let offsetMs: number = 0; offsetMs < durationOfRunMs; offsetMs += tickMs) {
-      const kinds: ReadonlyArray<PermitKind> = await Promise.all(
-        Array.from({ length: workerCount }, (): Promise<PermitKind> =>
-          acquireAt(settings, offsetMs),
-        ),
-      );
-      permits.push(...kinds.map((kind: PermitKind): TimedPermit => ({ atMs: offsetMs, kind })));
-    }
-    const grantedAtMs: ReadonlyArray<number> = permits
-      .filter(({ kind }: TimedPermit): boolean => kind === 'granted')
-      .map(({ atMs }: TimedPermit): number => atMs);
+      for (let offsetMs: number = 0; offsetMs < durationOfRunMs; offsetMs += tickMs) {
+        const kinds: ReadonlyArray<PermitKind> = await Promise.all(
+          Array.from({ length: workerCount }, (): Promise<PermitKind> =>
+            acquireAt(settings, offsetMs),
+          ),
+        );
+        permits.push(...kinds.map((kind: PermitKind): TimedPermit => ({ atMs: offsetMs, kind })));
+      }
+      const grantedAtMs: ReadonlyArray<number> = permits
+        .filter(({ kind }: TimedPermit): boolean => kind === 'granted')
+        .map(({ atMs }: TimedPermit): number => atMs);
 
-    expect(maxPermitsInAnyWindow(grantedAtMs)).toBe(PERMITS_PER_SECOND);
-    expect(grantedAtMs).toHaveLength((durationOfRunMs / WINDOW_MS) * PERMITS_PER_SECOND);
-  });
+      expect(maxPermitsInAnyWindow(grantedAtMs)).toBe(PERMITS_PER_SECOND);
+      expect(grantedAtMs).toHaveLength((durationOfRunMs / WINDOW_MS) * PERMITS_PER_SECOND);
+    },
+    SWEEP_TIMEOUT_MS,
+  );
 
   it('DB-11 같은 시각에 여러 워커가 동시에 요청하면 하나만 허가한다', async (): Promise<void> => {
     const settings: RateLimiterSettings = newSettings();

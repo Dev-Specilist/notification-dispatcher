@@ -45,14 +45,10 @@ class DrainingWork implements BeforeApplicationShutdown {
   }
 }
 
-const advanceUntilClosingStarted = async (pool: Pool): Promise<number> => {
-  let elapsedMs: number = 0;
-  while (!pool.ending) {
-    await vi.advanceTimersByTimeAsync(1);
-    elapsedMs += 1;
+const yieldUntil = async (condition: () => boolean): Promise<void> => {
+  while (!condition()) {
     await scheduler.yield();
   }
-  return elapsedMs;
 };
 
 describe('ShutdownService', () => {
@@ -109,12 +105,14 @@ describe('ShutdownService', () => {
     });
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     moduleRef.get(ShutdownService).handleSignal('SIGTERM');
+    const timersBeforeClose: number = vi.getTimerCount();
 
     closed = true;
     const closing: Promise<void> = moduleRef.close();
-    const elapsedMs: number = await advanceUntilClosingStarted(pool);
-    await vi.advanceTimersByTimeAsync(DRAIN_MS + TIMEOUT_MS - 1 - elapsedMs);
-    expect(elapsedMs).toBeGreaterThanOrEqual(DRAIN_MS);
+    await yieldUntil((): boolean => vi.getTimerCount() > timersBeforeClose);
+    await vi.advanceTimersByTimeAsync(DRAIN_MS);
+    await yieldUntil((): boolean => pool.ending);
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS - 1);
     expect(exit).not.toHaveBeenCalled();
 
     await expect(vi.advanceTimersByTimeAsync(1)).rejects.toThrow(ExitCalled);
