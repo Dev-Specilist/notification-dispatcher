@@ -1,6 +1,6 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { z } from 'zod';
-import { AlarmCreation } from '@/modules/notification/domain/alarm/alarm.type';
+import { CreateAlarmResult } from '@/modules/notification/application/port/in/create-alarm.type';
 import { CreateAlarmUseCase } from '@/modules/notification/application/port/in/create-alarm.use-case';
 import { AlarmResponse } from '@/modules/notification/presentation/alarm-response.type';
 import { AlarmPresenter } from '@/modules/notification/presentation/alarm.presenter';
@@ -15,10 +15,10 @@ export class AlarmController {
 
   @Post()
   async create(@Body({ schema: createAlarmSchema }) body: CreateAlarmBody): Promise<AlarmResponse> {
-    const creation: AlarmCreation = await this.createAlarm.execute(body);
-    if (creation.kind === 'rejected') {
-      throw new RequestValidationException([AlarmPresenter.violationOf(creation.error)]);
+    const result: CreateAlarmResult = await this.createAlarm.execute(body);
+    if (result.kind === 'rejected') {
+      throw new RequestValidationException([AlarmPresenter.violationOf(result.error)]);
     }
-    return AlarmPresenter.toResponse(creation.alarm);
+    return AlarmPresenter.toResponse(result.alarm);
   }
 }

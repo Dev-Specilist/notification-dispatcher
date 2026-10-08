@@ -1,10 +1,10 @@
-import { AlarmKind } from '@/modules/notification/domain/alarm/alarm.type';
+import { AlarmKindName } from '@/modules/notification/application/port/in/alarm-view.type';
 
 export interface AlarmResponseBase {
   readonly id: string;
   readonly title: string;
   readonly body: string;
-  readonly kind: AlarmKind;
+  readonly kind: AlarmKindName;
   readonly recipientIds: ReadonlyArray<string>;
   readonly createdAt: string;
 }

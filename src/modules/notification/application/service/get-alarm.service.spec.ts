@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
-import { AlarmCreation, AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
+import {
+  AlarmCreated,
+  AlarmCreation,
+  AlarmId,
+} from '@/modules/notification/domain/alarm/alarm.type';
 import { TransactionRepositories } from '@/modules/notification/application/port/out/unit-of-work.type';
-import { AlarmResult } from '@/modules/notification/application/port/in/alarm-result.type';
+import {
+  AlarmFoundResult,
+  AlarmResult,
+} from '@/modules/notification/application/port/in/alarm-result.type';
+import { AlarmView } from '@/modules/notification/application/port/in/alarm-view.type';
+import { AlarmViewMapper } from '@/modules/notification/application/service/alarm-view.mapper';
 import { GetAlarmService } from '@/modules/notification/application/service/get-alarm.service';
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-delivery-repository.adapter';
@@ -50,14 +59,16 @@ const storedAlarm = (): Alarm => {
   if (creation.kind !== 'created') {
     throw new Error(`test fixture alarm is invalid: ${creation.error.code}`);
   }
-  return creation.alarm;
+  const { alarm }: AlarmCreated = creation;
+  return alarm;
 };
 
-const found = (result: AlarmResult): Alarm => {
+const found = (result: AlarmResult): AlarmView => {
   if (result.kind !== 'found') {
     throw new Error(`expected found but got ${result.kind}`);
   }
-  return result.alarm;
+  const { alarm }: AlarmFoundResult = result;
+  return alarm;
 };
 
 const fixture = (): Fixture => {
@@ -78,7 +89,7 @@ describe('GetAlarmService', () => {
 
     const result: AlarmResult = await query.execute(alarmId(STORED_ID));
 
-    expect(found(result).snapshot()).toEqual(alarm.snapshot());
+    expect(found(result)).toEqual(AlarmViewMapper.toView(alarm));
   });
 
   it('UC-02 없는 알림 id / 조회·발송 시작·취소 → 알림 없음 오류가 난다', async (): Promise<void> => {

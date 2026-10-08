@@ -1,6 +1,10 @@
-import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmConflicted, AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
-import { AlarmFound } from '@/modules/notification/application/port/out/alarm-repository.type';
+import { AlarmView } from '@/modules/notification/application/port/in/alarm-view.type';
+
+export interface AlarmFoundResult {
+  readonly kind: 'found';
+  readonly alarm: AlarmView;
+}
 
 export interface AlarmNotFoundError {
   readonly code: 'ALARM_NOT_FOUND';
@@ -12,18 +16,18 @@ export interface AlarmNotFound {
   readonly error: AlarmNotFoundError;
 }
 
-export type AlarmResult = AlarmFound | AlarmNotFound;
+export type AlarmResult = AlarmFoundResult | AlarmNotFound;
 
 export interface AlarmDispatched {
   readonly kind: 'dispatched';
-  readonly alarm: Alarm;
+  readonly alarm: AlarmView;
 }
 
 export type StartDispatchResult = AlarmDispatched | AlarmNotFound | AlarmConflicted;
 
 export interface AlarmCancelled {
   readonly kind: 'cancelled';
-  readonly alarm: Alarm;
+  readonly alarm: AlarmView;
 }
 
 export type CancelAlarmResult = AlarmCancelled | AlarmNotFound | AlarmConflicted;

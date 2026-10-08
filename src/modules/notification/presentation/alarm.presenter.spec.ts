@@ -1,72 +1,33 @@
 import { describe, expect, it } from 'vitest';
-import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
-import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import {
-  AlarmCompletion,
-  AlarmCreation,
-  AlarmDraft,
-  AlarmTransition,
-  AlarmValidationError,
-  DeliveryCount,
-} from '@/modules/notification/domain/alarm/alarm.type';
+  AlarmView,
+  AlarmViewState,
+} from '@/modules/notification/application/port/in/alarm-view.type';
+import { AlarmCreationError } from '@/modules/notification/application/port/in/create-alarm.type';
 import { AlarmResponse } from '@/modules/notification/presentation/alarm-response.type';
 import { AlarmPresenter } from '@/modules/notification/presentation/alarm.presenter';
 import { FieldViolation } from '@/shared/http/problem-details.type';
 
-type StateCase = Readonly<[string, () => Alarm, AlarmResponse]>;
+type StateCase = Readonly<[string, AlarmViewState, AlarmResponse]>;
 
-type ViolationCase = Readonly<[AlarmValidationError, FieldViolation]>;
+type ViolationCase = Readonly<[AlarmCreationError, FieldViolation]>;
 
-const ALARM_ID: string = '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10';
 const CREATED_ISO: string = '2026-10-08T09:00:00.000Z';
 const DISPATCHED_ISO: string = '2026-10-08T09:05:00.000Z';
 const SETTLED_ISO: string = '2026-10-08T09:10:00.000Z';
 
-const URGENT_DRAFT: AlarmDraft = {
+const urgentView = (state: AlarmViewState): AlarmView => ({
+  id: '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10',
   title: '서버 점검',
   body: '10분 뒤 점검이 시작됩니다',
   kind: 'URGENT',
   recipientIds: ['u_000001', 'u_000002'],
-};
-
-const BULK_DRAFT: AlarmDraft = {
-  title: '추석 이벤트',
-  body: '연휴 쿠폰이 도착했어요',
-  kind: 'BULK',
-  recipientIds: [],
-};
-
-const created = (draft: Readonly<AlarmDraft>): Alarm => {
-  if (!AlarmPredicates.isAlarmId(ALARM_ID)) {
-    throw new Error('test fixture id is invalid');
-  }
-  const creation: AlarmCreation = Alarm.create(ALARM_ID, draft, new Date(CREATED_ISO));
-  if (creation.kind !== 'created') {
-    throw new Error(`test fixture alarm is invalid: ${creation.error.code}`);
-  }
-  return creation.alarm;
-};
-
-const transitioned = (transition: AlarmTransition | AlarmCompletion): Alarm => {
-  if (transition.kind !== 'transitioned') {
-    throw new Error(`test fixture transition failed: ${transition.kind}`);
-  }
-  return transition.alarm;
-};
-
-const noUnsettled = (): DeliveryCount => {
-  const count: number = 0;
-  if (!AlarmPredicates.isDeliveryCount(count)) {
-    throw new Error('test fixture count is invalid');
-  }
-  return count;
-};
-
-const dispatched = (draft: Readonly<AlarmDraft>): Alarm =>
-  transitioned(created(draft).startDispatch(new Date(DISPATCHED_ISO)));
+  state,
+  createdAt: new Date(CREATED_ISO),
+});
 
 const URGENT_BASE: Omit<AlarmResponse, 'status'> = {
-  id: ALARM_ID,
+  id: '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10',
   title: '서버 점검',
   body: '10분 뒤 점검이 시작됩니다',
   kind: 'URGENT',
@@ -76,21 +37,19 @@ const URGENT_BASE: Omit<AlarmResponse, 'status'> = {
 
 describe('AlarmPresenter', () => {
   it.each<StateCase>([
-    ['DRAFT', (): Alarm => created(URGENT_DRAFT), { ...URGENT_BASE, status: 'DRAFT' }],
+    ['DRAFT', { status: 'DRAFT' }, { ...URGENT_BASE, status: 'DRAFT' }],
     [
       'DISPATCHING',
-      (): Alarm => dispatched(URGENT_DRAFT),
+      { status: 'DISPATCHING', dispatchedAt: new Date(DISPATCHED_ISO) },
       { ...URGENT_BASE, status: 'DISPATCHING', dispatchedAt: DISPATCHED_ISO },
     ],
     [
       'COMPLETED',
-      (): Alarm =>
-        transitioned(
-          dispatched(URGENT_DRAFT).complete(
-            { expansionCompleted: true, unsettledDeliveries: noUnsettled() },
-            new Date(SETTLED_ISO),
-          ),
-        ),
+      {
+        status: 'COMPLETED',
+        dispatchedAt: new Date(DISPATCHED_ISO),
+        completedAt: new Date(SETTLED_ISO),
+      },
       {
         ...URGENT_BASE,
         status: 'COMPLETED',
@@ -100,12 +59,16 @@ describe('AlarmPresenter', () => {
     ],
     [
       '발송 전 CANCELLED',
-      (): Alarm => transitioned(created(URGENT_DRAFT).cancel(new Date(SETTLED_ISO))),
+      { status: 'CANCELLED', cancelledAt: new Date(SETTLED_ISO) },
       { ...URGENT_BASE, status: 'CANCELLED', cancelledAt: SETTLED_ISO },
     ],
     [
       '발송 후 CANCELLED',
-      (): Alarm => transitioned(dispatched(URGENT_DRAFT).cancel(new Date(SETTLED_ISO))),
+      {
+        status: 'CANCELLED',
+        cancelledAt: new Date(SETTLED_ISO),
+        dispatchedAt: new Date(DISPATCHED_ISO),
+      },
       {
         ...URGENT_BASE,
         status: 'CANCELLED',
@@ -114,17 +77,19 @@ describe('AlarmPresenter', () => {
       },
     ],
   ])(
-    '%s 알림을 상태에 맞는 시각만 담은 응답으로 바꾸고 시각은 UTC ISO 8601로 표기한다',
-    (_label: string, alarmOf: () => Alarm, expected: AlarmResponse): void => {
-      expect(AlarmPresenter.toResponse(alarmOf())).toEqual(expected);
+    '%s 결과 DTO를 상태에 맞는 시각만 담은 응답으로 바꾸고 시각은 UTC ISO 8601로 표기한다',
+    (_label: string, state: AlarmViewState, expected: AlarmResponse): void => {
+      expect(AlarmPresenter.toResponse(urgentView(state))).toEqual(expected);
     },
   );
 
-  it('전체 사용자 대상인 대량 알림은 수신자 목록을 비워서 응답한다', (): void => {
-    expect(AlarmPresenter.toResponse(created(BULK_DRAFT))).toMatchObject({
-      kind: 'BULK',
-      recipientIds: [],
-    });
+  it('결과 DTO의 수신자 목록을 새 배열로 옮겨 응답한다', (): void => {
+    const view: AlarmView = urgentView({ status: 'DRAFT' });
+
+    const response: AlarmResponse = AlarmPresenter.toResponse(view);
+
+    expect(response.recipientIds).toEqual(view.recipientIds);
+    expect(response.recipientIds).not.toBe(view.recipientIds);
   });
 
   it.each<ViolationCase>([
@@ -144,7 +109,7 @@ describe('AlarmPresenter', () => {
     ],
   ])(
     '도메인 거절 사유 %o를 요청 필드 오류로 바꾼다',
-    (error: AlarmValidationError, expected: FieldViolation): void => {
+    (error: AlarmCreationError, expected: FieldViolation): void => {
       expect(AlarmPresenter.violationOf(error)).toEqual(expected);
     },
   );

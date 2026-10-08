@@ -1,5 +1,8 @@
-import { AlarmCreation, AlarmDraft } from '@/modules/notification/domain/alarm/alarm.type';
+import {
+  CreateAlarmCommand,
+  CreateAlarmResult,
+} from '@/modules/notification/application/port/in/create-alarm.type';
 
 export abstract class CreateAlarmUseCase {
-  abstract execute(draft: Readonly<AlarmDraft>): Promise<AlarmCreation>;
+  abstract execute(command: Readonly<CreateAlarmCommand>): Promise<CreateAlarmResult>;
 }

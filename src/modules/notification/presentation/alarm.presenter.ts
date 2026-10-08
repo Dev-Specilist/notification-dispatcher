@@ -1,9 +1,8 @@
-import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import {
-  AlarmSnapshot,
-  AlarmState,
-  AlarmValidationError,
-} from '@/modules/notification/domain/alarm/alarm.type';
+  AlarmView,
+  AlarmViewState,
+} from '@/modules/notification/application/port/in/alarm-view.type';
+import { AlarmCreationError } from '@/modules/notification/application/port/in/create-alarm.type';
 import {
   AlarmResponse,
   AlarmResponseBase,
@@ -11,21 +10,20 @@ import {
 import { FieldViolation } from '@/shared/http/problem-details.type';
 
 export class AlarmPresenter {
-  static toResponse(alarm: Alarm): AlarmResponse {
-    const snapshot: AlarmSnapshot = alarm.snapshot();
-    const { id, title, body, kind, target, createdAt }: AlarmSnapshot = snapshot;
+  static toResponse(view: Readonly<AlarmView>): AlarmResponse {
+    const { id, title, body, kind, recipientIds, state, createdAt }: Readonly<AlarmView> = view;
     const base: AlarmResponseBase = {
       id,
       title,
       body,
       kind,
-      recipientIds: target.kind === 'EXPLICIT' ? [...target.recipientIds] : [],
+      recipientIds: [...recipientIds],
       createdAt: createdAt.toISOString(),
     };
-    return AlarmPresenter.withState(base, snapshot.state);
+    return AlarmPresenter.withState(base, state);
   }
 
-  static violationOf(error: AlarmValidationError): FieldViolation {
+  static violationOf(error: AlarmCreationError): FieldViolation {
     switch (error.code) {
       case 'EMPTY_TITLE':
         return { field: 'title', message: '제목이 비어 있습니다' };
@@ -44,7 +42,7 @@ export class AlarmPresenter {
     return { field: 'recipientIds', message: `수신자 id 형식이 잘못되었습니다: ${error.value}` };
   }
 
-  private static withState(base: AlarmResponseBase, state: AlarmState): AlarmResponse {
+  private static withState(base: AlarmResponseBase, state: AlarmViewState): AlarmResponse {
     switch (state.status) {
       case 'DRAFT':
         return { ...base, status: 'DRAFT' };
@@ -60,11 +58,11 @@ export class AlarmPresenter {
       case 'CANCELLED':
         break;
     }
-    return state.dispatch.kind === 'STARTED'
+    return 'dispatchedAt' in state
       ? {
           ...base,
           status: 'CANCELLED',
-          dispatchedAt: state.dispatch.at.toISOString(),
+          dispatchedAt: state.dispatchedAt.toISOString(),
           cancelledAt: state.cancelledAt.toISOString(),
         }
       : { ...base, status: 'CANCELLED', cancelledAt: state.cancelledAt.toISOString() };

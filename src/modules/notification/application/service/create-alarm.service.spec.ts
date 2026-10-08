@@ -1,10 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
-import { AlarmCreation, AlarmDraft, AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
+import { AlarmDraft, AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import { DeliveryId } from '@/modules/notification/domain/delivery/delivery.type';
-import { AlarmLookup } from '@/modules/notification/application/port/out/alarm-repository.type';
+import {
+  AlarmFound,
+  AlarmLookup,
+} from '@/modules/notification/application/port/out/alarm-repository.type';
+import {
+  AlarmCreatedResult,
+  CreateAlarmResult,
+} from '@/modules/notification/application/port/in/create-alarm.type';
+import { AlarmView } from '@/modules/notification/application/port/in/alarm-view.type';
+import { AlarmViewMapper } from '@/modules/notification/application/service/alarm-view.mapper';
 import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
 import { IdGeneratorPort } from '@/modules/notification/application/port/out/id-generator.port';
 import { CreateAlarmService } from '@/modules/notification/application/service/create-alarm.service';
@@ -56,18 +65,20 @@ class FailingAlarmRepository extends InMemoryAlarmRepositoryAdapter {
   }
 }
 
-const created = (creation: AlarmCreation): Alarm => {
-  if (creation.kind !== 'created') {
-    throw new Error(`expected created but got ${creation.error.code}`);
+const created = (result: CreateAlarmResult): AlarmView => {
+  if (result.kind !== 'created') {
+    throw new Error(`expected created but got ${result.error.code}`);
   }
-  return creation.alarm;
+  const { alarm }: AlarmCreatedResult = result;
+  return alarm;
 };
 
 const found = (lookup: AlarmLookup): Alarm => {
   if (lookup.kind !== 'found') {
     throw new Error('expected the alarm to be stored');
   }
-  return lookup.alarm;
+  const { alarm }: AlarmFound = lookup;
+  return alarm;
 };
 
 interface Gate {
@@ -110,11 +121,11 @@ describe('CreateAlarmService', () => {
   it('UC-01 유효한 요청 / 알림 생성 유스케이스 → 저장소에 DRAFT 알림이 저장되고 반환된다', async (): Promise<void> => {
     const { alarmRepository, useCase }: Fixture = fixture();
 
-    const alarm: Alarm = created(await useCase.execute(BULK_DRAFT));
+    const view: AlarmView = created(await useCase.execute(BULK_DRAFT));
     const stored: Alarm = found(await alarmRepository.findById(alarmId()));
 
-    expect(stored.snapshot()).toEqual(alarm.snapshot());
-    expect(stored.snapshot()).toMatchObject({
+    expect(view).toEqual(AlarmViewMapper.toView(stored));
+    expect(view).toMatchObject({
       id: alarmId(),
       state: { status: 'DRAFT' },
       createdAt: new Date(NOW_ISO),
@@ -138,20 +149,20 @@ describe('CreateAlarmService', () => {
     });
     await transactionStarted.opened;
 
-    const creation: Promise<AlarmCreation> = useCase.execute(BULK_DRAFT);
+    const pending: Promise<CreateAlarmResult> = useCase.execute(BULK_DRAFT);
     failureReleased.open();
 
     await expect(failing).rejects.toThrow('other transaction failed');
-    expect(created(await creation).snapshot().id).toBe(alarmId());
+    expect(created(await pending).id).toBe(alarmId());
     expect((await alarmRepository.findById(alarmId())).kind).toBe('found');
   });
 
   it('UC-01 검증에 실패한 요청은 저장하지 않고 거부 사유를 반환한다', async (): Promise<void> => {
     const { alarmRepository, useCase }: Fixture = fixture();
 
-    const creation: AlarmCreation = await useCase.execute({ ...BULK_DRAFT, title: ' ' });
+    const result: CreateAlarmResult = await useCase.execute({ ...BULK_DRAFT, title: ' ' });
 
-    expect(creation).toEqual({ kind: 'rejected', error: { code: 'EMPTY_TITLE' } });
+    expect(result).toEqual({ kind: 'rejected', error: { code: 'EMPTY_TITLE' } });
     expect(await alarmRepository.findById(alarmId())).toEqual({ kind: 'missing' });
   });
 });

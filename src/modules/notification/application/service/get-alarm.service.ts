@@ -4,6 +4,7 @@ import { UnitOfWorkPort } from '@/modules/notification/application/port/out/unit
 import { TransactionRepositories } from '@/modules/notification/application/port/out/unit-of-work.type';
 import { AlarmResult } from '@/modules/notification/application/port/in/alarm-result.type';
 import { GetAlarmUseCase } from '@/modules/notification/application/port/in/get-alarm.use-case';
+import { AlarmViewMapper } from '@/modules/notification/application/service/alarm-view.mapper';
 
 export class GetAlarmService implements GetAlarmUseCase {
   constructor(private readonly unitOfWork: UnitOfWorkPort) {}
@@ -16,6 +17,6 @@ export class GetAlarmService implements GetAlarmUseCase {
     if (lookup.kind === 'missing') {
       return { kind: 'not-found', error: { code: 'ALARM_NOT_FOUND', alarmId } };
     }
-    return lookup;
+    return { kind: 'found', alarm: AlarmViewMapper.toView(lookup.alarm) };
   }
 }

@@ -9,6 +9,7 @@ import { UnitOfWorkPort } from '@/modules/notification/application/port/out/unit
 import { TransactionRepositories } from '@/modules/notification/application/port/out/unit-of-work.type';
 import { CancelAlarmResult } from '@/modules/notification/application/port/in/alarm-result.type';
 import { CancelAlarmUseCase } from '@/modules/notification/application/port/in/cancel-alarm.use-case';
+import { AlarmViewMapper } from '@/modules/notification/application/service/alarm-view.mapper';
 
 export class CancelAlarmService implements CancelAlarmUseCase {
   constructor(
@@ -34,7 +35,7 @@ export class CancelAlarmService implements CancelAlarmUseCase {
         const { alarm }: AlarmTransitioned = transition;
         await alarmRepository.save(alarm);
         await deliveryRepository.cancelWaiting(alarmId, now);
-        return { kind: 'cancelled', alarm };
+        return { kind: 'cancelled', alarm: AlarmViewMapper.toView(alarm) };
       },
     );
   }

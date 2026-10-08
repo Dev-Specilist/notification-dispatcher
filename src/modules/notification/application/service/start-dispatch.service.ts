@@ -13,6 +13,7 @@ import { UnitOfWorkPort } from '@/modules/notification/application/port/out/unit
 import { TransactionRepositories } from '@/modules/notification/application/port/out/unit-of-work.type';
 import { StartDispatchResult } from '@/modules/notification/application/port/in/alarm-result.type';
 import { StartDispatchUseCase } from '@/modules/notification/application/port/in/start-dispatch.use-case';
+import { AlarmViewMapper } from '@/modules/notification/application/service/alarm-view.mapper';
 
 export class StartDispatchService implements StartDispatchUseCase {
   constructor(
@@ -52,7 +53,7 @@ export class StartDispatchService implements StartDispatchUseCase {
         } else {
           await expansionJobRepository.enqueue(alarmId, now);
         }
-        return { kind: 'dispatched', alarm };
+        return { kind: 'dispatched', alarm: AlarmViewMapper.toView(alarm) };
       },
     );
   }
