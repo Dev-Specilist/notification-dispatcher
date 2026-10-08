@@ -25,6 +25,7 @@ import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/adapter/o
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-expansion-job-repository.adapter';
 import { InMemoryTransactionAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-transaction.adapter';
+import { UnusedTransaction } from '@/modules/notification/testing/unused-transaction';
 
 type PageEntry = Readonly<[string, RecipientPage]>;
 
@@ -286,11 +287,27 @@ const pendingBulk = (recipientId: string): DeliverySummary => {
 };
 
 describe('ExpandRecipientsService', () => {
+  it('알림 id 형식이 아닌 값으로 확장하면 사용자 API와 저장소를 거치지 않고 확장 작업 없음으로 끝난다', async (): Promise<void> => {
+    const directory: PagedRecipientDirectory = new PagedRecipientDirectory([]);
+    const service: ExpandRecipientsService = new ExpandRecipientsService(
+      new UnusedTransaction(),
+      directory,
+      new SequentialDeliveryIdGenerator(),
+      new FixedClock(),
+    );
+
+    expect(await service.execute({ alarmId: 'not-a-uuid' })).toEqual({
+      kind: 'not-found',
+      alarmId: 'not-a-uuid',
+    });
+    expect(directory.requested).toEqual([]);
+  });
+
   it('UC-06 확장 대기 중인 대량 알림 / 확장 유스케이스가 사용자 API를 cursor 끝까지 읽는다 → 페이지마다 Delivery 생성과 cursor 저장이 한 트랜잭션으로 커밋된다', async (): Promise<void> => {
     const { deliveryRepository, expansionJobRepository, directory, service }: Fixture =
       await fixture(TWO_PAGES);
 
-    const result: ExpansionResult = await service.execute(alarmId(ALARM_ID));
+    const result: ExpansionResult = await service.execute({ alarmId: ALARM_ID });
 
     expect(result).toEqual({ kind: 'completed' });
     expect(directory.requested).toEqual(['first', 'next:Mw']);
@@ -315,7 +332,7 @@ describe('ExpandRecipientsService', () => {
       new FailingOnSecondProgressRepository(),
     );
 
-    await expect(service.execute(alarmId(ALARM_ID))).rejects.toThrow(
+    await expect(service.execute({ alarmId: ALARM_ID })).rejects.toThrow(
       'expansion progress storage is unavailable',
     );
     expect(await summaries(deliveryRepository)).toEqual([
@@ -332,7 +349,7 @@ describe('ExpandRecipientsService', () => {
       ['first', { recipientIds: [], next: { kind: 'end' } }],
     ]);
 
-    expect(await service.execute(alarmId(ALARM_ID))).toEqual({ kind: 'completed' });
+    expect(await service.execute({ alarmId: ALARM_ID })).toEqual({ kind: 'completed' });
     expect(await summaries(deliveryRepository)).toEqual([]);
     expect(await expansionJobRepository.findByAlarmId(alarmId(ALARM_ID))).toMatchObject({
       job: { progress: { kind: 'completed' } },
@@ -341,16 +358,16 @@ describe('ExpandRecipientsService', () => {
 
   it('UC-06 이미 완료된 확장은 사용자 API를 다시 읽지 않는다', async (): Promise<void> => {
     const { directory, service }: Fixture = await fixture(TWO_PAGES);
-    await service.execute(alarmId(ALARM_ID));
+    await service.execute({ alarmId: ALARM_ID });
 
-    expect(await service.execute(alarmId(ALARM_ID))).toEqual({ kind: 'completed' });
+    expect(await service.execute({ alarmId: ALARM_ID })).toEqual({ kind: 'completed' });
     expect(directory.requested).toEqual(['first', 'next:Mw']);
   });
 
   it('UC-06 확장 작업이 없는 알림은 not-found를 반환한다', async (): Promise<void> => {
     const { directory, service }: Fixture = await fixture(TWO_PAGES);
 
-    expect(await service.execute(alarmId(MISSING_ALARM_ID))).toEqual({
+    expect(await service.execute({ alarmId: MISSING_ALARM_ID })).toEqual({
       kind: 'not-found',
       alarmId: MISSING_ALARM_ID,
     });
@@ -364,9 +381,9 @@ describe('ExpandRecipientsService', () => {
       new InMemoryAlarmRepositoryAdapter(),
       new FailingOnceDirectory(TWO_PAGES, 'next:Mw'),
     );
-    await expect(service.execute(alarmId(ALARM_ID))).rejects.toThrow('user API is unavailable');
+    await expect(service.execute({ alarmId: ALARM_ID })).rejects.toThrow('user API is unavailable');
 
-    const result: ExpansionResult = await newWorker().execute(alarmId(ALARM_ID));
+    const result: ExpansionResult = await newWorker().execute({ alarmId: ALARM_ID });
 
     expect(result).toEqual({ kind: 'completed' });
     expect(directory.requested).toEqual(['first', 'next:Mw', 'next:Mw']);
@@ -382,11 +399,13 @@ describe('ExpandRecipientsService', () => {
       TWO_PAGES,
       new FailingOnSecondProgressRepository(),
     );
-    await expect(service.execute(alarmId(ALARM_ID))).rejects.toThrow(
+    await expect(service.execute({ alarmId: ALARM_ID })).rejects.toThrow(
       'expansion progress storage is unavailable',
     );
 
-    expect(await newWorker().execute(alarmId(ALARM_ID))).toEqual({ kind: 'completed' });
+    expect(await newWorker().execute({ alarmId: ALARM_ID })).toEqual({
+      kind: 'completed',
+    });
     expect(await summaries(deliveryRepository)).toEqual([
       pendingBulk('u_000001'),
       pendingBulk('u_000002'),
@@ -398,8 +417,8 @@ describe('ExpandRecipientsService', () => {
     const { deliveryRepository, service, newWorker }: Fixture = await fixture(TWO_PAGES);
 
     const results: ReadonlyArray<ExpansionResult> = await Promise.all([
-      service.execute(alarmId(ALARM_ID)),
-      newWorker().execute(alarmId(ALARM_ID)),
+      service.execute({ alarmId: ALARM_ID }),
+      newWorker().execute({ alarmId: ALARM_ID }),
     ]);
 
     expect(results.map((result: ExpansionResult): string => result.kind).toSorted()).toEqual([
@@ -423,7 +442,7 @@ describe('ExpandRecipientsService', () => {
         new CancellingDirectory(TWO_PAGES, 'next:Mw', alarmRepository),
       );
 
-    const result: ExpansionResult = await service.execute(alarmId(ALARM_ID));
+    const result: ExpansionResult = await service.execute({ alarmId: ALARM_ID });
 
     expect(result).toEqual({ kind: 'cancelled' });
     expect(directory.requested).toEqual(['first', 'next:Mw']);
@@ -444,10 +463,12 @@ describe('ExpandRecipientsService', () => {
       new InMemoryAlarmRepositoryAdapter(),
       directory,
     );
-    const expansion: Promise<ExpansionResult> = service.execute(alarmId(ALARM_ID));
+    const expansion: Promise<ExpansionResult> = service.execute({ alarmId: ALARM_ID });
     await directory.paused.opened;
 
-    await new CancelAlarmService(transaction, new FixedClock()).execute(alarmId(ALARM_ID));
+    await new CancelAlarmService(transaction, new FixedClock()).execute({
+      alarmId: ALARM_ID,
+    });
     directory.resumed.open();
 
     expect(await expansion).toEqual({ kind: 'cancelled' });
@@ -466,7 +487,7 @@ describe('ExpandRecipientsService', () => {
       await fixture(TWO_PAGES);
     await cancelStoredAlarm(alarmRepository);
 
-    expect(await service.execute(alarmId(ALARM_ID))).toEqual({ kind: 'cancelled' });
+    expect(await service.execute({ alarmId: ALARM_ID })).toEqual({ kind: 'cancelled' });
     expect(directory.requested).toEqual([]);
     expect(await summaries(deliveryRepository)).toEqual([]);
   });
@@ -474,9 +495,11 @@ describe('ExpandRecipientsService', () => {
   it('UC-08 멈춘 확장은 다시 실행해도 사용자 API를 호출하지 않는다', async (): Promise<void> => {
     const { alarmRepository, directory, service, newWorker }: Fixture = await fixture(TWO_PAGES);
     await cancelStoredAlarm(alarmRepository);
-    await service.execute(alarmId(ALARM_ID));
+    await service.execute({ alarmId: ALARM_ID });
 
-    expect(await newWorker().execute(alarmId(ALARM_ID))).toEqual({ kind: 'cancelled' });
+    expect(await newWorker().execute({ alarmId: ALARM_ID })).toEqual({
+      kind: 'cancelled',
+    });
     expect(directory.requested).toEqual([]);
   });
 });

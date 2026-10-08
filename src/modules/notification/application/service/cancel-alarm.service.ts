@@ -1,12 +1,10 @@
-import {
-  AlarmId,
-  AlarmTransition,
-  AlarmTransitioned,
-} from '@/modules/notification/domain/alarm/alarm.type';
+import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
+import { AlarmTransition, AlarmTransitioned } from '@/modules/notification/domain/alarm/alarm.type';
 import { AlarmLookup } from '@/modules/notification/application/port/out/alarm-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
 import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
 import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
+import { AlarmCommand } from '@/modules/notification/application/port/in/alarm-command.type';
 import { CancelAlarmResult } from '@/modules/notification/application/port/in/alarm-result.type';
 import { CancelAlarmUseCase } from '@/modules/notification/application/port/in/cancel-alarm.use-case';
 import { AlarmViewMapper } from '@/modules/notification/application/service/alarm-view.mapper';
@@ -17,7 +15,10 @@ export class CancelAlarmService implements CancelAlarmUseCase {
     private readonly clock: ClockPort,
   ) {}
 
-  execute(alarmId: AlarmId): Promise<CancelAlarmResult> {
+  execute({ alarmId }: Readonly<AlarmCommand>): Promise<CancelAlarmResult> {
+    if (!AlarmPredicates.isAlarmId(alarmId)) {
+      return Promise.resolve({ kind: 'not-found', error: { code: 'ALARM_NOT_FOUND', alarmId } });
+    }
     const now: Date = this.clock.now();
     return this.transaction.run(
       async ({

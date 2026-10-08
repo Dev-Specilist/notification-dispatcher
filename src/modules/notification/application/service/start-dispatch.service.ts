@@ -1,5 +1,5 @@
+import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import {
-  AlarmId,
   AlarmSnapshot,
   AlarmTransition,
   AlarmTransitioned,
@@ -11,6 +11,7 @@ import { ClockPort } from '@/modules/notification/application/port/out/clock.por
 import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/out/delivery-id-generator.port';
 import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
 import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
+import { AlarmCommand } from '@/modules/notification/application/port/in/alarm-command.type';
 import { StartDispatchResult } from '@/modules/notification/application/port/in/alarm-result.type';
 import { StartDispatchUseCase } from '@/modules/notification/application/port/in/start-dispatch.use-case';
 import { AlarmViewMapper } from '@/modules/notification/application/service/alarm-view.mapper';
@@ -22,7 +23,10 @@ export class StartDispatchService implements StartDispatchUseCase {
     private readonly clock: ClockPort,
   ) {}
 
-  execute(alarmId: AlarmId): Promise<StartDispatchResult> {
+  execute({ alarmId }: Readonly<AlarmCommand>): Promise<StartDispatchResult> {
+    if (!AlarmPredicates.isAlarmId(alarmId)) {
+      return Promise.resolve({ kind: 'not-found', error: { code: 'ALARM_NOT_FOUND', alarmId } });
+    }
     const now: Date = this.clock.now();
     return this.transaction.run(
       async ({

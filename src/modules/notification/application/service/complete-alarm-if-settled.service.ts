@@ -1,7 +1,7 @@
+import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import {
   AlarmCompletion,
-  AlarmId,
   AlarmSnapshot,
   CompletionEvidence,
   DeliveryCount,
@@ -12,6 +12,7 @@ import { ExpansionJobRepositoryPort } from '@/modules/notification/application/p
 import { ExpansionJobLookup } from '@/modules/notification/application/port/out/expansion-job-repository.type';
 import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
 import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
+import { AlarmCommand } from '@/modules/notification/application/port/in/alarm-command.type';
 import { CompleteAlarmResult } from '@/modules/notification/application/port/in/alarm-result.type';
 import { CompleteAlarmIfSettledUseCase } from '@/modules/notification/application/port/in/complete-alarm-if-settled.use-case';
 
@@ -21,7 +22,10 @@ export class CompleteAlarmIfSettledService implements CompleteAlarmIfSettledUseC
     private readonly clock: ClockPort,
   ) {}
 
-  execute(alarmId: AlarmId): Promise<CompleteAlarmResult> {
+  execute({ alarmId }: Readonly<AlarmCommand>): Promise<CompleteAlarmResult> {
+    if (!AlarmPredicates.isAlarmId(alarmId)) {
+      return Promise.resolve({ kind: 'not-found', error: { code: 'ALARM_NOT_FOUND', alarmId } });
+    }
     return this.transaction.run(
       async ({
         alarmRepository,

@@ -1,4 +1,3 @@
-import { DeliveryId } from '@/modules/notification/domain/delivery/delivery.type';
 import { SendOutcomeKind } from '@/modules/notification/application/port/out/message-sender.type';
 
 export interface NoPermit {
@@ -11,23 +10,23 @@ export interface NothingToSend {
 
 export interface DeliverySkipped {
   readonly kind: 'skipped';
-  readonly deliveryId: DeliveryId;
+  readonly deliveryId: string;
 }
 
 export interface LeaseReleased {
   readonly kind: 'released';
-  readonly deliveryId: DeliveryId;
+  readonly deliveryId: string;
 }
 
 export interface OutcomeRecorded {
   readonly kind: 'recorded';
-  readonly deliveryId: DeliveryId;
+  readonly deliveryId: string;
   readonly outcome: SendOutcomeKind;
 }
 
 export interface ResultDiscarded {
   readonly kind: 'lease-lost';
-  readonly deliveryId: DeliveryId;
+  readonly deliveryId: string;
 }
 
 export type SendAttempt =

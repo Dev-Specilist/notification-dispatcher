@@ -1,5 +1,7 @@
-import { AlarmConflicted } from '@/modules/notification/domain/alarm/alarm.type';
-import { AlarmView } from '@/modules/notification/application/port/in/alarm-view.type';
+import {
+  AlarmView,
+  AlarmViewState,
+} from '@/modules/notification/application/port/in/alarm-view.type';
 import { DeliveryProgressView } from '@/modules/notification/application/port/in/delivery-progress-view.type';
 
 export interface AlarmFoundResult {
@@ -20,19 +22,34 @@ export interface AlarmNotFound {
 
 export type AlarmResult = AlarmFoundResult | AlarmNotFound;
 
+export type AlarmStatusName = AlarmViewState['status'];
+
+export type AlarmActionName = 'dispatch' | 'cancel' | 'complete';
+
+export interface AlarmStateConflictError {
+  readonly code: 'ALARM_STATE_CONFLICT';
+  readonly status: AlarmStatusName;
+  readonly action: AlarmActionName;
+}
+
+export interface AlarmConflictedResult {
+  readonly kind: 'conflict';
+  readonly error: AlarmStateConflictError;
+}
+
 export interface AlarmDispatched {
   readonly kind: 'dispatched';
   readonly alarm: AlarmView;
 }
 
-export type StartDispatchResult = AlarmDispatched | AlarmNotFound | AlarmConflicted;
+export type StartDispatchResult = AlarmDispatched | AlarmNotFound | AlarmConflictedResult;
 
 export interface AlarmCancelled {
   readonly kind: 'cancelled';
   readonly alarm: AlarmView;
 }
 
-export type CancelAlarmResult = AlarmCancelled | AlarmNotFound | AlarmConflicted;
+export type CancelAlarmResult = AlarmCancelled | AlarmNotFound | AlarmConflictedResult;
 
 export interface AlarmCompleted {
   readonly kind: 'completed';
@@ -43,4 +60,4 @@ export interface AlarmNotYetSettled {
 }
 
 export type CompleteAlarmResult =
-  AlarmCompleted | AlarmNotYetSettled | AlarmNotFound | AlarmConflicted;
+  AlarmCompleted | AlarmNotYetSettled | AlarmNotFound | AlarmConflictedResult;

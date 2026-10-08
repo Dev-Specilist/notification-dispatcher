@@ -449,7 +449,7 @@ describe('ReconcileNextDeliveryService', () => {
     const attempt: Promise<ReconcileAttempt> = service.execute();
     await lookup.looking.opened;
 
-    await new CancelAlarmService(transaction, clock).execute(alarmId(ACTIVE_ALARM_ID));
+    await new CancelAlarmService(transaction, clock).execute({ alarmId: ACTIVE_ALARM_ID });
     lookup.answered.open();
 
     expect(await attempt).toEqual({

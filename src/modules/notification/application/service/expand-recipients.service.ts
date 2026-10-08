@@ -1,3 +1,4 @@
+import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { AlarmId, RecipientId } from '@/modules/notification/domain/alarm/alarm.type';
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
 import { AlarmLookup } from '@/modules/notification/application/port/out/alarm-repository.type';
@@ -15,6 +16,7 @@ import {
 } from '@/modules/notification/application/port/out/recipient-directory.type';
 import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
 import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
+import { AlarmCommand } from '@/modules/notification/application/port/in/alarm-command.type';
 import {
   ExpansionCancelled,
   ExpansionResult,
@@ -42,7 +44,10 @@ export class ExpandRecipientsService implements ExpandRecipientsUseCase {
     private readonly clock: ClockPort,
   ) {}
 
-  async execute(alarmId: AlarmId): Promise<ExpansionResult> {
+  async execute({ alarmId }: Readonly<AlarmCommand>): Promise<ExpansionResult> {
+    if (!AlarmPredicates.isAlarmId(alarmId)) {
+      return { kind: 'not-found', alarmId };
+    }
     let step: ExpansionStep = await this.expandNextPage(alarmId);
     while (step.kind === 'continued') {
       step = await this.expandNextPage(alarmId);

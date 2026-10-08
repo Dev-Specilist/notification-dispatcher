@@ -774,7 +774,7 @@ describe('SendNextDeliveryService', () => {
       const attempt: Promise<SendAttempt> = service.execute();
       await sender.sending.opened;
 
-      await new CancelAlarmService(transaction, clock).execute(alarmId(BULK_ALARM_ID));
+      await new CancelAlarmService(transaction, clock).execute({ alarmId: BULK_ALARM_ID });
       sender.responded.open();
       await attempt;
 

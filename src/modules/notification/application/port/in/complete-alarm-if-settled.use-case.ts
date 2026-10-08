@@ -1,6 +1,6 @@
-import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
+import { AlarmCommand } from '@/modules/notification/application/port/in/alarm-command.type';
 import { CompleteAlarmResult } from '@/modules/notification/application/port/in/alarm-result.type';
 
 export abstract class CompleteAlarmIfSettledUseCase {
-  abstract execute(alarmId: AlarmId): Promise<CompleteAlarmResult>;
+  abstract execute(command: Readonly<AlarmCommand>): Promise<CompleteAlarmResult>;
 }

@@ -28,6 +28,7 @@ import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/adapter/o
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-expansion-job-repository.adapter';
 import { InMemoryTransactionAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-transaction.adapter';
+import { UnusedTransaction } from '@/modules/notification/testing/unused-transaction';
 
 type DeliveryBuilder = (index: number) => Delivery;
 
@@ -221,6 +222,18 @@ const storedState = async (
 };
 
 describe('CompleteAlarmIfSettledService', () => {
+  it('알림 id 형식이 아닌 값으로 완료를 판정하면 저장소를 거치지 않고 알림 없음 오류가 난다', async (): Promise<void> => {
+    const service: CompleteAlarmIfSettledService = new CompleteAlarmIfSettledService(
+      new UnusedTransaction(),
+      new FixedClock(),
+    );
+
+    expect(await service.execute({ alarmId: 'not-a-uuid' })).toEqual({
+      kind: 'not-found',
+      error: { code: 'ALARM_NOT_FOUND', alarmId: 'not-a-uuid' },
+    });
+  });
+
   it('UC-12 발송 결과 확정 · reconcile 확정 · 확장 완료(수신자 0명 포함) / 완료 판정 유스케이스 → 확장 완료이고 미종결 Delivery가 0건이면(UNCONFIRMED는 종결로 셈) 알림이 COMPLETED가 된다', async (): Promise<void> => {
     const { alarmRepository, service }: Fixture = await fixture(dispatchedUrgent(), [
       sent(1),
@@ -229,7 +242,7 @@ describe('CompleteAlarmIfSettledService', () => {
       cancelled(4),
     ]);
 
-    expect(await service.execute(alarmId(ALARM_ID))).toEqual({ kind: 'completed' });
+    expect(await service.execute({ alarmId: ALARM_ID })).toEqual({ kind: 'completed' });
     expect(await storedState(alarmRepository)).toEqual({
       status: 'COMPLETED',
       dispatchedAt: at(DISPATCHED_ISO),
@@ -243,7 +256,7 @@ describe('CompleteAlarmIfSettledService', () => {
       started(2),
     ]);
 
-    expect(await service.execute(alarmId(ALARM_ID))).toEqual({ kind: 'not-yet' });
+    expect(await service.execute({ alarmId: ALARM_ID })).toEqual({ kind: 'not-yet' });
     expect((await storedState(alarmRepository)).status).toBe('DISPATCHING');
   });
 
@@ -254,7 +267,7 @@ describe('CompleteAlarmIfSettledService', () => {
     );
     await expansionJobRepository.enqueue(alarmId(ALARM_ID), at(DISPATCHED_ISO));
 
-    expect(await service.execute(alarmId(ALARM_ID))).toEqual({ kind: 'not-yet' });
+    expect(await service.execute({ alarmId: ALARM_ID })).toEqual({ kind: 'not-yet' });
     expect((await storedState(alarmRepository)).status).toBe('DISPATCHING');
   });
 
@@ -265,14 +278,14 @@ describe('CompleteAlarmIfSettledService', () => {
     );
     await completeExpansion(expansionJobRepository);
 
-    expect(await service.execute(alarmId(ALARM_ID))).toEqual({ kind: 'completed' });
+    expect(await service.execute({ alarmId: ALARM_ID })).toEqual({ kind: 'completed' });
     expect((await storedState(alarmRepository)).status).toBe('COMPLETED');
   });
 
   it('UC-12 확장 작업이 없는 대량 알림은 확장이 끝나지 않은 것으로 본다', async (): Promise<void> => {
     const { service }: Fixture = await fixture(dispatchedBulk(), []);
 
-    expect(await service.execute(alarmId(ALARM_ID))).toEqual({ kind: 'not-yet' });
+    expect(await service.execute({ alarmId: ALARM_ID })).toEqual({ kind: 'not-yet' });
   });
 
   it('UC-12 DISPATCHING이 아닌 알림은 상태 충돌을 반환한다', async (): Promise<void> => {
@@ -281,7 +294,7 @@ describe('CompleteAlarmIfSettledService', () => {
       [],
     );
 
-    expect(await service.execute(alarmId(ALARM_ID))).toEqual({
+    expect(await service.execute({ alarmId: ALARM_ID })).toEqual({
       kind: 'conflict',
       error: { code: 'ALARM_STATE_CONFLICT', status: 'CANCELLED', action: 'complete' },
     });
@@ -290,7 +303,9 @@ describe('CompleteAlarmIfSettledService', () => {
   it('UC-02 없는 알림은 알림 없음 오류를 반환한다', async (): Promise<void> => {
     const { service }: Fixture = await fixture(dispatchedUrgent(), []);
 
-    const result: CompleteAlarmResult = await service.execute(alarmId(MISSING_ALARM_ID));
+    const result: CompleteAlarmResult = await service.execute({
+      alarmId: MISSING_ALARM_ID,
+    });
 
     expect(result).toEqual({
       kind: 'not-found',

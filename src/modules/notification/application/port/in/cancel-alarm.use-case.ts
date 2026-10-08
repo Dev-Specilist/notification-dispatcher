@@ -1,6 +1,6 @@
-import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
+import { AlarmCommand } from '@/modules/notification/application/port/in/alarm-command.type';
 import { CancelAlarmResult } from '@/modules/notification/application/port/in/alarm-result.type';
 
 export abstract class CancelAlarmUseCase {
-  abstract execute(alarmId: AlarmId): Promise<CancelAlarmResult>;
+  abstract execute(command: Readonly<AlarmCommand>): Promise<CancelAlarmResult>;
 }

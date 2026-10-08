@@ -1,6 +1,6 @@
-import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
+import { AlarmCommand } from '@/modules/notification/application/port/in/alarm-command.type';
 import { StartDispatchResult } from '@/modules/notification/application/port/in/alarm-result.type';
 
 export abstract class StartDispatchUseCase {
-  abstract execute(alarmId: AlarmId): Promise<StartDispatchResult>;
+  abstract execute(command: Readonly<AlarmCommand>): Promise<StartDispatchResult>;
 }

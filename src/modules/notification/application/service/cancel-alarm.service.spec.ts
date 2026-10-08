@@ -28,6 +28,7 @@ import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/adapter/o
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-expansion-job-repository.adapter';
 import { InMemoryTransactionAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-transaction.adapter';
+import { UnusedTransaction } from '@/modules/notification/testing/unused-transaction';
 
 type DeliveryBuilder = (index: number) => Delivery;
 
@@ -218,10 +219,22 @@ const storedStatus = async (alarmRepository: InMemoryAlarmRepositoryAdapter): Pr
   found(await alarmRepository.findById(alarmId(ALARM_ID))).snapshot().state.status;
 
 describe('CancelAlarmService', () => {
+  it('UC-02 알림 id 형식이 아닌 값으로 취소하면 저장소를 거치지 않고 알림 없음 오류가 난다', async (): Promise<void> => {
+    const service: CancelAlarmService = new CancelAlarmService(
+      new UnusedTransaction(),
+      new FixedClock(),
+    );
+
+    expect(await service.execute({ alarmId: 'not-a-uuid' })).toEqual({
+      kind: 'not-found',
+      error: { code: 'ALARM_NOT_FOUND', alarmId: 'not-a-uuid' },
+    });
+  });
+
   it('UC-02 없는 알림 id / 조회·발송 시작·취소 → 알림 없음 오류가 난다', async (): Promise<void> => {
     const { service }: Fixture = await fixture([urgentAlarm(ALARM_ID)], []);
 
-    expect(await service.execute(alarmId(MISSING_ALARM_ID))).toEqual({
+    expect(await service.execute({ alarmId: MISSING_ALARM_ID })).toEqual({
       kind: 'not-found',
       error: { code: 'ALARM_NOT_FOUND', alarmId: MISSING_ALARM_ID },
     });
@@ -233,7 +246,7 @@ describe('CancelAlarmService', () => {
       [pending(1), retryWaiting(2), inFlight(3), started(4), sent(5)],
     );
 
-    const result: CancelAlarmResult = await service.execute(alarmId(ALARM_ID));
+    const result: CancelAlarmResult = await service.execute({ alarmId: ALARM_ID });
 
     expect(result.kind).toBe('cancelled');
     expect(found(await alarmRepository.findById(alarmId(ALARM_ID))).snapshot().state).toEqual({
@@ -256,7 +269,7 @@ describe('CancelAlarmService', () => {
       [pending(1), pendingFor(OTHER_ALARM_ID)(2)],
     );
 
-    await service.execute(alarmId(ALARM_ID));
+    await service.execute({ alarmId: ALARM_ID });
 
     expect(await statusesOf(deliveryRepository, OTHER_ALARM_ID)).toEqual([['u_000002', 'PENDING']]);
   });
@@ -264,7 +277,7 @@ describe('CancelAlarmService', () => {
   it('UC-13 발송 전 DRAFT 알림도 취소할 수 있다', async (): Promise<void> => {
     const { alarmRepository, service }: Fixture = await fixture([urgentAlarm(ALARM_ID)], []);
 
-    expect((await service.execute(alarmId(ALARM_ID))).kind).toBe('cancelled');
+    expect((await service.execute({ alarmId: ALARM_ID })).kind).toBe('cancelled');
     expect(found(await alarmRepository.findById(alarmId(ALARM_ID))).snapshot().state).toEqual({
       status: 'CANCELLED',
       cancelledAt: at(CANCELLED_ISO),
@@ -277,9 +290,9 @@ describe('CancelAlarmService', () => {
       [dispatched(urgentAlarm(ALARM_ID))],
       [inFlight(1)],
     );
-    await service.execute(alarmId(ALARM_ID));
+    await service.execute({ alarmId: ALARM_ID });
 
-    const repeatedCancel: CancelAlarmResult = await service.execute(alarmId(ALARM_ID));
+    const repeatedCancel: CancelAlarmResult = await service.execute({ alarmId: ALARM_ID });
 
     expect(repeatedCancel).toEqual({
       kind: 'conflict',
@@ -297,7 +310,7 @@ describe('CancelAlarmService', () => {
       deliveryRepository,
     );
 
-    await expect(service.execute(alarmId(ALARM_ID))).rejects.toThrow(
+    await expect(service.execute({ alarmId: ALARM_ID })).rejects.toThrow(
       'delivery storage failed midway',
     );
     expect(await storedStatus(alarmRepository)).toBe('DISPATCHING');
@@ -314,7 +327,7 @@ describe('CancelAlarmService', () => {
       new FailingDeliveryRepository(),
     );
 
-    await expect(service.execute(alarmId(ALARM_ID))).rejects.toThrow(
+    await expect(service.execute({ alarmId: ALARM_ID })).rejects.toThrow(
       'delivery storage is unavailable',
     );
     expect(await storedStatus(alarmRepository)).toBe('DISPATCHING');

@@ -299,7 +299,7 @@ describe('DrizzleTransactionAdapter', () => {
 
   const countsAroundConcurrentCancel = async (alarmId: AlarmId): Promise<CancelCounts> => {
     const beforeCancel: DeliveryStatusCounts = await deliveryProgressOf(alarmId);
-    await new CancelAlarmService(transaction, new FixedClock()).execute(alarmId);
+    await new CancelAlarmService(transaction, new FixedClock()).execute({ alarmId });
     return [beforeCancel, await deliveryProgressOf(alarmId)];
   };
 
@@ -312,7 +312,7 @@ describe('DrizzleTransactionAdapter', () => {
     const alarm: Alarm = urgentDraft();
     await save(alarm);
     const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
-    await startDispatch().execute(alarmId);
+    await startDispatch().execute({ alarmId });
     return alarmId;
   };
 
@@ -323,7 +323,7 @@ describe('DrizzleTransactionAdapter', () => {
       async ({ deliveryProgress }: SnapshotRepositories): Promise<CancelCounts> => {
         const countedBeforeCancel: DeliveryStatusCounts =
           await deliveryProgress.countByStatus(alarmId);
-        await new CancelAlarmService(transaction, new FixedClock()).execute(alarmId);
+        await new CancelAlarmService(transaction, new FixedClock()).execute({ alarmId });
         return [countedBeforeCancel, await deliveryProgress.countByStatus(alarmId)];
       },
     );
@@ -412,8 +412,8 @@ describe('DrizzleTransactionAdapter', () => {
     const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
 
     const results: ReadonlyArray<StartDispatchResult> = await Promise.all([
-      startDispatch().execute(alarmId),
-      startDispatch().execute(alarmId),
+      startDispatch().execute({ alarmId }),
+      startDispatch().execute({ alarmId }),
     ]);
 
     expect(results.map((result: StartDispatchResult): string => result.kind).toSorted()).toEqual([
@@ -429,8 +429,8 @@ describe('DrizzleTransactionAdapter', () => {
     const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
 
     const results: ReadonlyArray<StartDispatchResult> = await Promise.all([
-      startDispatch().execute(alarmId),
-      startDispatch().execute(alarmId),
+      startDispatch().execute({ alarmId }),
+      startDispatch().execute({ alarmId }),
     ]);
 
     expect(results.map((result: StartDispatchResult): string => result.kind).toSorted()).toEqual([
@@ -445,8 +445,8 @@ describe('DrizzleTransactionAdapter', () => {
     const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
 
     const [started, cancelled]: StartAndCancelResults = await Promise.all([
-      startDispatch().execute(alarmId),
-      new CancelAlarmService(transaction, new FixedClock()).execute(alarmId),
+      startDispatch().execute({ alarmId }),
+      new CancelAlarmService(transaction, new FixedClock()).execute({ alarmId }),
     ]);
     const outcome: OutcomePair = [started.kind, cancelled.kind];
     const deliveryStatuses: ReadonlyArray<string> = (await deliveriesOf(alarmId)).map(
@@ -510,7 +510,7 @@ describe('DrizzleTransactionAdapter', () => {
     const alarm: Alarm = bulkDraft();
     await save(alarm);
     const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
-    await startDispatch().execute(alarmId);
+    await startDispatch().execute({ alarmId });
     const directory: BothWorkersFetchFirstDirectory = new BothWorkersFetchFirstDirectory();
     const expander = (): ExpandRecipientsService =>
       new ExpandRecipientsService(
@@ -521,8 +521,8 @@ describe('DrizzleTransactionAdapter', () => {
       );
 
     const results: ReadonlyArray<ExpansionResult> = await Promise.all([
-      expander().execute(alarmId),
-      expander().execute(alarmId),
+      expander().execute({ alarmId }),
+      expander().execute({ alarmId }),
     ]);
 
     expect(results.map((result: ExpansionResult): string => result.kind).toSorted()).toEqual([

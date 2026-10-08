@@ -30,6 +30,7 @@ import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/adapter/o
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-expansion-job-repository.adapter';
 import { InMemoryTransactionAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-transaction.adapter';
+import { UnusedTransaction } from '@/modules/notification/testing/unused-transaction';
 
 const STORED_ID: string = '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10';
 const MISSING_ID: string = '7d3f1e2a-4b5c-4d6e-8f70-1a2b3c4d5e6f';
@@ -48,16 +49,6 @@ const createGate = (): Gate => {
   });
   return { opened, open: (): void => release() };
 };
-
-class UnusedTransaction implements TransactionPort {
-  run<TResult>(_work: TransactionWork<TResult>): Promise<TResult> {
-    return Promise.reject(new Error('transaction must not run'));
-  }
-
-  readSnapshot<TResult>(_work: SnapshotWork<TResult>): Promise<TResult> {
-    return Promise.reject(new Error('transaction must not run'));
-  }
-}
 
 class SnapshotOnlyTransaction implements TransactionPort {
   constructor(private readonly snapshotSource: InMemoryTransactionAdapter) {}

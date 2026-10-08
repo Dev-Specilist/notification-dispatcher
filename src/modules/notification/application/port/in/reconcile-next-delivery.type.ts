@@ -1,4 +1,4 @@
-import { DeliveryId, DeliveryStatus } from '@/modules/notification/domain/delivery/delivery.type';
+import { DeliveryStatusName } from '@/modules/notification/application/port/in/delivery-progress-view.type';
 
 export interface NothingToReconcile {
   readonly kind: 'idle';
@@ -6,13 +6,13 @@ export interface NothingToReconcile {
 
 export interface DeliveryReconciled {
   readonly kind: 'reconciled';
-  readonly deliveryId: DeliveryId;
-  readonly status: DeliveryStatus;
+  readonly deliveryId: string;
+  readonly status: DeliveryStatusName;
 }
 
 export interface ReconcileSuperseded {
   readonly kind: 'superseded';
-  readonly deliveryId: DeliveryId;
+  readonly deliveryId: string;
 }
 
 export type ReconcileAttempt = NothingToReconcile | DeliveryReconciled | ReconcileSuperseded;
