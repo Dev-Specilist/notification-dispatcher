@@ -34,6 +34,8 @@ const REQUEST_TIMEOUT_MS: number = 5_000;
 
 const MINIMUM_THROUGHPUT_RATIO: number = 0.8;
 
+const BUCKET_REFILL_MS: number = 1_000;
+
 const SEND_TIMEOUT_MS: number = 2_000;
 
 const LOOKUP_DELAY_MS: number = 300;
@@ -92,18 +94,25 @@ describe('MockMessageSenderAdapter', () => {
   });
 
   it('EXT-10 기본 RATE_LIMIT mock / 제한기를 거쳐 2초 동안 연속 발송한다 → 429가 나오지 않는다 (mock 한도 구간 방식에 대한 특성 테스트)', async (): Promise<void> => {
-    const limiter: PostgresRateLimiterAdapter = new PostgresRateLimiterAdapter(
-      NotificationDatabaseFactory.create(testDatabase.pool),
-      {
-        name: `characterization-${randomUUID()}`,
-        emissionIntervalMs: durationMs(1_000 / PERMITS_PER_SECOND),
-      },
-      PostgresRateLimiterAdapter.SERVER_CLOCK,
-    );
+    const limiterNamed = (name: string): PostgresRateLimiterAdapter =>
+      new PostgresRateLimiterAdapter(
+        NotificationDatabaseFactory.create(testDatabase.pool),
+        { name, emissionIntervalMs: durationMs(1_000 / PERMITS_PER_SECOND) },
+        PostgresRateLimiterAdapter.SERVER_CLOCK,
+      );
     const sender: MockMessageSenderAdapter = new MockMessageSenderAdapter({
       baseUrl: defaultRateMock.baseUrl,
       requestTimeoutMs: requestTimeoutMs(REQUEST_TIMEOUT_MS),
     });
+    const warmUpLimiter: PostgresRateLimiterAdapter = limiterNamed(`warm-up-${randomUUID()}`);
+    await Promise.all(
+      Array.from({ length: WORKER_COUNT }, async (): Promise<void> => {
+        await warmUpLimiter.acquire();
+        await sender.send(messageWith(newClientRef()));
+      }),
+    );
+    await scheduler.wait(BUCKET_REFILL_MS);
+    const limiter: PostgresRateLimiterAdapter = limiterNamed(`characterization-${randomUUID()}`);
     const deadline: number = performance.now() + RUN_MS;
     const runWorker = async (
       sent: ReadonlyArray<SendOutcome>,

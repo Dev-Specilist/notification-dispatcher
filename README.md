@@ -120,7 +120,7 @@
 ├── 📂 test/                                         e2e (api 전체 · 발송 전체 흐름)
 ├── 📄 Dockerfile                                    target: api · worker
 ├── 📄 docker-compose.yml                            api · worker · postgres · mock
-├── 📄 vitest.config.mts                             unit · integration · e2e 프로젝트
+├── 📄 vitest.config.mts                             unit · integration · characterization · e2e 프로젝트
 ├── 📄 SCENARIO.md                                   테스트 시나리오 (ID ↔ 테스트 이름)
 └── 📄 README.md
 ```
@@ -131,6 +131,7 @@
 | --- | --- | --- | --- | --- |
 | unit | `*.spec.ts` | `pnpm test` | domain · use case (port는 in-memory fake) | 없음 |
 | integration | `*.int-spec.ts` | `pnpm test:int` | adapter (Drizzle 저장소, 제한기, mock API adapter) | PostgreSQL · mock (Testcontainers) |
+| characterization | `*.characterization.int-spec.ts` | `pnpm test:int` (integration 다음에 단독 실행) | mock 한도·발송 기록 시점, 제한기를 거친 처리량 | PostgreSQL · mock (Testcontainers) |
 | e2e | `test/*.e2e-spec.ts` | `pnpm test:e2e` | HTTP 계약과 api + worker 전체 흐름 | PostgreSQL · mock (Testcontainers) |
 
 - 컨테이너는 vitest `globalSetup`에서 실행 단위마다 한 번만 띄우고, 테스트 파일마다 별도 database를 써서 서로 섞이지 않게 합니다. mock은 `RATE_LIMIT` · `ERROR_RATE` · `TIMEOUT_RATE` 설정별로 따로 띄웁니다.

@@ -11,7 +11,10 @@ import {
 import { MockApiPredicates } from '@/modules/notification/infrastructure/adapter/mock-api.predicate';
 import { RequestTimeoutMs } from '@/modules/notification/infrastructure/adapter/mock-api.type';
 import { MockMessageSenderAdapter } from '@/modules/notification/infrastructure/adapter/mock-message-sender.adapter';
-import { MockApiContainer } from '@/modules/notification/infrastructure/testing/mock-api.container';
+import {
+  MockApiContainer,
+  MockApiEnvironment,
+} from '@/modules/notification/infrastructure/testing/mock-api.container';
 import { StubHttpServer } from '@/modules/notification/infrastructure/testing/stub-http.server';
 
 type ConnectionState = 'released' | 'held';
@@ -79,24 +82,26 @@ describe('MockMessageSenderAdapter', () => {
   let failingMock: MockApiContainer;
   let stallingMock: MockApiContainer;
 
+  const started: Array<MockApiContainer> = [];
+
+  const startMock = async (
+    overrides: Readonly<Partial<MockApiEnvironment>>,
+  ): Promise<MockApiContainer> => {
+    const mock: MockApiContainer = await MockApiContainer.start(overrides);
+    started.push(mock);
+    return mock;
+  };
+
   beforeAll(async (): Promise<void> => {
-    [deterministicMock, blockingMock, throttledMock, failingMock, stallingMock] = await Promise.all(
-      [
-        MockApiContainer.start({}),
-        MockApiContainer.start({ BLOCKED_PERCENT: '100' }),
-        MockApiContainer.start({ RATE_LIMIT: '1' }),
-        MockApiContainer.start({ ERROR_RATE: '1' }),
-        MockApiContainer.start({ TIMEOUT_RATE: '1', TIMEOUT_MS: '5000' }),
-      ],
-    );
+    deterministicMock = await startMock({});
+    blockingMock = await startMock({ BLOCKED_PERCENT: '100' });
+    throttledMock = await startMock({ RATE_LIMIT: '1' });
+    failingMock = await startMock({ ERROR_RATE: '1' });
+    stallingMock = await startMock({ TIMEOUT_RATE: '1', TIMEOUT_MS: '5000' });
   });
 
   afterAll(async (): Promise<void> => {
-    await Promise.all(
-      [deterministicMock, blockingMock, throttledMock, failingMock, stallingMock].map(
-        (mock: MockApiContainer): Promise<void> => mock.stop(),
-      ),
-    );
+    await Promise.all(started.map((mock: MockApiContainer): Promise<void> => mock.stop()));
   });
 
   it('EXT-02 mock 발송 API / 정상 발송 → Accepted(messageId) 결과가 나온다', async (): Promise<void> => {

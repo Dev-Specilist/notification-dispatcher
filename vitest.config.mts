@@ -42,8 +42,19 @@ export default defineConfig({
         test: {
           name: 'integration',
           include: ['src/**/*.int-spec.ts'],
+          exclude: ['src/**/*.characterization.int-spec.ts'],
           globalSetup: ['./src/shared/database/testing/postgres.global-setup.ts'],
           hookTimeout: 60_000,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'characterization',
+          include: ['src/**/*.characterization.int-spec.ts'],
+          globalSetup: ['./src/shared/database/testing/postgres.global-setup.ts'],
+          hookTimeout: 60_000,
+          fileParallelism: false,
         },
       },
       {
