@@ -25,12 +25,29 @@ import { RetryPolicyCreation } from '@/modules/notification/domain/delivery/retr
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/out/alarm-repository.port';
-import { DeliveryRepositoryPort } from '@/modules/notification/application/port/out/delivery-repository.port';
+import { DeliveryCreationPort } from '@/modules/notification/application/port/out/delivery-creation.port';
+import { DispatchQueuePort } from '@/modules/notification/application/port/out/dispatch-queue.port';
+import { LeaseRecoveryQueuePort } from '@/modules/notification/application/port/out/lease-recovery-queue.port';
+import { ReconcileQueuePort } from '@/modules/notification/application/port/out/reconcile-queue.port';
+import { DeliveryCancellationPort } from '@/modules/notification/application/port/out/delivery-cancellation.port';
+import { DeliveryProgressPort } from '@/modules/notification/application/port/out/delivery-progress.port';
 import { DeliveryCandidate } from '@/modules/notification/application/port/out/delivery-repository.type';
+
+interface DeliveryInspection {
+  findByAlarmId(alarmId: AlarmId): Promise<ReadonlyArray<Delivery>>;
+}
+
+type ContractDeliveryRepository = DeliveryCreationPort &
+  DispatchQueuePort &
+  LeaseRecoveryQueuePort &
+  ReconcileQueuePort &
+  DeliveryCancellationPort &
+  DeliveryProgressPort &
+  DeliveryInspection;
 
 interface ContractRepositories {
   readonly alarmRepository: AlarmRepositoryPort;
-  readonly deliveryRepository: DeliveryRepositoryPort;
+  readonly deliveryRepository: ContractDeliveryRepository;
 }
 
 interface Scenario extends ContractRepositories {
@@ -645,7 +662,7 @@ export class DeliveryRepositoryContract {
   }
 
   private static async snapshots(
-    deliveryRepository: DeliveryRepositoryPort,
+    deliveryRepository: DeliveryInspection,
     owner: AlarmId,
   ): Promise<ReadonlyArray<DeliverySnapshot>> {
     return (await deliveryRepository.findByAlarmId(owner)).map(
@@ -654,7 +671,7 @@ export class DeliveryRepositoryContract {
   }
 
   private static async statuses(
-    deliveryRepository: DeliveryRepositoryPort,
+    deliveryRepository: DeliveryInspection,
     owner: AlarmId,
   ): Promise<ReadonlyArray<RecipientStatus>> {
     return (await DeliveryRepositoryContract.snapshots(deliveryRepository, owner))

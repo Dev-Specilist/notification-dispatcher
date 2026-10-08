@@ -25,14 +25,14 @@ export class CompleteAlarmIfSettledService implements CompleteAlarmIfSettledUseC
     return this.transaction.run(
       async ({
         alarmRepository,
-        deliveryRepository,
+        deliveryProgress,
         expansionJobRepository,
       }: TransactionRepositories): Promise<CompleteAlarmResult> => {
         const lookup: AlarmLookup = await alarmRepository.findByIdForUpdate(alarmId);
         if (lookup.kind === 'missing') {
           return { kind: 'not-found', error: { code: 'ALARM_NOT_FOUND', alarmId } };
         }
-        const unsettledDeliveries: DeliveryCount = await deliveryRepository.countUnsettled(alarmId);
+        const unsettledDeliveries: DeliveryCount = await deliveryProgress.countUnsettled(alarmId);
         const evidence: CompletionEvidence = {
           expansionCompleted: await CompleteAlarmIfSettledService.isExpansionCompleted(
             lookup.alarm,

@@ -22,7 +22,7 @@ export class CancelAlarmService implements CancelAlarmUseCase {
     return this.transaction.run(
       async ({
         alarmRepository,
-        deliveryRepository,
+        deliveryCancellation,
       }: TransactionRepositories): Promise<CancelAlarmResult> => {
         const lookup: AlarmLookup = await alarmRepository.findByIdForUpdate(alarmId);
         if (lookup.kind === 'missing') {
@@ -34,7 +34,7 @@ export class CancelAlarmService implements CancelAlarmUseCase {
         }
         const { alarm }: AlarmTransitioned = transition;
         await alarmRepository.save(alarm);
-        await deliveryRepository.cancelWaiting(alarmId, now);
+        await deliveryCancellation.cancelWaiting(alarmId, now);
         return { kind: 'cancelled', alarm: AlarmViewMapper.toView(alarm) };
       },
     );

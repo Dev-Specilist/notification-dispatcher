@@ -51,6 +51,7 @@ import { ExpandRecipientsService } from '@/modules/notification/application/serv
 import { SendAttempt } from '@/modules/notification/application/port/in/send-next-delivery.type';
 import { SendNextDeliveryService } from '@/modules/notification/application/service/send-next-delivery.service';
 import { StartDispatchService } from '@/modules/notification/application/service/start-dispatch.service';
+import { DrizzleDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/drizzle-delivery-repository.adapter';
 import { DrizzleTransactionAdapter } from '@/modules/notification/infrastructure/adapter/drizzle-transaction.adapter';
 import { NotificationDatabaseFactory } from '@/modules/notification/infrastructure/persistence/notification-database.factory';
 import { QueryResult } from 'pg';
@@ -268,10 +269,9 @@ describe('DrizzleTransactionAdapter', () => {
   };
 
   const deliveriesOf = (id: AlarmId): Promise<ReadonlyArray<Delivery>> =>
-    transaction.run(
-      ({ deliveryRepository }: TransactionRepositories): Promise<ReadonlyArray<Delivery>> =>
-        deliveryRepository.findByAlarmId(id),
-    );
+    new DrizzleDeliveryRepositoryAdapter(
+      NotificationDatabaseFactory.create(testDatabase.pool),
+    ).findByAlarmId(id);
 
   const waitUntilAnotherTransactionWaitsForLock = (): Promise<void> =>
     vi.waitFor(
@@ -300,9 +300,9 @@ describe('DrizzleTransactionAdapter', () => {
 
     await expect(
       transaction.run(
-        async ({ alarmRepository, deliveryRepository }: TransactionRepositories): Promise<void> => {
+        async ({ alarmRepository, deliveryCreation }: TransactionRepositories): Promise<void> => {
           await alarmRepository.save(dispatchedTransition.alarm);
-          await deliveryRepository.insertMissing(
+          await deliveryCreation.insertMissing(
             recipientIds(2).map((recipientId: RecipientId): Delivery =>
               Delivery.create(
                 {
@@ -416,8 +416,8 @@ describe('DrizzleTransactionAdapter', () => {
     }
     await save(dispatchedTransition.alarm);
     const { id }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
-    await transaction.run(({ deliveryRepository }: TransactionRepositories): Promise<void> =>
-      deliveryRepository.insertMissing(
+    await transaction.run(({ deliveryCreation }: TransactionRepositories): Promise<void> =>
+      deliveryCreation.insertMissing(
         recipientIds(100).map((recipientId: RecipientId): Delivery =>
           Delivery.create(
             {

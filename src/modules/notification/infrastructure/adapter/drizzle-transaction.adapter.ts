@@ -11,12 +11,19 @@ export class DrizzleTransactionAdapter implements TransactionPort {
   constructor(private readonly database: NotificationDatabase) {}
 
   run<TResult>(work: TransactionWork<TResult>): Promise<TResult> {
-    return this.database.transaction((transaction: NotificationDatabase): Promise<TResult> =>
-      work({
+    return this.database.transaction((transaction: NotificationDatabase): Promise<TResult> => {
+      const deliveryRepository: DrizzleDeliveryRepositoryAdapter =
+        new DrizzleDeliveryRepositoryAdapter(transaction);
+      return work({
         alarmRepository: new DrizzleAlarmRepositoryAdapter(transaction),
-        deliveryRepository: new DrizzleDeliveryRepositoryAdapter(transaction),
+        deliveryCreation: deliveryRepository,
+        dispatchQueue: deliveryRepository,
+        leaseRecoveryQueue: deliveryRepository,
+        reconcileQueue: deliveryRepository,
+        deliveryCancellation: deliveryRepository,
+        deliveryProgress: deliveryRepository,
         expansionJobRepository: new DrizzleExpansionJobRepositoryAdapter(transaction),
-      }),
-    );
+      });
+    });
   }
 }

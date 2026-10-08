@@ -24,9 +24,9 @@ export class RecoverExpiredLeaseService implements RecoverExpiredLeaseUseCase {
 
   execute(): Promise<RecoveryAttempt> {
     return this.transaction.run(
-      async ({ deliveryRepository }: TransactionRepositories): Promise<RecoveryAttempt> => {
+      async ({ leaseRecoveryQueue }: TransactionRepositories): Promise<RecoveryAttempt> => {
         const now: Date = this.clock.now();
-        const candidate: DeliveryCandidate = await deliveryRepository.findNextExpiredLease(now);
+        const candidate: DeliveryCandidate = await leaseRecoveryQueue.findNextExpiredLease(now);
         if (candidate.kind === 'none') {
           return { kind: 'idle' };
         }
@@ -35,7 +35,7 @@ export class RecoverExpiredLeaseService implements RecoverExpiredLeaseUseCase {
         const recovered: Delivery = RecoverExpiredLeaseService.transitioned(
           expired.recoverExpiredLease(now, this.settings.reconcileDelayMs),
         );
-        const saved: LeasedSave = await deliveryRepository.saveLeased(
+        const saved: LeasedSave = await leaseRecoveryQueue.saveLeased(
           recovered,
           RecoverExpiredLeaseService.leaseTokenOf(expired),
         );

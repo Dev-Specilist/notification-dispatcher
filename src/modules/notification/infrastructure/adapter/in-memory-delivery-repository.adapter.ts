@@ -13,11 +13,24 @@ import {
   LeasedSave,
   ReconciledSave,
 } from '@/modules/notification/application/port/out/delivery-repository.type';
-import { DeliveryRepositoryPort } from '@/modules/notification/application/port/out/delivery-repository.port';
+import { DeliveryCreationPort } from '@/modules/notification/application/port/out/delivery-creation.port';
+import { DispatchQueuePort } from '@/modules/notification/application/port/out/dispatch-queue.port';
+import { LeaseRecoveryQueuePort } from '@/modules/notification/application/port/out/lease-recovery-queue.port';
+import { ReconcileQueuePort } from '@/modules/notification/application/port/out/reconcile-queue.port';
+import { DeliveryCancellationPort } from '@/modules/notification/application/port/out/delivery-cancellation.port';
+import { DeliveryProgressPort } from '@/modules/notification/application/port/out/delivery-progress.port';
 import { Rollback } from '@/modules/notification/infrastructure/adapter/rollback.type';
 
 @Injectable()
-export class InMemoryDeliveryRepositoryAdapter implements DeliveryRepositoryPort {
+export class InMemoryDeliveryRepositoryAdapter
+  implements
+    DeliveryCreationPort,
+    DispatchQueuePort,
+    LeaseRecoveryQueuePort,
+    ReconcileQueuePort,
+    DeliveryCancellationPort,
+    DeliveryProgressPort
+{
   private readonly deliveriesById: Map<DeliveryId, Delivery> = new Map<DeliveryId, Delivery>();
 
   private readonly deliveryIdsByRecipient: Map<string, DeliveryId> = new Map<string, DeliveryId>();

@@ -33,8 +33,8 @@ export class ReconcileNextDeliveryService implements ReconcileNextDeliveryUseCas
 
   async execute(): Promise<ReconcileAttempt> {
     const candidate: DeliveryCandidate = await this.transaction.run(
-      ({ deliveryRepository }: TransactionRepositories): Promise<DeliveryCandidate> =>
-        deliveryRepository.findNextReconcilable(this.clock.now()),
+      ({ reconcileQueue }: TransactionRepositories): Promise<DeliveryCandidate> =>
+        reconcileQueue.findNextReconcilable(this.clock.now()),
     );
     if (candidate.kind === 'none') {
       return { kind: 'idle' };
@@ -50,13 +50,13 @@ export class ReconcileNextDeliveryService implements ReconcileNextDeliveryUseCas
     return this.transaction.run(
       async ({
         alarmRepository,
-        deliveryRepository,
+        reconcileQueue,
       }: TransactionRepositories): Promise<ReconcileAttempt> => {
         const alarm: AlarmLookup = await alarmRepository.findById(alarmId);
         const reconciled: Delivery = ReconcileNextDeliveryService.transitioned(
           this.decide(delivery, lookup, alarm, this.clock.now()),
         );
-        const saved: ReconciledSave = await deliveryRepository.saveReconciled(reconciled, delivery);
+        const saved: ReconciledSave = await reconcileQueue.saveReconciled(reconciled, delivery);
         return saved.kind === 'saved'
           ? { kind: 'reconciled', deliveryId: id, status: reconciled.snapshot().state.status }
           : { kind: 'superseded', deliveryId: id };

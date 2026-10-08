@@ -4,7 +4,12 @@ import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predi
 import { AlarmId, DeliveryCount } from '@/modules/notification/domain/alarm/alarm.type';
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
 import { DeliverySnapshot, LeaseToken } from '@/modules/notification/domain/delivery/delivery.type';
-import { DeliveryRepositoryPort } from '@/modules/notification/application/port/out/delivery-repository.port';
+import { DeliveryCreationPort } from '@/modules/notification/application/port/out/delivery-creation.port';
+import { DispatchQueuePort } from '@/modules/notification/application/port/out/dispatch-queue.port';
+import { LeaseRecoveryQueuePort } from '@/modules/notification/application/port/out/lease-recovery-queue.port';
+import { ReconcileQueuePort } from '@/modules/notification/application/port/out/reconcile-queue.port';
+import { DeliveryCancellationPort } from '@/modules/notification/application/port/out/delivery-cancellation.port';
+import { DeliveryProgressPort } from '@/modules/notification/application/port/out/delivery-progress.port';
 import {
   DeliveryCandidate,
   LeasedSave,
@@ -27,7 +32,15 @@ interface CountRow {
   readonly total: number;
 }
 
-export class DrizzleDeliveryRepositoryAdapter implements DeliveryRepositoryPort {
+export class DrizzleDeliveryRepositoryAdapter
+  implements
+    DeliveryCreationPort,
+    DispatchQueuePort,
+    LeaseRecoveryQueuePort,
+    ReconcileQueuePort,
+    DeliveryCancellationPort,
+    DeliveryProgressPort
+{
   private static readonly SETTLED_STATUSES: ReadonlyArray<DeliveryRow['status']> = [
     'SENT',
     'FAILED',

@@ -1,10 +1,20 @@
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/out/alarm-repository.port';
-import { DeliveryRepositoryPort } from '@/modules/notification/application/port/out/delivery-repository.port';
+import { DeliveryCreationPort } from '@/modules/notification/application/port/out/delivery-creation.port';
+import { DispatchQueuePort } from '@/modules/notification/application/port/out/dispatch-queue.port';
+import { LeaseRecoveryQueuePort } from '@/modules/notification/application/port/out/lease-recovery-queue.port';
+import { ReconcileQueuePort } from '@/modules/notification/application/port/out/reconcile-queue.port';
+import { DeliveryCancellationPort } from '@/modules/notification/application/port/out/delivery-cancellation.port';
+import { DeliveryProgressPort } from '@/modules/notification/application/port/out/delivery-progress.port';
 import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/out/expansion-job-repository.port';
 
 export interface TransactionRepositories {
   readonly alarmRepository: AlarmRepositoryPort;
-  readonly deliveryRepository: DeliveryRepositoryPort;
+  readonly deliveryCreation: DeliveryCreationPort;
+  readonly dispatchQueue: DispatchQueuePort;
+  readonly leaseRecoveryQueue: LeaseRecoveryQueuePort;
+  readonly reconcileQueue: ReconcileQueuePort;
+  readonly deliveryCancellation: DeliveryCancellationPort;
+  readonly deliveryProgress: DeliveryProgressPort;
   readonly expansionJobRepository: ExpansionJobRepositoryPort;
 }
 

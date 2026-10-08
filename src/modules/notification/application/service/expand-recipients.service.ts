@@ -89,7 +89,7 @@ export class ExpandRecipientsService implements ExpandRecipientsUseCase {
     return this.transaction.run(
       async ({
         alarmRepository,
-        deliveryRepository,
+        deliveryCreation,
         expansionJobRepository,
       }: TransactionRepositories): Promise<ExpansionStep> => {
         const current: ExpansionJobLookup =
@@ -104,7 +104,7 @@ export class ExpandRecipientsService implements ExpandRecipientsUseCase {
         ) {
           return this.stop(expansionJobRepository, alarmId);
         }
-        await deliveryRepository.insertMissing(
+        await deliveryCreation.insertMissing(
           recipientIds.map((recipientId: RecipientId): Delivery =>
             Delivery.create(
               { id: this.deliveryIdGenerator.deliveryId(), alarmId, recipientId, priority: 'BULK' },

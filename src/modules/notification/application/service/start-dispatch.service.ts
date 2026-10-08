@@ -27,7 +27,7 @@ export class StartDispatchService implements StartDispatchUseCase {
     return this.transaction.run(
       async ({
         alarmRepository,
-        deliveryRepository,
+        deliveryCreation,
         expansionJobRepository,
       }: TransactionRepositories): Promise<StartDispatchResult> => {
         const lookup: AlarmLookup = await alarmRepository.findByIdForUpdate(alarmId);
@@ -42,7 +42,7 @@ export class StartDispatchService implements StartDispatchUseCase {
         await alarmRepository.save(alarm);
         const snapshot: AlarmSnapshot = alarm.snapshot();
         if (snapshot.kind === 'URGENT') {
-          await deliveryRepository.saveAll(
+          await deliveryCreation.saveAll(
             snapshot.target.recipientIds.map((recipientId: RecipientId): Delivery =>
               Delivery.create(
                 {

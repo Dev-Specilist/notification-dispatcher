@@ -32,7 +32,16 @@ export class InMemoryTransactionAdapter implements TransactionPort {
       expansionJobRepository.checkpoint(),
     ];
     try {
-      return await work(this.repositories);
+      return await work({
+        alarmRepository,
+        deliveryCreation: deliveryRepository,
+        dispatchQueue: deliveryRepository,
+        leaseRecoveryQueue: deliveryRepository,
+        reconcileQueue: deliveryRepository,
+        deliveryCancellation: deliveryRepository,
+        deliveryProgress: deliveryRepository,
+        expansionJobRepository,
+      });
     } catch (error) {
       rollbacks.forEach((rollback: Rollback): void => rollback());
       throw error;
