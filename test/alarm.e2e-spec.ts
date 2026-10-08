@@ -26,6 +26,16 @@ const dispatchedAlarmSchema = createdAlarmSchema.extend({ dispatchedAt: z.string
 
 type DispatchedAlarm = z.infer<typeof dispatchedAlarmSchema>;
 
+const cancelledBeforeDispatchSchema = createdAlarmSchema
+  .extend({ cancelledAt: z.string() })
+  .strict();
+
+type CancelledBeforeDispatch = z.infer<typeof cancelledBeforeDispatchSchema>;
+
+const cancelledAfterDispatchSchema = dispatchedAlarmSchema.extend({ cancelledAt: z.string() });
+
+type CancelledAfterDispatch = z.infer<typeof cancelledAfterDispatchSchema>;
+
 const alarmDetailSchema = createdAlarmSchema.extend({
   deliveries: z.object({
     total: z.number(),
@@ -364,9 +374,76 @@ describe('알림 REST API', () => {
       },
     });
   });
-  it.todo('API-09 DRAFT·DISPATCHING 알림 / POST /alarms/:id/cancel → 200과 CANCELLED 알림');
-  it.todo(
-    'API-10 종결된 알림 / POST /alarms/:id/cancel → 409 Problem Details (ALARM_STATE_CONFLICT)',
-  );
+  it('API-09 DRAFT·DISPATCHING 알림 / POST /alarms/:id/cancel → 200과 CANCELLED 알림', async (): Promise<void> => {
+    const createdAlarm: CreatedAlarm = await createUrgentAlarm(['u_000001']);
+
+    const cancelledAlarm: CancelledBeforeDispatch = cancelledBeforeDispatchSchema.parse(
+      await spec().post(`/alarms/${createdAlarm.id}/cancel`).expectStatus(200).returns('res.body'),
+    );
+
+    expect(cancelledAlarm).toEqual({
+      ...createdAlarm,
+      status: 'CANCELLED',
+      cancelledAt: expect.stringMatching(ISO_UTC),
+    });
+    expect(await storedStatus(createdAlarm.id)).toBe('CANCELLED');
+  });
+
+  it('API-09 발송 중인 알림을 취소하면 200과 발송 시각이 남은 CANCELLED 알림이 오고, 대기 Delivery는 CANCELLED로 집계된다', async (): Promise<void> => {
+    const createdAlarm: CreatedAlarm = await createUrgentAlarm(['u_000001', 'u_000002']);
+    const dispatchedAlarm: DispatchedAlarm = dispatchedAlarmSchema.parse(
+      await spec()
+        .post(`/alarms/${createdAlarm.id}/dispatch`)
+        .expectStatus(202)
+        .returns('res.body'),
+    );
+
+    const cancelledAlarm: CancelledAfterDispatch = cancelledAfterDispatchSchema.parse(
+      await spec().post(`/alarms/${createdAlarm.id}/cancel`).expectStatus(200).returns('res.body'),
+    );
+    const fetchedAlarm: AlarmDetail = alarmDetailSchema.parse(
+      await spec().get(`/alarms/${createdAlarm.id}`).expectStatus(200).returns('res.body'),
+    );
+
+    expect(cancelledAlarm).toMatchObject({
+      status: 'CANCELLED',
+      dispatchedAt: dispatchedAlarm.dispatchedAt,
+      cancelledAt: expect.stringMatching(ISO_UTC),
+    });
+    expect(fetchedAlarm.deliveries).toMatchObject({
+      total: 2,
+      byStatus: { PENDING: 0, CANCELLED: 2 },
+    });
+  });
+
+  it('API-10 종결된 알림 / POST /alarms/:id/cancel → 409 Problem Details (ALARM_STATE_CONFLICT)', async (): Promise<void> => {
+    const createdAlarm: CreatedAlarm = await createUrgentAlarm(['u_000001']);
+    await spec().post(`/alarms/${createdAlarm.id}/cancel`).expectStatus(200);
+
+    const problem: Problem = problemSchema.parse(
+      await spec()
+        .post(`/alarms/${createdAlarm.id}/cancel`)
+        .expectStatus(409)
+        .expectHeader('content-type', PROBLEM_JSON)
+        .returns('res.body'),
+    );
+
+    expect(problem).toEqual({
+      status: 409,
+      code: 'ALARM_STATE_CONFLICT',
+      instance: `/alarms/${createdAlarm.id}/cancel`,
+      errors: [],
+    });
+  });
+
+  it('없는 알림 / POST /alarms/:id/cancel → 404 Problem Details (ALARM_NOT_FOUND)', async (): Promise<void> => {
+    const missingAlarmId: string = '7d3f1e2a-4b5c-4d6e-8f70-1a2b3c4d5e6f';
+
+    const problem: Problem = problemSchema.parse(
+      await spec().post(`/alarms/${missingAlarmId}/cancel`).expectStatus(404).returns('res.body'),
+    );
+
+    expect(problem).toMatchObject({ status: 404, code: 'ALARM_NOT_FOUND' });
+  });
   it.todo('API-11 실행 중인 api / GET /docs-json → OpenAPI 3 문서가 나온다');
 });

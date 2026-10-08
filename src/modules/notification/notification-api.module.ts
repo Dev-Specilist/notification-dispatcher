@@ -4,9 +4,11 @@ import { ClockPort } from '@/modules/notification/application/port/out/clock.por
 import { AlarmIdGeneratorPort } from '@/modules/notification/application/port/out/alarm-id-generator.port';
 import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/out/delivery-id-generator.port';
 import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
+import { CancelAlarmUseCase } from '@/modules/notification/application/port/in/cancel-alarm.use-case';
 import { CreateAlarmUseCase } from '@/modules/notification/application/port/in/create-alarm.use-case';
 import { GetAlarmUseCase } from '@/modules/notification/application/port/in/get-alarm.use-case';
 import { StartDispatchUseCase } from '@/modules/notification/application/port/in/start-dispatch.use-case';
+import { CancelAlarmService } from '@/modules/notification/application/service/cancel-alarm.service';
 import { CreateAlarmService } from '@/modules/notification/application/service/create-alarm.service';
 import { GetAlarmService } from '@/modules/notification/application/service/get-alarm.service';
 import { StartDispatchService } from '@/modules/notification/application/service/start-dispatch.service';
@@ -52,6 +54,12 @@ import { AlarmController } from '@/modules/notification/adapter/in/web/alarm.con
         deliveryIdGenerator: DeliveryIdGeneratorPort,
         clock: ClockPort,
       ): StartDispatchUseCase => new StartDispatchService(transaction, deliveryIdGenerator, clock),
+    },
+    {
+      provide: CancelAlarmUseCase,
+      inject: [TransactionPort, ClockPort],
+      useFactory: (transaction: TransactionPort, clock: ClockPort): CancelAlarmUseCase =>
+        new CancelAlarmService(transaction, clock),
     },
   ],
 })

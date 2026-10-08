@@ -2,8 +2,10 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestj
 import { z } from 'zod';
 import {
   AlarmResult,
+  CancelAlarmResult,
   StartDispatchResult,
 } from '@/modules/notification/application/port/in/alarm-result.type';
+import { CancelAlarmUseCase } from '@/modules/notification/application/port/in/cancel-alarm.use-case';
 import { CreateAlarmResult } from '@/modules/notification/application/port/in/create-alarm.type';
 import { CreateAlarmUseCase } from '@/modules/notification/application/port/in/create-alarm.use-case';
 import { GetAlarmUseCase } from '@/modules/notification/application/port/in/get-alarm.use-case';
@@ -27,6 +29,7 @@ export class AlarmController {
     private readonly createAlarm: CreateAlarmUseCase,
     private readonly getAlarm: GetAlarmUseCase,
     private readonly startDispatch: StartDispatchUseCase,
+    private readonly cancelAlarm: CancelAlarmUseCase,
   ) {}
 
   @Post()
@@ -56,6 +59,18 @@ export class AlarmController {
   ): Promise<AlarmResponse> {
     const result: StartDispatchResult = await this.startDispatch.execute({ alarmId });
     if (result.kind !== 'dispatched') {
+      throw AlarmPresenter.problemOf(result.error);
+    }
+    return AlarmPresenter.toResponse(result.alarm);
+  }
+
+  @Post(':id/cancel')
+  @HttpCode(HttpStatus.OK)
+  async cancel(
+    @Param({ schema: alarmIdParamSchema }) { id: alarmId }: AlarmIdParam,
+  ): Promise<AlarmResponse> {
+    const result: CancelAlarmResult = await this.cancelAlarm.execute({ alarmId });
+    if (result.kind !== 'cancelled') {
       throw AlarmPresenter.problemOf(result.error);
     }
     return AlarmPresenter.toResponse(result.alarm);
