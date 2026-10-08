@@ -104,12 +104,16 @@ describe('ShutdownService', () => {
       throw new ExitCalled();
     });
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    moduleRef.get(ShutdownService).handleSignal('SIGTERM');
-    const timersBeforeClose: number = vi.getTimerCount();
+    const shutdown: ShutdownService = moduleRef.get(ShutdownService);
+    const drainStarted: MockInstance<ShutdownService['beforeApplicationShutdown']> = vi.spyOn(
+      shutdown,
+      'beforeApplicationShutdown',
+    );
+    shutdown.handleSignal('SIGTERM');
 
     closed = true;
     const closing: Promise<void> = moduleRef.close();
-    await yieldUntil((): boolean => vi.getTimerCount() > timersBeforeClose);
+    await yieldUntil((): boolean => drainStarted.mock.calls.length > 0);
     await vi.advanceTimersByTimeAsync(DRAIN_MS);
     await yieldUntil((): boolean => pool.ending);
     await vi.advanceTimersByTimeAsync(TIMEOUT_MS - 1);

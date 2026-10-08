@@ -14,10 +14,15 @@ import { TypedConfigService } from '@/shared/config/typed-config.service';
   exports: [Pool],
 })
 export class DatabaseModule {
+  private static readonly CONNECTION_TIMEOUT_MS: number = 5_000;
+
   private static readonly logger: Logger = new Logger('Database');
 
   private static createPool(config: TypedConfigService): Pool {
-    const pool: Pool = new Pool({ connectionString: config.get('DATABASE_URL') });
+    const pool: Pool = new Pool({
+      connectionString: config.get('DATABASE_URL'),
+      connectionTimeoutMillis: DatabaseModule.CONNECTION_TIMEOUT_MS,
+    });
     pool.on('error', (error: Error): void => {
       DatabaseModule.logger.error(`idle database connection failed: ${error.message}`);
     });

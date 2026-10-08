@@ -280,7 +280,7 @@ OpenAPI 문서는 `/docs`(UI)와 `/docs-json`에서 제공합니다. 계약은 [
 | `GET` | `/alarms/:id` | 알림 단건 (Delivery 상태별 집계 포함) |
 | `POST` | `/alarms/:id/dispatch` | 발송 시작 |
 | `POST` | `/alarms/:id/cancel` | 발송 취소 |
-| `GET` | `/livez` · `/readyz` | liveness · readiness 프로브 |
+| `GET` | `/livez` · `/readyz` | liveness(의존성을 보지 않음) · readiness(종료 중이거나 DB에 1초 안에 쿼리할 수 없으면 503) 프로브 |
 
 에러는 RFC 9457 Problem Details로 응답합니다. 예외는 `/livez` · `/readyz`로, k8s 프로브가 기대하는 terminus 형식을 그대로 유지합니다. 도메인 오류는 `ALARM_NOT_FOUND`(404), `ALARM_STATE_CONFLICT`(409)처럼 HTTP 상태와 `code`로 바꿔 응답합니다.
 

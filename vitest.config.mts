@@ -51,10 +51,9 @@ export default defineConfig({
         test: {
           name: 'e2e',
           include: ['test/**/*.e2e-spec.ts'],
-          env: {
-            SHUTDOWN_DRAIN_MS: '200',
-            DATABASE_URL: 'postgres://e2e:e2e@127.0.0.1:5432/notification',
-          },
+          globalSetup: ['./src/shared/database/testing/postgres.global-setup.ts'],
+          hookTimeout: 60_000,
+          env: { SHUTDOWN_DRAIN_MS: '200' },
         },
       },
     ],
