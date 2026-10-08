@@ -40,6 +40,10 @@ describe('환경변수 스키마', () => {
       UNCONFIRMED_AFTER_MS: 3600000,
       USER_PAGE_LIMIT: 1000,
       RATE_LIMIT_INTERVAL_MS: 20,
+      DISPATCH_CONCURRENCY: 8,
+      WORKER_POLL_INTERVAL_MS: 100,
+      WORKER_ERROR_DELAY_MS: 1000,
+      COMPLETION_CHECK_INTERVAL_MS: 1000,
     };
 
     expect(validate(REQUIRED)).toEqual(expected);
@@ -73,6 +77,10 @@ describe('환경변수 스키마', () => {
       UNCONFIRMED_AFTER_MS: '600000',
       USER_PAGE_LIMIT: '500',
       RATE_LIMIT_INTERVAL_MS: '25',
+      DISPATCH_CONCURRENCY: '4',
+      WORKER_POLL_INTERVAL_MS: '50',
+      WORKER_ERROR_DELAY_MS: '2000',
+      COMPLETION_CHECK_INTERVAL_MS: '3000',
     };
     const expected: EnvSnapshot = {
       HOST: '127.0.0.1',
@@ -95,6 +103,10 @@ describe('환경변수 스키마', () => {
       UNCONFIRMED_AFTER_MS: 600000,
       USER_PAGE_LIMIT: 500,
       RATE_LIMIT_INTERVAL_MS: 25,
+      DISPATCH_CONCURRENCY: 4,
+      WORKER_POLL_INTERVAL_MS: 50,
+      WORKER_ERROR_DELAY_MS: 2000,
+      COMPLETION_CHECK_INTERVAL_MS: 3000,
     };
 
     expect(validate(raw)).toEqual(expected);
@@ -159,6 +171,11 @@ describe('환경변수 스키마', () => {
     ['USER_PAGE_LIMIT', '0'],
     ['RATE_LIMIT_INTERVAL_MS', '0'],
     ['RETRY_MAX_ATTEMPTS', '1.5'],
+    ['DISPATCH_CONCURRENCY', '0'],
+    ['WORKER_POLL_INTERVAL_MS', '0'],
+    ['WORKER_ERROR_DELAY_MS', '0'],
+    ['COMPLETION_CHECK_INTERVAL_MS', '0'],
+    ['WORKER_POLL_INTERVAL_MS', '2147483648'],
   ])('워커 설정 %s="%s"는 거부한다', (key: string, rawValue: string): void => {
     expect(() => validate({ ...REQUIRED, [key]: rawValue })).toThrow(new RegExp(key));
   });

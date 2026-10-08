@@ -11,8 +11,9 @@ import {
   portSchema,
   positiveIntegerSchema,
   positiveMillisecondsSchema,
+  timerDelayMsSchema,
 } from '@/shared/config/primitive.schema';
-import { HttpUrl, PositiveInteger } from '@/shared/config/primitive.type';
+import { HttpUrl, PositiveInteger, TimerDelayMs } from '@/shared/config/primitive.type';
 import { logFormatSchema, logLevelSchema } from '@/shared/logging/logging.schema';
 
 const DEFAULT_HOST: Host = hostSchema.parse('0.0.0.0');
@@ -31,6 +32,10 @@ const DEFAULT_LOOKUP_RETRY_MAX_DELAY: Milliseconds = positiveMillisecondsSchema.
 const DEFAULT_UNCONFIRMED_AFTER: Milliseconds = positiveMillisecondsSchema.parse(3600000);
 const DEFAULT_USER_PAGE_LIMIT: PositiveInteger = positiveIntegerSchema.parse(1000);
 const DEFAULT_RATE_LIMIT_INTERVAL: Milliseconds = positiveMillisecondsSchema.parse(20);
+const DEFAULT_DISPATCH_CONCURRENCY: PositiveInteger = positiveIntegerSchema.parse(8);
+const DEFAULT_WORKER_POLL_INTERVAL: TimerDelayMs = timerDelayMsSchema.parse(100);
+const DEFAULT_WORKER_ERROR_DELAY: TimerDelayMs = timerDelayMsSchema.parse(1000);
+const DEFAULT_COMPLETION_CHECK_INTERVAL: TimerDelayMs = timerDelayMsSchema.parse(1000);
 
 export const createEnvSchema = (defaultPort: Port): EnvSchema =>
   z.object({
@@ -54,4 +59,8 @@ export const createEnvSchema = (defaultPort: Port): EnvSchema =>
     UNCONFIRMED_AFTER_MS: positiveMillisecondsSchema.default(DEFAULT_UNCONFIRMED_AFTER),
     USER_PAGE_LIMIT: positiveIntegerSchema.default(DEFAULT_USER_PAGE_LIMIT),
     RATE_LIMIT_INTERVAL_MS: positiveMillisecondsSchema.default(DEFAULT_RATE_LIMIT_INTERVAL),
+    DISPATCH_CONCURRENCY: positiveIntegerSchema.default(DEFAULT_DISPATCH_CONCURRENCY),
+    WORKER_POLL_INTERVAL_MS: timerDelayMsSchema.default(DEFAULT_WORKER_POLL_INTERVAL),
+    WORKER_ERROR_DELAY_MS: timerDelayMsSchema.default(DEFAULT_WORKER_ERROR_DELAY),
+    COMPLETION_CHECK_INTERVAL_MS: timerDelayMsSchema.default(DEFAULT_COMPLETION_CHECK_INTERVAL),
   });

@@ -31,7 +31,7 @@ export const positiveMillisecondsSchema = integer.pipe(z.number().min(1)).brand<
 export type PositiveMillisecondsSchema = typeof positiveMillisecondsSchema;
 
 export const timerDelayMsSchema = integer
-  .pipe(z.number().min(0).max(MAX_TIMER_DELAY_MS))
+  .pipe(z.number().min(1).max(MAX_TIMER_DELAY_MS))
   .brand<'TimerDelayMs'>();
 
 export const databaseUrlSchema = z.url({ protocol: /^postgres(ql)?$/ }).brand<'DatabaseUrl'>();

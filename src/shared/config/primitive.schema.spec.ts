@@ -33,18 +33,18 @@ describe('primitive 스키마', () => {
     expect(positiveMillisecondsSchema.safeParse(raw).success).toBe(false);
   });
 
-  it.each(['-1', '1.5', '2147483648'])(
-    '타이머 대기 밀리초는 Node 타이머 상한을 넘거나 정수가 아닌 "%s"를 거부한다',
+  it.each(['0', '1.5', '2147483648'])(
+    '타이머 대기 밀리초는 0이거나 Node 타이머 상한을 넘거나 정수가 아닌 "%s"를 거부한다',
     (raw: string): void => {
       expect(timerDelayMsSchema.safeParse(raw).success).toBe(false);
     },
   );
 
   it.each([
-    ['0', 0],
+    ['1', 1],
     ['2147483647', 2_147_483_647],
   ])(
-    '타이머 대기 밀리초는 0부터 Node 타이머 상한까지 허용한다 ("%s")',
+    '타이머 대기 밀리초는 1부터 Node 타이머 상한까지 허용한다 ("%s")',
     (raw: string, delayMs: number): void => {
       expect(timerDelayMsSchema.parse(raw)).toBe(delayMs);
     },

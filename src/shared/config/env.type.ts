@@ -9,6 +9,7 @@ import {
   DatabaseUrlSchema,
   HttpUrlSchema,
   PositiveIntegerSchema,
+  TimerDelayMsSchema,
 } from '@/shared/config/primitive.type';
 import { LogFormatSchema, LogLevelSchema } from '@/shared/logging/logging.schema';
 
@@ -33,6 +34,10 @@ export type EnvShape = {
   readonly UNCONFIRMED_AFTER_MS: z.ZodDefault<PositiveMillisecondsSchema>;
   readonly USER_PAGE_LIMIT: z.ZodDefault<PositiveIntegerSchema>;
   readonly RATE_LIMIT_INTERVAL_MS: z.ZodDefault<PositiveMillisecondsSchema>;
+  readonly DISPATCH_CONCURRENCY: z.ZodDefault<PositiveIntegerSchema>;
+  readonly WORKER_POLL_INTERVAL_MS: z.ZodDefault<TimerDelayMsSchema>;
+  readonly WORKER_ERROR_DELAY_MS: z.ZodDefault<TimerDelayMsSchema>;
+  readonly COMPLETION_CHECK_INTERVAL_MS: z.ZodDefault<TimerDelayMsSchema>;
 };
 
 export type EnvSchema = z.ZodObject<EnvShape>;
