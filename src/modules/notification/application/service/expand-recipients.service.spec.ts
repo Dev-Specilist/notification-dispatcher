@@ -13,7 +13,7 @@ import { DeliveryId, DeliverySnapshot } from '@/modules/notification/domain/deli
 import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
 import { CancelAlarmService } from '@/modules/notification/application/service/cancel-alarm.service';
 import { ExpansionProgress } from '@/modules/notification/application/port/out/expansion-job-repository.type';
-import { IdGeneratorPort } from '@/modules/notification/application/port/out/id-generator.port';
+import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/out/delivery-id-generator.port';
 import { RecipientDirectoryPort } from '@/modules/notification/application/port/out/recipient-directory.port';
 import {
   PageCursor,
@@ -106,12 +106,8 @@ class FixedClock implements ClockPort {
   }
 }
 
-class SequentialIdGenerator implements IdGeneratorPort {
+class SequentialDeliveryIdGenerator implements DeliveryIdGeneratorPort {
   private issued: number = 0;
-
-  alarmId(): AlarmId {
-    return alarmId(ALARM_ID);
-  }
 
   deliveryId(): DeliveryId {
     this.issued += 1;
@@ -255,9 +251,9 @@ const fixture = async (
     deliveryRepository,
     expansionJobRepository,
   });
-  const idGenerator: SequentialIdGenerator = new SequentialIdGenerator();
+  const deliveryIdGenerator: SequentialDeliveryIdGenerator = new SequentialDeliveryIdGenerator();
   const newWorker = (): ExpandRecipientsService =>
-    new ExpandRecipientsService(transaction, directory, idGenerator, new FixedClock());
+    new ExpandRecipientsService(transaction, directory, deliveryIdGenerator, new FixedClock());
   return {
     alarmRepository,
     transaction,

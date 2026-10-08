@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { Pool } from 'pg';
 import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
-import { IdGeneratorPort } from '@/modules/notification/application/port/out/id-generator.port';
+import { AlarmIdGeneratorPort } from '@/modules/notification/application/port/out/alarm-id-generator.port';
 import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
 import { CreateAlarmUseCase } from '@/modules/notification/application/port/in/create-alarm.use-case';
 import { CreateAlarmService } from '@/modules/notification/application/service/create-alarm.service';
@@ -15,7 +15,7 @@ import { AlarmController } from '@/modules/notification/presentation/alarm.contr
   controllers: [AlarmController],
   providers: [
     { provide: ClockPort, useClass: SystemClockAdapter },
-    { provide: IdGeneratorPort, useClass: RandomIdGeneratorAdapter },
+    { provide: AlarmIdGeneratorPort, useClass: RandomIdGeneratorAdapter },
     {
       provide: TransactionPort,
       inject: [Pool],
@@ -24,12 +24,12 @@ import { AlarmController } from '@/modules/notification/presentation/alarm.contr
     },
     {
       provide: CreateAlarmUseCase,
-      inject: [TransactionPort, IdGeneratorPort, ClockPort],
+      inject: [TransactionPort, AlarmIdGeneratorPort, ClockPort],
       useFactory: (
         transaction: TransactionPort,
-        idGenerator: IdGeneratorPort,
+        alarmIdGenerator: AlarmIdGeneratorPort,
         clock: ClockPort,
-      ): CreateAlarmUseCase => new CreateAlarmService(transaction, idGenerator, clock),
+      ): CreateAlarmUseCase => new CreateAlarmService(transaction, alarmIdGenerator, clock),
     },
   ],
 })

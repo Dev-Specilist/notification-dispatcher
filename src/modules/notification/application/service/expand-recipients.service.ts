@@ -7,7 +7,7 @@ import {
   ExpansionJob,
   ExpansionJobLookup,
 } from '@/modules/notification/application/port/out/expansion-job-repository.type';
-import { IdGeneratorPort } from '@/modules/notification/application/port/out/id-generator.port';
+import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/out/delivery-id-generator.port';
 import { RecipientDirectoryPort } from '@/modules/notification/application/port/out/recipient-directory.port';
 import {
   PageCursor,
@@ -38,7 +38,7 @@ export class ExpandRecipientsService implements ExpandRecipientsUseCase {
   constructor(
     private readonly transaction: TransactionPort,
     private readonly recipientDirectory: RecipientDirectoryPort,
-    private readonly idGenerator: IdGeneratorPort,
+    private readonly deliveryIdGenerator: DeliveryIdGeneratorPort,
     private readonly clock: ClockPort,
   ) {}
 
@@ -107,7 +107,7 @@ export class ExpandRecipientsService implements ExpandRecipientsUseCase {
         await deliveryRepository.insertMissing(
           recipientIds.map((recipientId: RecipientId): Delivery =>
             Delivery.create(
-              { id: this.idGenerator.deliveryId(), alarmId, recipientId, priority: 'BULK' },
+              { id: this.deliveryIdGenerator.deliveryId(), alarmId, recipientId, priority: 'BULK' },
               now,
             ),
           ),

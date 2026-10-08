@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { AlarmDraft, AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
-import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
-import { DeliveryId } from '@/modules/notification/domain/delivery/delivery.type';
 import {
   AlarmFound,
   AlarmLookup,
@@ -15,7 +13,7 @@ import {
 import { AlarmView } from '@/modules/notification/application/port/in/alarm-view.type';
 import { AlarmViewMapper } from '@/modules/notification/application/service/alarm-view.mapper';
 import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
-import { IdGeneratorPort } from '@/modules/notification/application/port/out/id-generator.port';
+import { AlarmIdGeneratorPort } from '@/modules/notification/application/port/out/alarm-id-generator.port';
 import { CreateAlarmService } from '@/modules/notification/application/service/create-alarm.service';
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-delivery-repository.adapter';
@@ -45,17 +43,9 @@ class FixedClock implements ClockPort {
   }
 }
 
-class FixedIdGenerator implements IdGeneratorPort {
+class FixedAlarmIdGenerator implements AlarmIdGeneratorPort {
   alarmId(): AlarmId {
     return alarmId();
-  }
-
-  deliveryId(): DeliveryId {
-    const value: string = '5f1d2a8c-3b4e-4c6d-9e7f-8a9b0c1d2e3f';
-    if (!DeliveryPredicates.isDeliveryId(value)) {
-      throw new Error('test fixture is not a valid DeliveryId');
-    }
-    return value;
   }
 }
 
@@ -113,7 +103,7 @@ const fixture = (
   return {
     alarmRepository,
     transaction,
-    service: new CreateAlarmService(transaction, new FixedIdGenerator(), new FixedClock()),
+    service: new CreateAlarmService(transaction, new FixedAlarmIdGenerator(), new FixedClock()),
   };
 };
 

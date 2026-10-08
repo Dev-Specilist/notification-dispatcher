@@ -25,7 +25,7 @@ import { AlarmLookup } from '@/modules/notification/application/port/out/alarm-r
 import { ExpansionJobLookup } from '@/modules/notification/application/port/out/expansion-job-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
 import { DispatchSettingsPort } from '@/modules/notification/application/port/out/dispatch-settings.port';
-import { IdGeneratorPort } from '@/modules/notification/application/port/out/id-generator.port';
+import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/out/delivery-id-generator.port';
 import { JitterSourcePort } from '@/modules/notification/application/port/out/jitter-source.port';
 import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/out/lease-token-generator.port';
 import { MessageSenderPort } from '@/modules/notification/application/port/out/message-sender.port';
@@ -130,11 +130,7 @@ class FixedClock implements ClockPort {
   }
 }
 
-class RandomIdGenerator implements IdGeneratorPort {
-  alarmId(): AlarmId {
-    return newAlarmId();
-  }
-
+class RandomDeliveryIdGenerator implements DeliveryIdGeneratorPort {
   deliveryId(): DeliveryId {
     const value: string = randomUUID();
     if (!DeliveryPredicates.isDeliveryId(value)) {
@@ -291,7 +287,7 @@ describe('DrizzleTransactionAdapter', () => {
     );
 
   const startDispatch = (): StartDispatchService =>
-    new StartDispatchService(transaction, new RandomIdGenerator(), new FixedClock());
+    new StartDispatchService(transaction, new RandomDeliveryIdGenerator(), new FixedClock());
 
   it('DB-15 알림 상태 변경과 Delivery 생성을 한 트랜잭션에서 진행 중 / 트랜잭션 도중 실패한다 → 알림 상태 변경과 Delivery 생성이 함께 롤백된다', async (): Promise<void> => {
     const alarm: Alarm = urgentDraft();
@@ -310,7 +306,7 @@ describe('DrizzleTransactionAdapter', () => {
             recipientIds(2).map((recipientId: RecipientId): Delivery =>
               Delivery.create(
                 {
-                  id: new RandomIdGenerator().deliveryId(),
+                  id: new RandomDeliveryIdGenerator().deliveryId(),
                   alarmId: id,
                   recipientId,
                   priority: 'URGENT',
@@ -425,7 +421,7 @@ describe('DrizzleTransactionAdapter', () => {
         recipientIds(100).map((recipientId: RecipientId): Delivery =>
           Delivery.create(
             {
-              id: new RandomIdGenerator().deliveryId(),
+              id: new RandomDeliveryIdGenerator().deliveryId(),
               alarmId: id,
               recipientId,
               priority: 'BULK',
@@ -467,7 +463,7 @@ describe('DrizzleTransactionAdapter', () => {
       new ExpandRecipientsService(
         transaction,
         directory,
-        new RandomIdGenerator(),
+        new RandomDeliveryIdGenerator(),
         new FixedClock(),
       );
 

@@ -7,7 +7,7 @@ import { DeliveryPredicates } from '@/modules/notification/domain/delivery/deliv
 import { DeliveryId, DeliverySnapshot } from '@/modules/notification/domain/delivery/delivery.type';
 import { AlarmLookup } from '@/modules/notification/application/port/out/alarm-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
-import { IdGeneratorPort } from '@/modules/notification/application/port/out/id-generator.port';
+import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/out/delivery-id-generator.port';
 import { StartDispatchResult } from '@/modules/notification/application/port/in/alarm-result.type';
 import { StartDispatchService } from '@/modules/notification/application/service/start-dispatch.service';
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/infrastructure/adapter/in-memory-alarm-repository.adapter';
@@ -61,12 +61,8 @@ class FixedClock implements ClockPort {
   }
 }
 
-class SequentialIdGenerator implements IdGeneratorPort {
+class SequentialDeliveryIdGenerator implements DeliveryIdGeneratorPort {
   private issued: number = 0;
-
-  alarmId(): AlarmId {
-    return alarmId(ALARM_ID);
-  }
 
   deliveryId(): DeliveryId {
     this.issued += 1;
@@ -120,7 +116,11 @@ const fixture = async (
     alarmRepository,
     deliveryRepository,
     expansionJobRepository,
-    service: new StartDispatchService(transaction, new SequentialIdGenerator(), new FixedClock()),
+    service: new StartDispatchService(
+      transaction,
+      new SequentialDeliveryIdGenerator(),
+      new FixedClock(),
+    ),
   };
 };
 

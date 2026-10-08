@@ -8,7 +8,7 @@ import {
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
 import { AlarmLookup } from '@/modules/notification/application/port/out/alarm-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
-import { IdGeneratorPort } from '@/modules/notification/application/port/out/id-generator.port';
+import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/out/delivery-id-generator.port';
 import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
 import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
 import { StartDispatchResult } from '@/modules/notification/application/port/in/alarm-result.type';
@@ -18,7 +18,7 @@ import { AlarmViewMapper } from '@/modules/notification/application/service/alar
 export class StartDispatchService implements StartDispatchUseCase {
   constructor(
     private readonly transaction: TransactionPort,
-    private readonly idGenerator: IdGeneratorPort,
+    private readonly deliveryIdGenerator: DeliveryIdGeneratorPort,
     private readonly clock: ClockPort,
   ) {}
 
@@ -45,7 +45,12 @@ export class StartDispatchService implements StartDispatchUseCase {
           await deliveryRepository.saveAll(
             snapshot.target.recipientIds.map((recipientId: RecipientId): Delivery =>
               Delivery.create(
-                { id: this.idGenerator.deliveryId(), alarmId, recipientId, priority: 'URGENT' },
+                {
+                  id: this.deliveryIdGenerator.deliveryId(),
+                  alarmId,
+                  recipientId,
+                  priority: 'URGENT',
+                },
                 now,
               ),
             ),

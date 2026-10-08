@@ -1,7 +1,7 @@
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmCreation } from '@/modules/notification/domain/alarm/alarm.type';
 import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
-import { IdGeneratorPort } from '@/modules/notification/application/port/out/id-generator.port';
+import { AlarmIdGeneratorPort } from '@/modules/notification/application/port/out/alarm-id-generator.port';
 import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
 import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
 import {
@@ -14,13 +14,13 @@ import { AlarmViewMapper } from '@/modules/notification/application/service/alar
 export class CreateAlarmService implements CreateAlarmUseCase {
   constructor(
     private readonly transaction: TransactionPort,
-    private readonly idGenerator: IdGeneratorPort,
+    private readonly alarmIdGenerator: AlarmIdGeneratorPort,
     private readonly clock: ClockPort,
   ) {}
 
   async execute(command: Readonly<CreateAlarmCommand>): Promise<CreateAlarmResult> {
     const creation: AlarmCreation = Alarm.create(
-      this.idGenerator.alarmId(),
+      this.alarmIdGenerator.alarmId(),
       command,
       this.clock.now(),
     );
