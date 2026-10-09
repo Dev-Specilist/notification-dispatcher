@@ -12,24 +12,24 @@ import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'v
 import { ShutdownService } from '@/bootstrap/lifecycle/shutdown.service';
 import { ReadinessPort } from '@/modules/health/application/port/out/readiness.port';
 import { InMemoryReadinessAdapter } from '@/modules/health/adapter/out/in-memory/in-memory-readiness.adapter';
-import { CompleteSettledAlarmsUseCase } from '@/modules/notification/application/port/in/complete-settled-alarms.use-case';
+import { CompleteSettledAlarmsUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-settled-alarms.use-case';
 import {
   AlarmCompletionFailure,
   CompleteSettledAlarmsCommand,
   SettledAlarmsPageChecked,
-} from '@/modules/notification/application/port/in/complete-settled-alarms.type';
+} from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-settled-alarms.type';
 import {
   ListPosition,
   ListStart,
-} from '@/modules/notification/application/port/in/list-alarms.type';
-import { ExpandNextPageUseCase } from '@/modules/notification/application/port/in/expand-next-page.use-case';
-import { ExpansionPageAttempt } from '@/modules/notification/application/port/in/expand-next-page.type';
-import { ReconcileNextDeliveryUseCase } from '@/modules/notification/application/port/in/reconcile-next-delivery.use-case';
-import { ReconcileAttempt } from '@/modules/notification/application/port/in/reconcile-next-delivery.type';
-import { RecoverExpiredLeaseUseCase } from '@/modules/notification/application/port/in/recover-expired-lease.use-case';
-import { RecoveryAttempt } from '@/modules/notification/application/port/in/recover-expired-lease.type';
-import { SendNextDeliveryUseCase } from '@/modules/notification/application/port/in/send-next-delivery.use-case';
-import { SendAttempt } from '@/modules/notification/application/port/in/send-next-delivery.type';
+} from '@/modules/notification/application/port/driving/for-managing-alarms/list-alarms.type';
+import { ExpandNextPageUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/expand-next-page.use-case';
+import { ExpansionPageAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/expand-next-page.type';
+import { ReconcileNextDeliveryUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/reconcile-next-delivery.use-case';
+import { ReconcileAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/reconcile-next-delivery.type';
+import { RecoverExpiredLeaseUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/recover-expired-lease.use-case';
+import { RecoveryAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/recover-expired-lease.type';
+import { SendNextDeliveryUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/send-next-delivery.use-case';
+import { SendAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/send-next-delivery.type';
 import { DispatchWorker } from '@/modules/notification/adapter/in/worker/dispatch.worker';
 import { createEnvSchema } from '@/shared/config/env.schema';
 import { portSchema } from '@/shared/config/primitive.schema';

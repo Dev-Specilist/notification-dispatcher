@@ -49,13 +49,13 @@ import {
 import {
   CancelAlarmResult,
   StartDispatchResult,
-} from '@/modules/notification/application/port/in/alarm-result.type';
-import { CancelAlarmService } from '@/modules/notification/application/service/cancel-alarm.service';
-import { ExpansionPageAttempt } from '@/modules/notification/application/port/in/expand-next-page.type';
-import { ExpandNextPageService } from '@/modules/notification/application/service/expand-next-page.service';
-import { SendAttempt } from '@/modules/notification/application/port/in/send-next-delivery.type';
-import { SendNextDeliveryService } from '@/modules/notification/application/service/send-next-delivery.service';
-import { StartDispatchService } from '@/modules/notification/application/service/start-dispatch.service';
+} from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
+import { CancelAlarmService } from '@/modules/notification/application/service/alarm/cancel-alarm.service';
+import { ExpansionPageAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/expand-next-page.type';
+import { ExpandNextPageService } from '@/modules/notification/application/service/expansion/expand-next-page.service';
+import { SendAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/send-next-delivery.type';
+import { SendNextDeliveryService } from '@/modules/notification/application/service/delivery/send-next-delivery.service';
+import { StartDispatchService } from '@/modules/notification/application/service/alarm/start-dispatch.service';
 import { DrizzleDeliveryRepositoryAdapter } from '@/modules/notification/adapter/out/persistence/drizzle-delivery-repository.adapter';
 import { DrizzleTransactionAdapter } from '@/modules/notification/adapter/out/persistence/drizzle-transaction.adapter';
 import { NotificationDatabaseFactory } from '@/modules/notification/adapter/out/persistence/notification-database.factory';

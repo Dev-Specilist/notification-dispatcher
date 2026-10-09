@@ -12,17 +12,17 @@ import {
   AlarmResult,
   CancelAlarmResult,
   StartDispatchResult,
-} from '@/modules/notification/application/port/in/alarm-result.type';
-import { CancelAlarmUseCase } from '@/modules/notification/application/port/in/cancel-alarm.use-case';
-import { CreateAlarmResult } from '@/modules/notification/application/port/in/create-alarm.type';
-import { CreateAlarmUseCase } from '@/modules/notification/application/port/in/create-alarm.use-case';
-import { GetAlarmUseCase } from '@/modules/notification/application/port/in/get-alarm.use-case';
+} from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
+import { CancelAlarmUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/cancel-alarm.use-case';
+import { CreateAlarmResult } from '@/modules/notification/application/port/driving/for-managing-alarms/create-alarm.type';
+import { CreateAlarmUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/create-alarm.use-case';
+import { GetAlarmUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/get-alarm.use-case';
 import {
   ListAlarmsQuery,
   ListAlarmsResult,
-} from '@/modules/notification/application/port/in/list-alarms.type';
-import { ListAlarmsUseCase } from '@/modules/notification/application/port/in/list-alarms.use-case';
-import { StartDispatchUseCase } from '@/modules/notification/application/port/in/start-dispatch.use-case';
+} from '@/modules/notification/application/port/driving/for-managing-alarms/list-alarms.type';
+import { ListAlarmsUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/list-alarms.use-case';
+import { StartDispatchUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/start-dispatch.use-case';
 import { alarmIdParamSchema } from '@/modules/notification/adapter/in/web/alarm-id-param.schema';
 import {
   AlarmDetailResponse,

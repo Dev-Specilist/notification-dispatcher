@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import { AlarmStatusName } from '@/modules/notification/application/port/in/alarm-result.type';
-import { AlarmKindName } from '@/modules/notification/application/port/in/alarm-view.type';
+import { AlarmStatusName } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
+import { AlarmKindName } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-view.type';
 import {
   ListAlarmsQuery,
   ListFilter,
   ListStart,
-} from '@/modules/notification/application/port/in/list-alarms.type';
+} from '@/modules/notification/application/port/driving/for-managing-alarms/list-alarms.type';
 import { CursorDecoding } from '@/modules/notification/adapter/in/web/alarm-cursor.type';
 import { AlarmCursor } from '@/modules/notification/adapter/in/web/alarm-cursor.util';
 

@@ -1,5 +1,5 @@
-import { AlarmKindName } from '@/modules/notification/application/port/in/alarm-view.type';
-import { DeliveryStatusName } from '@/modules/notification/application/port/in/delivery-progress-view.type';
+import { AlarmKindName } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-view.type';
+import { DeliveryStatusName } from '@/modules/notification/application/port/driving/for-managing-alarms/delivery-progress-view.type';
 
 export interface AlarmResponseBase {
   readonly id: string;

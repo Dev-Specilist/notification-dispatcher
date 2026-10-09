@@ -1,4 +1,4 @@
-import { ListPosition } from '@/modules/notification/application/port/in/list-alarms.type';
+import { ListPosition } from '@/modules/notification/application/port/driving/for-managing-alarms/list-alarms.type';
 
 export interface CursorDecoded {
   readonly kind: 'decoded';

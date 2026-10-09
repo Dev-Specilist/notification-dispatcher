@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ListPosition } from '@/modules/notification/application/port/in/list-alarms.type';
+import { ListPosition } from '@/modules/notification/application/port/driving/for-managing-alarms/list-alarms.type';
 import { CursorDecoding } from '@/modules/notification/adapter/in/web/alarm-cursor.type';
 
 export class AlarmCursor {

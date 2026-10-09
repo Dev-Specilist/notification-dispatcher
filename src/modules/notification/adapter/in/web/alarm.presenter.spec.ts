@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   AlarmView,
   AlarmViewState,
-} from '@/modules/notification/application/port/in/alarm-view.type';
+} from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-view.type';
 import {
   AlarmNotFoundError,
   AlarmStateConflictError,
-} from '@/modules/notification/application/port/in/alarm-result.type';
-import { AlarmCreationError } from '@/modules/notification/application/port/in/create-alarm.type';
-import { DeliveryProgressView } from '@/modules/notification/application/port/in/delivery-progress-view.type';
-import { ListAlarmsError } from '@/modules/notification/application/port/in/list-alarms.type';
+} from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
+import { AlarmCreationError } from '@/modules/notification/application/port/driving/for-managing-alarms/create-alarm.type';
+import { DeliveryProgressView } from '@/modules/notification/application/port/driving/for-managing-alarms/delivery-progress-view.type';
+import { ListAlarmsError } from '@/modules/notification/application/port/driving/for-managing-alarms/list-alarms.type';
 import {
   AlarmDetailResponse,
   AlarmListResponse,

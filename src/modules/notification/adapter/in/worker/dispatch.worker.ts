@@ -2,17 +2,17 @@ import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@ne
 import {
   AlarmCompletionFailure,
   SettledAlarmsPageChecked,
-} from '@/modules/notification/application/port/in/complete-settled-alarms.type';
-import { CompleteSettledAlarmsUseCase } from '@/modules/notification/application/port/in/complete-settled-alarms.use-case';
-import { ListStart } from '@/modules/notification/application/port/in/list-alarms.type';
-import { ExpandNextPageUseCase } from '@/modules/notification/application/port/in/expand-next-page.use-case';
-import { ExpansionPageAttempt } from '@/modules/notification/application/port/in/expand-next-page.type';
-import { ReconcileNextDeliveryUseCase } from '@/modules/notification/application/port/in/reconcile-next-delivery.use-case';
-import { ReconcileAttempt } from '@/modules/notification/application/port/in/reconcile-next-delivery.type';
-import { RecoverExpiredLeaseUseCase } from '@/modules/notification/application/port/in/recover-expired-lease.use-case';
-import { RecoveryAttempt } from '@/modules/notification/application/port/in/recover-expired-lease.type';
-import { SendNextDeliveryUseCase } from '@/modules/notification/application/port/in/send-next-delivery.use-case';
-import { SendAttempt } from '@/modules/notification/application/port/in/send-next-delivery.type';
+} from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-settled-alarms.type';
+import { CompleteSettledAlarmsUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-settled-alarms.use-case';
+import { ListStart } from '@/modules/notification/application/port/driving/for-managing-alarms/list-alarms.type';
+import { ExpandNextPageUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/expand-next-page.use-case';
+import { ExpansionPageAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/expand-next-page.type';
+import { ReconcileNextDeliveryUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/reconcile-next-delivery.use-case';
+import { ReconcileAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/reconcile-next-delivery.type';
+import { RecoverExpiredLeaseUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/recover-expired-lease.use-case';
+import { RecoveryAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/recover-expired-lease.type';
+import { SendNextDeliveryUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/send-next-delivery.use-case';
+import { SendAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/send-next-delivery.type';
 import { PollingLoopRunner } from '@/modules/notification/adapter/in/worker/polling-loop.runner';
 import {
   PollingDelays,
