@@ -1,4 +1,3 @@
-import { setTimeout } from 'node:timers/promises';
 import {
   BeforeApplicationShutdown,
   DynamicModule,
@@ -61,6 +60,7 @@ const SHUTDOWN_DRAIN_MS: number = 30;
 const SHUTDOWN_TIMEOUT_MS: number = 100;
 const POLL_INTERVAL_MS: number = 5;
 const COMPLETION_CHECK_INTERVAL_MS: number = 20;
+const TIMER_STEP_MS: number = 1;
 
 const FIRST_PAGE_END: CompletionScanPosition = {
   createdAt: new Date('2026-10-09T09:00:00.000Z'),
@@ -72,6 +72,27 @@ class ExitCalled extends Error {}
 const UNCONNECTED_DATABASE_URL: string = 'postgres://app:secret@localhost:5432/notification';
 
 const NOT_YET_OPENED: () => void = (): void => {};
+
+const delay = (delayMs: number): Promise<void> =>
+  new Promise<void>((resolve: () => void): void => {
+    setTimeout(resolve, delayMs);
+  });
+
+const advanceUntilSettled = async (pending: Promise<void>): Promise<void> => {
+  let settled: boolean = false;
+  const watched: Promise<void> = pending.finally((): void => {
+    settled = true;
+  });
+  const advanceStepsUntilSettled = async (): Promise<void> => {
+    if (settled) {
+      return;
+    }
+    await vi.advanceTimersByTimeAsync(TIMER_STEP_MS);
+    await advanceStepsUntilSettled();
+  };
+  await advanceStepsUntilSettled();
+  await watched;
+};
 
 const createGate = (): Gate => {
   let release: () => void = NOT_YET_OPENED;
@@ -113,7 +134,7 @@ class ShutdownPhaseProbe implements BeforeApplicationShutdown, OnApplicationShut
 
   async beforeApplicationShutdown(): Promise<void> {
     this.observe('drain-start');
-    await setTimeout(POLL_INTERVAL_MS * 4);
+    await delay(POLL_INTERVAL_MS * 4);
     this.observe('drain-end');
   }
 
@@ -230,6 +251,9 @@ describe('DispatchWorker', () => {
     }).compile();
 
   beforeEach(async (): Promise<void> => {
+    vi.useFakeTimers({
+      toFake: ['setTimeout', 'clearTimeout', 'setImmediate', 'clearImmediate'],
+    });
     vi.stubEnv('DATABASE_URL', UNCONNECTED_DATABASE_URL);
     vi.stubEnv('SHUTDOWN_DRAIN_MS', String(SHUTDOWN_DRAIN_MS));
     vi.stubEnv('SHUTDOWN_TIMEOUT_MS', String(SHUTDOWN_TIMEOUT_MS));
@@ -247,38 +271,36 @@ describe('DispatchWorker', () => {
   });
 
   afterEach(async (): Promise<void> => {
-    vi.useRealTimers();
     sender.release.open();
-    await moduleRef.close();
+    await advanceUntilSettled(moduleRef.close());
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
 
   it('WRK-01 워커 모듈 / 애플리케이션 부트스트랩이 끝난다 → 확장 · 발송 · reconcile · lease 복구 · 완료 확인 루프가 시작된다', async (): Promise<void> => {
     await moduleRef.init();
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
 
-    await vi.waitFor((): void => {
-      expect(expansion.executions).toBeGreaterThanOrEqual(2);
-      expect(reconcile.executions).toBeGreaterThanOrEqual(2);
-      expect(recovery.executions).toBeGreaterThanOrEqual(2);
-      expect(completionCheck.executions).toBeGreaterThanOrEqual(1);
-      expect(sender.inFlight).toBe(DISPATCH_CONCURRENCY);
-    });
+    expect(expansion.executions).toBeGreaterThanOrEqual(2);
+    expect(reconcile.executions).toBeGreaterThanOrEqual(2);
+    expect(recovery.executions).toBeGreaterThanOrEqual(2);
+    expect(completionCheck.executions).toBeGreaterThanOrEqual(1);
+    expect(sender.inFlight).toBe(DISPATCH_CONCURRENCY);
   });
 
   it('WRK-02 실행 중인 워커 / 종료 신호를 받는다 → 새 claim을 즉시 멈추고 readiness를 내린다 (워커 모듈이 종료 모듈보다 먼저 import돼도 drain 대기 전에 멈춘다)', async (): Promise<void> => {
     const readiness: ReadinessPort = moduleRef.get(ReadinessPort);
     await moduleRef.init();
-    await vi.waitFor((): void => {
-      expect(sender.inFlight).toBe(DISPATCH_CONCURRENCY);
-    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sender.inFlight).toBe(DISPATCH_CONCURRENCY);
 
     moduleRef.get(ShutdownService).handleSignal('SIGTERM');
     const acceptingTrafficAfterSignal: boolean = readiness.isAcceptingTraffic();
     const closing: Promise<void> = moduleRef.close();
-    await setTimeout(POLL_INTERVAL_MS * 4);
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 4);
     sender.release.open();
-    await closing;
+    await advanceUntilSettled(closing);
 
     expect(acceptingTrafficAfterSignal).toBe(false);
     expect(shutdownSignal.isRequested()).toBe(true);
@@ -310,11 +332,9 @@ describe('DispatchWorker', () => {
       });
     vi.spyOn(Logger.prototype, 'error').mockImplementation((): void => {});
     await moduleRef.init();
-    await vi.waitFor((): void => {
-      expect(sender.inFlight).toBe(DISPATCH_CONCURRENCY);
-    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sender.inFlight).toBe(DISPATCH_CONCURRENCY);
 
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     moduleRef.get(ShutdownService).handleSignal('SIGTERM');
     const closing: Promise<void> = moduleRef.close();
 
@@ -323,13 +343,12 @@ describe('DispatchWorker', () => {
     );
     expect(exit).toHaveBeenCalledWith(1);
     expect(sender.completed).toBe(0);
-    vi.useRealTimers();
     sender.release.open();
-    await closing;
+    await advanceUntilSettled(closing);
   });
 
   it('부트스트랩 전에는 어떤 루프도 실행하지 않는다', async (): Promise<void> => {
-    await setTimeout(POLL_INTERVAL_MS * 4);
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 4);
 
     expect(executionCounts()).toEqual({
       expansions: 0,
@@ -342,15 +361,14 @@ describe('DispatchWorker', () => {
 
   it('WRK-03 진행 중인 요청이 있는 워커 / 종료 절차가 진행된다 → 진행 중 요청의 결과를 제한 시간 안에 저장한 뒤 DB 연결을 닫는다', async (): Promise<void> => {
     await moduleRef.init();
-    await vi.waitFor((): void => {
-      expect(sender.inFlight).toBe(DISPATCH_CONCURRENCY);
-    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sender.inFlight).toBe(DISPATCH_CONCURRENCY);
 
     const closing: Promise<void> = moduleRef.close();
     sender.release.open();
-    await closing;
+    await advanceUntilSettled(closing);
     const countsAtClose: ExecutionCounts = executionCounts();
-    await setTimeout(POLL_INTERVAL_MS * 4);
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 4);
 
     expect(
       probe.observations.find(({ phase }: PhaseObservation): boolean => phase === 'database-close'),
@@ -366,34 +384,35 @@ describe('DispatchWorker', () => {
   it('발송 허가를 얻지 못하면 쉬는 간격을 두고 다시 시도한다', async (): Promise<void> => {
     const noPermitSender: NoPermitSender = new NoPermitSender();
     const noPermitModule: TestingModule = await compile(noPermitSender);
-    const observedMs: number = POLL_INTERVAL_MS * 10;
 
     await noPermitModule.init();
-    await setTimeout(observedMs);
-    await noPermitModule.close();
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS - 1);
+    const attemptsBeforePollInterval: number = noPermitSender.executions;
+    await vi.advanceTimersByTimeAsync(1);
+    const attemptsAfterPollInterval: number = noPermitSender.executions;
+    await advanceUntilSettled(noPermitModule.close());
 
-    expect(noPermitSender.executions).toBeGreaterThanOrEqual(DISPATCH_CONCURRENCY);
-    expect(noPermitSender.executions).toBeLessThanOrEqual(
-      DISPATCH_CONCURRENCY * (observedMs / POLL_INTERVAL_MS + 1),
-    );
+    expect(attemptsBeforePollInterval).toBe(DISPATCH_CONCURRENCY);
+    expect(attemptsAfterPollInterval).toBe(DISPATCH_CONCURRENCY * 2);
   });
 
   it('완료 확인은 다음 페이지가 있으면 바로 이어서 확인하고, 마지막 페이지 뒤에는 간격을 두고 처음부터 다시 확인한다', async (): Promise<void> => {
-    const observedMs: number = COMPLETION_CHECK_INTERVAL_MS * 5;
-
     await moduleRef.init();
-    await setTimeout(observedMs);
-    sender.release.open();
-    await moduleRef.close();
+    await vi.advanceTimersByTimeAsync(COMPLETION_CHECK_INTERVAL_MS - 1);
+    const completionStartsBeforeInterval: ReadonlyArray<CompletionScanStart> = [
+      ...completionCheck.starts,
+    ];
+    await vi.advanceTimersByTimeAsync(1);
 
-    expect(completionCheck.starts.slice(0, 3)).toEqual([
+    expect(completionStartsBeforeInterval).toEqual([
+      { kind: 'newest' },
+      { kind: 'after', position: FIRST_PAGE_END },
+    ]);
+    expect(completionCheck.starts).toEqual([
       { kind: 'newest' },
       { kind: 'after', position: FIRST_PAGE_END },
       { kind: 'newest' },
     ]);
-    expect(completionCheck.executions).toBeLessThanOrEqual(
-      2 * (observedMs / COMPLETION_CHECK_INTERVAL_MS + 1),
-    );
   });
 
   it('완료 판정에 실패한 알림이 있으면 경고 로그로 남기고 확인을 이어간다', async (): Promise<void> => {
@@ -406,12 +425,12 @@ describe('DispatchWorker', () => {
     const failingModule: TestingModule = await compile(sender);
 
     await failingModule.init();
-    await vi.waitFor((): void => {
-      expect(completionCheck.executions).toBeGreaterThanOrEqual(2);
-    });
+    await vi.advanceTimersByTimeAsync(COMPLETION_CHECK_INTERVAL_MS - 1);
+    const completionChecksAfterFailure: number = completionCheck.executions;
     sender.release.open();
-    await failingModule.close();
+    await advanceUntilSettled(failingModule.close());
 
+    expect(completionChecksAfterFailure).toBeGreaterThanOrEqual(2);
     expect(warnLog).toHaveBeenCalledWith(
       'completion check failed for alarm 0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10: database connection reset',
     );

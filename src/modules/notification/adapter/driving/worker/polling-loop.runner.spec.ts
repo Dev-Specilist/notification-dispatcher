@@ -34,7 +34,9 @@ describe('PollingLoopRunner', () => {
   let errorLog: ErrorLogSpy;
 
   beforeEach((): void => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    vi.useFakeTimers({
+      toFake: ['setTimeout', 'clearTimeout', 'setImmediate', 'clearImmediate'],
+    });
     errorLog = vi.spyOn(Logger.prototype, 'error').mockImplementation((): void => {});
   });
 
@@ -52,11 +54,11 @@ describe('PollingLoopRunner', () => {
     );
 
     loop.start();
-    await vi.waitFor((): void => {
-      expect(work.passes).toBe(4);
-    });
+    await vi.advanceTimersByTimeAsync(IDLE_DELAY_MS - 1);
+    const passesBeforeIdleDelay: number = work.passes;
     await loop.stop();
 
+    expect(passesBeforeIdleDelay).toBe(4);
     expect(work.passes).toBe(4);
   });
 
@@ -147,6 +149,7 @@ describe('PollingLoopRunner', () => {
     await vi.advanceTimersByTimeAsync(0);
     const stoppedBeforePassFinished: boolean = stopped;
     passFinish.open();
+    await vi.advanceTimersToNextTimerAsync();
     await stopping;
 
     expect(stoppedBeforePassFinished).toBe(false);
@@ -178,6 +181,7 @@ describe('PollingLoopRunner', () => {
     await vi.advanceTimersByTimeAsync(0);
     const stoppedBeforePassFinished: boolean = stopped;
     passFinish.open();
+    await vi.advanceTimersToNextTimerAsync();
     await stopping;
 
     expect(stoppedBeforePassFinished).toBe(false);
