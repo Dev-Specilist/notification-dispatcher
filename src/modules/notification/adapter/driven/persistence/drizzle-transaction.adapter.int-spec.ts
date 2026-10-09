@@ -14,6 +14,7 @@ import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import {
   DeliveryId,
+  DeliveryPriority,
   DeliveryStatusCounts,
   JitterRatio,
   LeaseToken,
@@ -23,6 +24,7 @@ import { RetryPolicy } from '@/modules/notification/domain/delivery/retry-policy
 import { RetryPolicyCreation } from '@/modules/notification/domain/delivery/retry-policy.type';
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
+import { DeliveryCandidate } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.type';
 import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
 import { ExpansionJobLookup } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
@@ -184,9 +186,11 @@ class AlwaysGrantedPermit implements SendPermitPort {
 class RecordingMessageSender implements MessageSenderPort {
   readonly clientRefs: Array<string> = [];
 
+  constructor(private readonly workerName: string) {}
+
   send(message: OutgoingMessage): Promise<SendOutcome> {
     this.clientRefs.push(message.clientRef);
-    const rawMessageId: string = `m_${this.clientRefs.length}`;
+    const rawMessageId: string = `m_${this.workerName}_${this.clientRefs.length}`;
     if (!DeliveryPredicates.isMessageId(rawMessageId)) {
       throw new Error(`generated ${rawMessageId} is not a valid MessageId`);
     }
@@ -251,6 +255,9 @@ class BothWorkersFetchFirstDirectory implements RecipientDirectoryPort {
     return { recipientIds: [], next: { kind: 'end' } };
   }
 }
+
+const claimedRecipientOf = (candidate: Readonly<DeliveryCandidate>): string =>
+  candidate.kind === 'found' ? candidate.delivery.snapshot().recipientId : 'none';
 
 const drainAll = async (useCase: SendNextDeliveryService): Promise<void> => {
   let attempt: SendAttempt = await useCase.execute();
@@ -322,6 +329,37 @@ describe('DrizzleTransactionAdapter', () => {
     new DrizzleDeliveryRepositoryAdapter(
       NotificationDatabaseFactory.create(testDatabase.pool),
     ).countByStatus(alarmId);
+
+  const dispatchedBulkAlarm = async (): Promise<AlarmId> => {
+    const alarm: Alarm = bulkDraft();
+    const dispatchedTransition: AlarmTransition = alarm.startDispatch(new Date(NOW_ISO));
+    if (dispatchedTransition.kind !== 'transitioned') {
+      throw new Error('test fixture alarm cannot be dispatched');
+    }
+    await save(dispatchedTransition.alarm);
+    const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
+    return alarmId;
+  };
+
+  const insertPendingDeliveries = (
+    alarmId: AlarmId,
+    priorities: ReadonlyArray<DeliveryPriority>,
+  ): Promise<void> =>
+    transaction.run(({ deliveryRepository }: TransactionRepositories): Promise<void> =>
+      deliveryRepository.insertMissing(
+        recipientIds(priorities.length).map((recipientId: RecipientId, index: number): Delivery =>
+          Delivery.create(
+            {
+              id: new RandomDeliveryIdGenerator().deliveryId(),
+              alarmId,
+              recipientId,
+              priority: priorities[index],
+            },
+            new Date(NOW_ISO),
+          ),
+        ),
+      ),
+    );
 
   const dispatchedUrgentAlarm = async (): Promise<AlarmId> => {
     const alarm: Alarm = urgentDraft();
@@ -477,30 +515,15 @@ describe('DrizzleTransactionAdapter', () => {
   });
 
   it('DB-06 대기 Delivery 100건 / 워커 3개가 동시에 claim한다 (FOR UPDATE SKIP LOCKED) → 같은 Delivery를 두 워커가 가져가지 않는다', async (): Promise<void> => {
-    const alarm: Alarm = bulkDraft();
-    const dispatchedTransition: AlarmTransition = alarm.startDispatch(new Date(NOW_ISO));
-    if (dispatchedTransition.kind !== 'transitioned') {
-      throw new Error('test fixture alarm cannot be dispatched');
-    }
-    await save(dispatchedTransition.alarm);
-    const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
-    await transaction.run(({ deliveryRepository }: TransactionRepositories): Promise<void> =>
-      deliveryRepository.insertMissing(
-        recipientIds(100).map((recipientId: RecipientId): Delivery =>
-          Delivery.create(
-            {
-              id: new RandomDeliveryIdGenerator().deliveryId(),
-              alarmId,
-              recipientId,
-              priority: 'BULK',
-            },
-            new Date(NOW_ISO),
-          ),
-        ),
-      ),
+    const alarmId: AlarmId = await dispatchedBulkAlarm();
+    await insertPendingDeliveries(
+      alarmId,
+      Array.from({ length: 100 }, (): DeliveryPriority => 'BULK'),
     );
-    const sender: RecordingMessageSender = new RecordingMessageSender();
-    const worker = (): SendNextDeliveryService =>
+    const workerSenders: ReadonlyArray<RecordingMessageSender> = ['first', 'second', 'third'].map(
+      (workerName: string): RecordingMessageSender => new RecordingMessageSender(workerName),
+    );
+    const worker = (sender: RecordingMessageSender): SendNextDeliveryService =>
       new SendNextDeliveryService(
         transaction,
         new AlwaysGrantedPermit(),
@@ -511,15 +534,60 @@ describe('DrizzleTransactionAdapter', () => {
         new ZeroJitter(),
         new WorkerShutdownSignalAdapter(),
       );
-    await Promise.all([drainAll(worker()), drainAll(worker()), drainAll(worker())]);
+    await Promise.all(
+      workerSenders.map((sender: RecordingMessageSender): Promise<void> =>
+        drainAll(worker(sender)),
+      ),
+    );
+    const sentClientRefs: ReadonlyArray<string> = workerSenders.flatMap(
+      (sender: RecordingMessageSender): ReadonlyArray<string> => sender.clientRefs,
+    );
 
-    expect(sender.clientRefs).toHaveLength(100);
-    expect(new Set<string>(sender.clientRefs).size).toBe(100);
+    expect(
+      workerSenders.map((sender: RecordingMessageSender): boolean => sender.clientRefs.length > 0),
+    ).toEqual([true, true, true]);
+    expect(sentClientRefs).toHaveLength(100);
+    expect(new Set<string>(sentClientRefs).size).toBe(100);
     expect(
       (await deliveriesOf(alarmId)).every(
         (delivery: Delivery): boolean => delivery.snapshot().state.status === 'SENT',
       ),
     ).toBe(true);
+  });
+
+  it('DB-06 한 트랜잭션이 가장 앞선 대기 Delivery를 claim해 잠근 채 열려 있다 / 다른 트랜잭션이 claim한다 (FOR UPDATE SKIP LOCKED) → 잠금이 풀리기를 기다리지 않고 잠기지 않은 다음 Delivery를 받는다', async (): Promise<void> => {
+    const alarmId: AlarmId = await dispatchedBulkAlarm();
+    await insertPendingDeliveries(alarmId, ['URGENT', 'BULK']);
+    const locked: Gate = createGate();
+    const release: Gate = createGate();
+    const holder: Promise<DeliveryCandidate> = transaction.run(
+      async ({ deliveryRepository }: TransactionRepositories): Promise<DeliveryCandidate> => {
+        const heldCandidate: DeliveryCandidate = await deliveryRepository.findNextClaimable(
+          new Date(NOW_ISO),
+        );
+        locked.open();
+        await release.opened;
+        return heldCandidate;
+      },
+    );
+    await locked.opened;
+
+    const contender: Promise<DeliveryCandidate> = transaction.run(
+      ({ deliveryRepository }: TransactionRepositories): Promise<DeliveryCandidate> =>
+        deliveryRepository.findNextClaimable(new Date(NOW_ISO)),
+    );
+    try {
+      await vi.waitFor((): Promise<DeliveryCandidate> => contender, {
+        timeout: 2_000,
+        interval: 10,
+      });
+    } finally {
+      release.open();
+      await Promise.allSettled([holder, contender]);
+    }
+
+    expect(claimedRecipientOf(await holder)).toBe('u_000001');
+    expect(claimedRecipientOf(await contender)).toBe('u_000002');
   });
 
   it('UC-07 lease가 만료돼 두 워커가 같은 확장 페이지를 받아 동시에 저장하면 한 워커만 진행하고 다른 워커는 superseded가 된다', async (): Promise<void> => {
