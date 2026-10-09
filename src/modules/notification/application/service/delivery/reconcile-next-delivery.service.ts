@@ -117,7 +117,7 @@ export class ReconcileNextDeliveryService implements ReconcileNextDeliveryUseCas
       case 'found':
         return delivery.reconcileFound(lookup.messages);
       case 'none':
-        return alarm.kind === 'found' && alarm.alarm.acceptsDeliveries()
+        return alarm.kind === 'found' && !alarm.alarm.isCancelled()
           ? delivery.reconcileNotFound(now, this.settings.retryPolicy, this.jitterSource.next())
           : delivery.reconcileNotFoundAsCancelled(now);
       case 'lookup-failed':

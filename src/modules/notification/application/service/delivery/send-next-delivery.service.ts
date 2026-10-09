@@ -104,7 +104,7 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
         const { id, alarmId }: DeliverySnapshot = delivery.snapshot();
         const alarm: AlarmLookup = await alarmRepository.findById(alarmId);
         const claimedAt: Date = this.clock.now();
-        if (alarm.kind === 'missing' || !alarm.alarm.acceptsDeliveries()) {
+        if (alarm.kind === 'missing' || alarm.alarm.isCancelled()) {
           await deliveryRepository.saveAll([
             AcceptedTransition.delivery(delivery.cancel(claimedAt)),
           ]);
@@ -166,7 +166,7 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
       }: SendNextDeliveryRepositories): Promise<SendAttempt> => {
         const alarm: AlarmLookup = await alarmRepository.findByIdForShare(alarmId);
         const recorded: Delivery =
-          alarm.kind === 'found' && alarm.alarm.acceptsDeliveries()
+          alarm.kind === 'found' && !alarm.alarm.isCancelled()
             ? settled
             : settled.cancelIfWaiting(now);
         const saved: LeasedSave = await deliveryRepository.saveLeased(recorded, token);

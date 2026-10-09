@@ -407,20 +407,17 @@ describe('Alarm', () => {
     ['DRAFT', bulkDraft],
     ['DISPATCHING', dispatching],
     ['COMPLETED', completed],
-  ])(
-    'UC-08 취소되지 않은 %s 알림은 Delivery를 계속 받는다',
-    (_status: string, build: () => Alarm) => {
-      expect(build().acceptsDeliveries()).toBe(true);
-    },
-  );
+  ])('UC-08 %s 알림은 취소된 알림으로 판별되지 않는다', (_status: string, build: () => Alarm) => {
+    expect(build().isCancelled()).toBe(false);
+  });
 
   it.each<StatusBuildCase>([
     ['DRAFT', cancelledFromDraft],
     ['DISPATCHING', (): Alarm => transitioned(dispatching().cancel(new Date(LATER_ISO)))],
   ])(
-    'UC-08 %s에서 취소된 알림은 더 이상 Delivery를 받지 않는다',
+    'UC-08 %s에서 취소된 알림은 취소된 알림으로 판별된다',
     (_status: string, build: () => Alarm) => {
-      expect(build().acceptsDeliveries()).toBe(false);
+      expect(build().isCancelled()).toBe(true);
     },
   );
 

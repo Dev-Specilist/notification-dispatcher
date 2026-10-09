@@ -99,7 +99,7 @@ export class ExpandNextPageService implements ExpandNextPageUseCase {
             break;
         }
         const alarm: AlarmLookup = await alarmRepository.findById(alarmId);
-        if (alarm.kind === 'missing' || !alarm.alarm.acceptsDeliveries()) {
+        if (alarm.kind === 'missing' || alarm.alarm.isCancelled()) {
           return { kind: 'settled', step: await this.stop(expansionJobRepository, job) };
         }
         return nextPage;
@@ -126,7 +126,7 @@ export class ExpandNextPageService implements ExpandNextPageUseCase {
         }
         const { job }: ExpansionJobFound = locked;
         const lockedAlarm: AlarmLookup = await alarmRepository.findByIdForUpdate(alarmId);
-        if (lockedAlarm.kind === 'missing' || !lockedAlarm.alarm.acceptsDeliveries()) {
+        if (lockedAlarm.kind === 'missing' || lockedAlarm.alarm.isCancelled()) {
           return this.stop(expansionJobRepository, job);
         }
         await deliveryRepository.insertMissing(

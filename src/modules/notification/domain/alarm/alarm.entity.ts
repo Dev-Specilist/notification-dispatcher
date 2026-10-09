@@ -109,8 +109,8 @@ export class Alarm {
     });
   }
 
-  acceptsDeliveries(): boolean {
-    return this.props.state.status !== 'CANCELLED';
+  isCancelled(): boolean {
+    return this.props.state.status === 'CANCELLED';
   }
 
   requiresExpansion(): boolean {
