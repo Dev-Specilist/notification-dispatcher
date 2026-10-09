@@ -320,6 +320,13 @@ export class Delivery {
     return Delivery.isSettled(this.props.state);
   }
 
+  hasLeaseTimeFor(now: Readonly<Date>, requestMs: DurationMs): boolean {
+    const { state }: DeliverySnapshot = this.props;
+    return (
+      state.status === 'IN_FLIGHT' && state.lease.expiresAt.getTime() - now.getTime() >= requestMs
+    );
+  }
+
   hasExpiredLeaseAt(now: Readonly<Date>): boolean {
     const { state }: DeliverySnapshot = this.props;
     return state.status === 'IN_FLIGHT' && state.lease.expiresAt.getTime() <= now.getTime();

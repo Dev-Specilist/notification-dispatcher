@@ -29,5 +29,16 @@ export interface ResultDiscarded {
   readonly deliveryId: string;
 }
 
+export interface LeaseTooShortToSend {
+  readonly kind: 'lease-too-short';
+  readonly deliveryId: string;
+}
+
 export type SendAttempt =
-  NoPermit | NothingToSend | DeliverySkipped | LeaseReleased | OutcomeRecorded | ResultDiscarded;
+  | NoPermit
+  | NothingToSend
+  | DeliverySkipped
+  | LeaseReleased
+  | LeaseTooShortToSend
+  | OutcomeRecorded
+  | ResultDiscarded;

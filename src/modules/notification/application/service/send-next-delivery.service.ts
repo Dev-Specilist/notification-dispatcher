@@ -56,6 +56,9 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
       return step;
     }
     const { alarmId, recipientId, id }: DeliverySnapshot = step.delivery.snapshot();
+    if (!step.delivery.hasLeaseTimeFor(this.clock.now(), this.settings.maxRequestMs)) {
+      return { kind: 'lease-too-short', deliveryId: id };
+    }
     const outcome: SendOutcome = await this.messageSender.send({
       alarmId,
       recipientId,

@@ -277,6 +277,15 @@ describe('Delivery', () => {
     });
   });
 
+  it('DLV-16 요청 시작을 기록한 뒤 실제로 보내기 직전에도 남은 lease가 HTTP 최대 실행 시간 이상인지 판정한다', (): void => {
+    const lastSendableAt: Date = new Date(at(CLAIMED_ISO).getTime() + LEASE_MS - MAX_REQUEST_MS);
+    const tooLateAt: Date = new Date(lastSendableAt.getTime() + 1);
+
+    expect(started().hasLeaseTimeFor(lastSendableAt, MAX_REQUEST_MS)).toBe(true);
+    expect(started().hasLeaseTimeFor(tooLateAt, MAX_REQUEST_MS)).toBe(false);
+    expect(pending().hasLeaseTimeFor(at(CLAIMED_ISO), MAX_REQUEST_MS)).toBe(false);
+  });
+
   it.each<InvalidDurationCase>([
     ['0', 0],
     ['음수', -1],

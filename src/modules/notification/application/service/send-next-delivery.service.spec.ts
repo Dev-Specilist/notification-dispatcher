@@ -369,6 +369,25 @@ class SecondRunObservingTransaction extends InMemoryTransactionAdapter {
   }
 }
 
+class SlowClaimCommitTransaction extends InMemoryTransactionAdapter {
+  readonly committing: Gate = createGate();
+
+  readonly commitFinished: Gate = createGate();
+
+  private runs: number = 0;
+
+  override async run<TResult>(work: TransactionWork<TResult>): Promise<TResult> {
+    this.runs += 1;
+    const isClaim: boolean = this.runs === 1;
+    const result: TResult = await super.run(work);
+    if (isClaim) {
+      this.committing.open();
+      await this.commitFinished.opened;
+    }
+    return result;
+  }
+}
+
 class SlowAlarmRepository extends InMemoryAlarmRepositoryAdapter {
   readonly lookingUp: Gate = createGate();
 
@@ -655,6 +674,38 @@ describe('SendNextDeliveryService', () => {
       kind: 'recorded',
       deliveryId: deliveryId(1),
       outcome: 'accepted',
+    });
+  });
+
+  it('UC-09 claim 커밋이 늦어져 보내기 직전 남은 lease가 최대 요청 시간보다 짧으면 요청을 보내지 않고 lease 만료 후 복구에 맡긴다', async (): Promise<void> => {
+    const slowCommit: Array<SlowClaimCommitTransaction> = [];
+    const { deliveryRepository, sender, clock, service }: Fixture = await fixture(
+      [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
+      {
+        createTransaction: (repositories: InMemoryRepositories): InMemoryTransactionAdapter => {
+          const transaction: SlowClaimCommitTransaction = new SlowClaimCommitTransaction(
+            repositories,
+          );
+          slowCommit.push(transaction);
+          return transaction;
+        },
+      },
+    );
+    const [transaction]: ReadonlyArray<SlowClaimCommitTransaction> = slowCommit;
+
+    const attempt: Promise<SendAttempt> = service.execute();
+    await transaction.committing.opened;
+    clock.advanceBy(60_000 - 10_000 + 1);
+    transaction.commitFinished.open();
+
+    expect(await attempt).toEqual({ kind: 'lease-too-short', deliveryId: deliveryId(1) });
+    expect(sender.sent).toEqual([]);
+    const [stored]: ReadonlyArray<Delivery> = await deliveryRepository.findByAlarmId(
+      alarmId(BULK_ALARM_ID),
+    );
+    expect(stored.snapshot().state).toMatchObject({
+      status: 'IN_FLIGHT',
+      request: { kind: 'STARTED' },
     });
   });
 
