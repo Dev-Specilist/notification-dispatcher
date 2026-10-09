@@ -20,7 +20,11 @@ import { SendOutcome } from '@/modules/notification/application/port/driven/for-
 import { SendPermitPort } from '@/modules/notification/application/port/driven/for-permitting-sends/send-permit.port';
 import { SendPermit } from '@/modules/notification/application/port/driven/for-permitting-sends/send-permit.type';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
-import { SendAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/send-next-delivery.type';
+import {
+  LeaseTooShortToSend,
+  ResultDiscarded,
+  SendAttempt,
+} from '@/modules/notification/application/port/driving/for-dispatching-alarms/send-next-delivery.type';
 import { SendNextDeliveryUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/send-next-delivery.use-case';
 import { DeliveryRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.port';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
@@ -41,6 +45,8 @@ interface RequestReady {
 }
 
 type ClaimStep = SendAttempt | RequestReady;
+
+type UnsentReleaseLost = LeaseTooShortToSend | ResultDiscarded;
 
 export class SendNextDeliveryService implements SendNextDeliveryUseCase {
   constructor(
@@ -68,8 +74,11 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
       return step;
     }
     const { alarmId, recipientId, id }: DeliverySnapshot = step.delivery.snapshot();
+    if (this.shutdownSignal.isRequested()) {
+      return this.abandonUnsent(step.delivery, token, 'lease-lost');
+    }
     if (!step.delivery.hasLeaseTimeFor(this.clock.now(), this.settings.maxRequestMs)) {
-      return this.abandonUnsent(step.delivery, token);
+      return this.abandonUnsent(step.delivery, token, 'lease-too-short');
     }
     const outcome: SendOutcome = await this.messageSender.send({
       alarmId,
@@ -120,7 +129,11 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
     );
   }
 
-  private abandonUnsent(delivery: Delivery, token: LeaseToken): Promise<SendAttempt> {
+  private abandonUnsent(
+    delivery: Delivery,
+    token: LeaseToken,
+    leaseLostKind: UnsentReleaseLost['kind'],
+  ): Promise<SendAttempt> {
     const abandoned: Delivery = AcceptedTransition.delivery(delivery.abandonUnsentRequest(token));
     const { id: deliveryId }: DeliverySnapshot = delivery.snapshot();
     return this.transaction.run(
@@ -128,7 +141,7 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
         const saved: LeasedSave = await deliveryRepository.saveLeased(abandoned, token);
         return saved.kind === 'saved'
           ? { kind: 'released', deliveryId }
-          : { kind: 'lease-too-short', deliveryId };
+          : { kind: leaseLostKind, deliveryId };
       },
     );
   }

@@ -481,9 +481,13 @@ const statuses = async (
     },
   );
 
-const slowClaimCommitFixture = async (delivery: Delivery): Promise<SlowClaimCommitFixture> => {
+const slowClaimCommitFixture = async (
+  delivery: Delivery,
+  overrides: Partial<FixtureOptions> = {},
+): Promise<SlowClaimCommitFixture> => {
   const createdTransactions: Array<SlowClaimCommitTransaction> = [];
   const builtFixture: Fixture = await fixture([delivery], {
+    ...overrides,
     createTransaction: (repositories: InMemoryRepositories): InMemoryTransactionAdapter => {
       const slowTransaction: SlowClaimCommitTransaction = new SlowClaimCommitTransaction(
         repositories,
@@ -600,6 +604,57 @@ describe('SendNextDeliveryService', () => {
     expect(await service.execute()).toEqual({ kind: 'stopped' });
     expect(sender.sent).toEqual([]);
     expect(await statuses(deliveryRepository, BULK_ALARM_ID)).toEqual([['u_000001', 'PENDING']]);
+  });
+
+  it('UC-24 새 Delivery를 claim하는 사이 워커 종료가 요청됐다 / 발송 유스케이스 → 요청을 보내지 않고 leaseToken이 그대로일 때만 lease를 반납해 시도 횟수를 쓰지 않은 채 PENDING으로 되돌린다', async (): Promise<void> => {
+    const shutdownSignal: WorkerShutdownSignalAdapter = new WorkerShutdownSignalAdapter();
+    const { deliveryRepository, sender, service, slowTransaction }: SlowClaimCommitFixture =
+      await slowClaimCommitFixture(pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO), {
+        shutdownSignal,
+      });
+
+    const attempt: Promise<SendAttempt> = service.execute();
+    await slowTransaction.committing.opened;
+    shutdownSignal.request();
+    slowTransaction.commitFinished.open();
+
+    expect(await attempt).toEqual({ kind: 'released', deliveryId: deliveryId(1) });
+    expect(sender.sent).toEqual([]);
+    const [stored]: ReadonlyArray<Delivery> = await deliveryRepository.findByAlarmId(
+      alarmId(BULK_ALARM_ID),
+    );
+    expect(stored.snapshot()).toMatchObject({ attempts: 0, state: { status: 'PENDING' } });
+  });
+
+  it('UC-24 claim하는 사이 종료가 요청됐고 반납 전에 다른 워커가 같은 Delivery를 이어받았으면 반납을 저장하지 않는다', async (): Promise<void> => {
+    const shutdownSignal: WorkerShutdownSignalAdapter = new WorkerShutdownSignalAdapter();
+    const { deliveryRepository, sender, service, slowTransaction }: SlowClaimCommitFixture =
+      await slowClaimCommitFixture(pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO), {
+        shutdownSignal,
+      });
+
+    const attempt: Promise<SendAttempt> = service.execute();
+    await slowTransaction.committing.opened;
+    shutdownSignal.request();
+    const reclaimed: Delivery = transitionedDelivery(
+      pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO).claim(
+        leaseToken(PREVIOUS_TOKEN),
+        at(NOW_ISO),
+        durationMs(60_000),
+      ),
+    );
+    await deliveryRepository.saveAll([reclaimed]);
+    slowTransaction.commitFinished.open();
+
+    expect(await attempt).toEqual({ kind: 'lease-lost', deliveryId: deliveryId(1) });
+    expect(sender.sent).toEqual([]);
+    const [stored]: ReadonlyArray<Delivery> = await deliveryRepository.findByAlarmId(
+      alarmId(BULK_ALARM_ID),
+    );
+    expect(stored.snapshot()).toMatchObject({
+      attempts: 0,
+      state: { status: 'IN_FLIGHT', lease: { token: PREVIOUS_TOKEN } },
+    });
   });
 
   it('UC-09 취소된 알림의 대기 Delivery는 보내지 않고 CANCELLED로 정리한다', async (): Promise<void> => {
