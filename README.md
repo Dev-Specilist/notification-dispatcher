@@ -290,20 +290,44 @@ curl -X POST localhost:3000/alarms -H 'Content-Type: application/json' \
 `api` · `worker` · `migrate`는 같은 Dockerfile의 다른 target입니다. 코드는 `src/modules/notification/`이 Ports & Adapters 구조이고, `health` 모듈도 같은 배치를 따릅니다. `src/bootstrap/`이 composition root(루트 모듈 · 종료 조율 · OpenAPI), `src/shared/`가 공통 인프라(config · database · http · logging)입니다.
 
 ```text
-domain/{alarm,delivery}                    Alarm · Delivery Aggregate, RetryPolicy (Nest·DB·HTTP·zod 의존 없음)
-application/port/driving/
-  for-managing-alarms/                     CreateAlarm · GetAlarm · ListAlarms · StartDispatch · CancelAlarm
-  for-dispatching-alarms/                  ExpandNextPage · SendNextDelivery · ReconcileNextDelivery
-                                           · RecoverExpiredLease · CompleteSettledAlarms
-application/port/driven/                   for-storing-{alarms,deliveries,expansion-jobs} · for-running-transactions
-                                           · for-sending-messages · for-looking-up-messages · for-fetching-recipients
-                                           · for-permitting-sends · for-telling-time · for-generating-ids · for-drawing-jitter
-                                           · for-checking-shutdown
-application/service/{alarm,delivery,expansion,completion}   유스케이스 구현 · 설정 타입 · AlarmCompletionChecker
-adapter/driving/{web,worker}               controller · 요청 schema · presenter / 폴링 루프
-adapter/driven/persistence/{alarm,delivery,expansion-job,rate-limiter}   Drizzle 저장소 · 트랜잭션 · PG 제한기
-adapter/driven/{mock-api/{message,recipient},system,config}              mock API · 시계·id·jitter · env → 설정
-testing/{in-memory,contract}               fake 저장소 · 트랜잭션, 저장소 계약 테스트 (운영 빌드 제외)
+src/modules/notification/
+├─ domain/                              순수 TypeScript (Nest · DB · HTTP · zod 의존 없음)
+│  ├─ alarm/                            알림 Aggregate
+│  └─ delivery/                         발송 건 Aggregate, 재시도 정책
+├─ application/
+│  ├─ port/
+│  │  ├─ driving/                       바깥이 앱을 부르는 계약 (유스케이스마다 하나)
+│  │  │  ├─ for-managing-alarms/        생성 · 단건 · 목록 · 발송 시작 · 취소
+│  │  │  └─ for-dispatching-alarms/     수신자 확장 · 발송 · 결과 확인 · lease 복구 · 완료 확인
+│  │  └─ driven/                        앱이 바깥에 요구하는 계약
+│  │     ├─ for-storing-alarms/         알림 저장소
+│  │     ├─ for-storing-deliveries/     발송 건 저장소
+│  │     ├─ for-storing-expansion-jobs/ 수신자 확장 작업 저장소
+│  │     ├─ for-running-transactions/   트랜잭션 실행
+│  │     ├─ for-sending-messages/       외부 발송
+│  │     ├─ for-looking-up-messages/    외부 발송 내역 조회
+│  │     ├─ for-fetching-recipients/    사용자 목록 조회
+│  │     ├─ for-permitting-sends/       처리량 제한
+│  │     ├─ for-telling-time/           시계
+│  │     ├─ for-generating-ids/         id · lease 토큰 생성
+│  │     ├─ for-drawing-jitter/         재시도 jitter
+│  │     └─ for-checking-shutdown/      워커 종료 여부
+│  └─ service/                          port 구현 (일반 클래스, 모듈이 조립)
+│     ├─ alarm/                         관리 유스케이스, 응답용 view 변환
+│     ├─ delivery/                      발송 · 결과 확인 · lease 복구, 설정 타입
+│     ├─ expansion/                     수신자 확장
+│     └─ completion/                    완료 확인과 내부 협력자 AlarmCompletionChecker
+├─ adapter/
+│  ├─ driving/
+│  │  ├─ web/                           controller · 요청/응답 schema · presenter
+│  │  └─ worker/                        폴링 루프
+│  └─ driven/
+│     ├─ persistence/                   Drizzle 트랜잭션, 개념별 테이블 · 저장소 · PG 처리량 제한기
+│     ├─ mock-api/                      외부 발송 · 내역 조회 · 사용자 조회 HTTP 클라이언트
+│     ├─ process-state/                 워커 종료 신호 · 요청 중단
+│     ├─ system/                        시계 · id · jitter
+│     └─ config/                        env → 워커 설정
+└─ testing/                             in-memory fake, 저장소 계약 테스트 (운영 빌드 제외)
 ```
 
 - **의존은 adapter → application → domain으로만 향합니다.** domain과 application은 Nest · DB · HTTP · zod를 모르고, 서비스는 일반 클래스라 모듈이 `useFactory`로 조립합니다. 핵심 로직을 프레임워크 없이 테스트할 수 있습니다(대가: 모듈의 조립 코드가 길어짐). 이 방향은 리뷰에만 맡기지 않고 oxlint `no-restricted-imports`로 강제합니다(domain · application은 Nest · zod · Drizzle · pg · adapter를, driving adapter는 domain · 서비스 구현을 import하면 lint 오류).
