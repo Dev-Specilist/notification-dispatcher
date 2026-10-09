@@ -75,10 +75,10 @@ pnpm dev          # api + worker, SWC watch로 변경 시 재시작
 | `pnpm typecheck` · `pnpm lint` | 타입 검사 · oxlint(type-aware)                                                                                                   | 없음      |
 | `pnpm test`                    | unit: 도메인, 유스케이스(port는 in-memory fake), 워커 루프                                                                       | 없음      |
 | `pnpm test:int`                | integration: Drizzle 저장소 · 제한기 · mock API adapter · 마이그레이션, 이어서 characterization(mock 한도 방식 · 발송 기록 시점) | Docker    |
-| `pnpm test:e2e`                | HTTP 계약 · OpenAPI 문서, 실제 worker 프로세스 1~3대로 발송 전체 흐름 · 강제 종료 · 취소 · SIGTERM                               | Docker    |
+| `pnpm test:e2e`                | HTTP API 동작(상태 코드 · 응답 형식) · OpenAPI 문서, 실제 worker 프로세스 1~3대로 발송 전체 흐름 · 강제 종료 · 취소 · SIGTERM                               | Docker    |
 
 - integration · e2e는 Testcontainers로 실제 PostgreSQL과 mock 컨테이너를 띄웁니다. PostgreSQL은 실행마다 한 번 띄워 마이그레이션한 템플릿 DB를 만들고, 테스트 파일마다 복제한 database를 씁니다. mock은 테스트마다 시나리오에 맞는 설정(`USER_COUNT` · `ERROR_RATE` · `TIMEOUT_RATE` 등)으로 띄웁니다.
-- 저장소 계약 테스트(`testing/contract/`) 하나를 in-memory fake와 Drizzle adapter 양쪽에 돌려, unit 테스트의 fake가 실제 구현과 같은 계약을 지키게 합니다.
+- 저장소 계약 테스트(contract test, `testing/contract/`) 하나를 in-memory fake와 Drizzle adapter 양쪽에 돌려, unit 테스트의 fake가 실제 구현과 똑같이 동작하게 합니다.
 - e2e는 "정확히 1번 보냈다"를 DB가 아니라 mock의 발송 내역으로 발송 건마다 셉니다.
 
 #### 부하 테스트 (k6, 선택)
@@ -249,7 +249,7 @@ curl -X POST localhost:3000/alarms -H 'Content-Type: application/json' \
 - **목록은 offset 대신 `(createdAt, id)` cursor입니다.** 발송 중에도 알림이 생기고 상태가 바뀌어 offset이면 같은 항목이 두 번 나오거나 건너뜁니다. 대가로 임의 페이지로 이동할 수 없고, 페이지 사이의 스냅샷은 보장하지 않습니다(`status`로 거르는 중 이미 지나간 위치의 알림 상태가 바뀌면 다음 페이지에 나오지 않음).
 - **목록 키는 `alarms`입니다.** 과제의 데이터 모델 예시와 같은 모양입니다. 처음에는 범용 키 `items`를 썼다가 바꿨습니다.
 - **오류는 RFC 9457에 `code` · `errors[]`를 더했습니다.** 표준 형식이라 게이트웨이 · 클라이언트가 공통으로 다루고, `code`로 분기합니다. Nest 기본 `{ statusCode, message }`는 분기 기준과 필드별 오류가 없습니다.
-- **상태에 해당하는 시각 필드만 응답합니다.** 상태별로 반드시 있는 시각을 판별 union 타입이 보장해, 모든 시각을 nullable로 두는 것보다 계약이 분명합니다.
+- **상태에 해당하는 시각 필드만 응답합니다.** 상태별로 반드시 있는 시각을 판별 union 타입이 보장해, 모든 시각을 nullable로 두는 것보다 응답 형식이 분명합니다.
 - **OpenAPI는 요구 스펙대로 3.0입니다.** `@nestjs/swagger`가 만드는 3.0 문서를 그대로 제공하고 3.1 전용 표현은 쓰지 않습니다.
 
 ## 3. 설계 설명
@@ -296,10 +296,10 @@ src/modules/notification/
 │  └─ delivery/                         발송 건 Aggregate, 재시도 정책
 ├─ application/
 │  ├─ port/
-│  │  ├─ driving/                       바깥이 앱을 부르는 계약 (유스케이스마다 하나)
+│  │  ├─ driving/                       바깥이 앱의 기능을 호출하는 인터페이스 (유스케이스마다 하나)
 │  │  │  ├─ for-managing-alarms/        생성 · 단건 · 목록 · 발송 시작 · 취소
 │  │  │  └─ for-dispatching-alarms/     수신자 확장 · 발송 · 결과 확인 · lease 복구 · 완료 확인
-│  │  └─ driven/                        앱이 바깥에 요구하는 계약
+│  │  └─ driven/                        앱이 바깥에 요청하는 인터페이스
 │  │     ├─ for-storing-alarms/         알림 저장소
 │  │     ├─ for-storing-deliveries/     발송 건 저장소
 │  │     ├─ for-storing-expansion-jobs/ 수신자 확장 작업 저장소
@@ -331,12 +331,12 @@ src/modules/notification/
 ```
 
 - **의존은 adapter → application → domain으로만 향합니다.** domain과 application은 Nest · DB · HTTP · zod를 모르고, 서비스는 일반 클래스라 모듈이 `useFactory`로 조립합니다. 핵심 로직을 프레임워크 없이 테스트할 수 있습니다(대가: 모듈의 조립 코드가 길어짐). 이 방향은 리뷰에만 맡기지 않고 oxlint `no-restricted-imports`로 강제합니다(domain · application은 Nest · zod · Drizzle · pg · adapter를, driving adapter는 domain · 서비스 구현을 import하면 lint 오류).
-- **port는 `driving` · `driven`으로 나누고 `for-<목적>` 폴더로 묶습니다.** Cockburn은 port를 "목적이 있는 대화"로 보고 `For_doing_something`으로 이름 짓습니다. 이 용어와 Garrido de Paz가 정리한 참조 배치를 따르면 폴더 이름만으로 앱이 바깥과 나누는 대화가 보이고, 같은 목적의 계약과 그 타입(예: `for-sending-messages`의 발송 port와 `SendOutcome`)이 한곳에 모입니다. 처음의 종류별 `port/in` · `port/out`은 목적이 다른 계약 20개 가까이가 한 폴더에 섞였습니다. 폴더 배치는 원전이 강제하지 않는 프로젝트 관례입니다.
-- **driving port는 유스케이스마다 하나(abstract class)입니다.** controller와 워커 루프는 이 계약과 application이 소유한 readonly 입력 · 결과 타입에만 의존하고 도메인 타입을 import하지 않습니다. hexagonal의 필수 조건이 아닌 일관성을 위한 선택이고, 유스케이스마다 계약 · 타입 파일이 생기는 대가가 있습니다.
+- **port는 `driving` · `driven`으로 나누고 `for-<목적>` 폴더로 묶습니다.** Cockburn은 port를 "목적이 있는 대화"로 보고 `For_doing_something`으로 이름 짓습니다. 이 용어와 Garrido de Paz가 정리한 참조 배치를 따르면 폴더 이름만으로 앱이 바깥과 나누는 대화가 보이고, 같은 목적의 인터페이스와 그 타입(예: `for-sending-messages`의 발송 port와 `SendOutcome`)이 한곳에 모입니다. 처음의 종류별 `port/in` · `port/out`은 목적이 다른 인터페이스 20개 가까이가 한 폴더에 섞였습니다. 폴더 배치는 원전이 강제하지 않는 프로젝트 관례입니다.
+- **driving port는 유스케이스마다 하나(abstract class)입니다.** controller와 워커 루프는 이 인터페이스와 application이 소유한 readonly 입력 · 결과 타입에만 의존하고 도메인 타입을 import하지 않습니다. hexagonal의 필수 조건이 아닌 일관성을 위한 선택이고, 유스케이스마다 인터페이스 · 타입 파일이 생기는 대가가 있습니다.
 - **저장소 port는 개념마다 하나이고, 서비스는 쓰는 메서드만 `Pick`으로 받습니다.** `AlarmRepositoryPort` · `DeliveryRepositoryPort` · `ExpansionJobRepositoryPort` 세 개를 `TransactionPort.run`이 한 트랜잭션으로 넘기고, 서비스는 콜백 파라미터를 `Pick<…>`으로 좁힌 자기 인터페이스로 선언합니다. 쓰지 않는 메서드는 컴파일러가 막아 ISP를 타입으로 강제하면서 port · adapter 수는 개념 수로 유지합니다. 처음에는 쓰임새별로 나눠 발송 건 저장소만 port 6개였고, adapter 하나가 모두 구현했습니다.
 - **설정은 port가 아니라 서비스가 소유한 readonly 설정 타입입니다.** `DispatchSettings` · `ReconcileSettings` · `ExpansionSettings` 등을 `WorkerSettingsFactory`가 env에서 검증해 만들고 모듈이 생성자로 넘깁니다. 행위 없는 값이라 바꿔 끼울 구현이 없어, 처음의 설정 port 4개를 없앴습니다.
-- **완료 판정은 driving port가 아니라 내부 협력자 `AlarmCompletionChecker`입니다.** 바깥에서 직접 부르지 않는 완료 확인 유스케이스의 내부 단계라 계약으로 드러낼 이유가 없습니다.
-- **성공과 실패는 예외 대신 `kind` 판별 union입니다.** 외부 발송 결과(`SendOutcome`: accepted · permanent-failure · transient-failure · rate-limited · unreachable · indeterminate)도 port 계약에 두어, 처리하지 않은 경우가 있으면 컴파일 오류가 납니다.
+- **완료 판정은 driving port가 아니라 내부 협력자 `AlarmCompletionChecker`입니다.** 바깥에서 직접 부르지 않는 완료 확인 유스케이스의 내부 단계라 port로 드러낼 이유가 없습니다.
+- **성공과 실패는 예외 대신 `kind` 판별 union입니다.** 외부 발송 결과(`SendOutcome`: accepted · permanent-failure · transient-failure · rate-limited · unreachable · indeterminate)도 port의 타입으로 두어, 처리하지 않은 경우가 있으면 컴파일 오류가 납니다.
 - **트랜잭션은 필요한 일관성으로 정합니다.** 여러 변경이 함께 성공해야 하면 `run`, 같은 시점이 필요한 조회는 `readSnapshot`(조회 메서드만 `Pick`한 저장소를 넘겨 쓰기를 타입으로 막음)입니다. 변경 추적이 없는 실행기라 Fowler의 Unit of Work와는 범위가 다릅니다.
 - **의도한 타협은 하나입니다.** 발송 시작(알림 상태 변경 + 발송 건 또는 확장 작업 생성)과 수신자 확장 페이지(알림 잠금 조회 + 발송 건 생성 + cursor 저장)는 두 Aggregate를 한 트랜잭션에 씁니다. Aggregate 사이는 최종 일관성이 권장되지만(Vernon), "발송 중인데 작업이 없는" 이중 쓰기 불일치를 막으려고 이 두 명령에만 씁니다.
 - **in-memory fake는 모듈의 `testing/`에 둡니다.** 같은 계약 테스트를 fake와 Drizzle adapter에 함께 돌려 fake가 실제처럼 동작함을 보장하고, 운영 빌드에서는 제외합니다.
@@ -487,7 +487,7 @@ Delivery  PENDING ─claim─▶ IN_FLIGHT ─202──────────�
 - **완료 확인 전체 순회.** 알림이 많으면 종료할 때 순회가 끝나기를 기다려야 해서, 한 번에 100개씩 이어가게 했습니다.
 - **앱 기동 시 마이그레이션.** 잠금 없는 마이그레이션이 동시에 돌 수 있어 일회성 `migrate`로 분리했습니다.
 - **claim 트랜잭션에서만 lease를 확인했던 것.** 커밋이 늦으면 lease가 거의 없이 요청을 보낼 수 있어 요청 직전에 다시 확인합니다.
-- **쓰임새별 저장소 port · 설정 port · 완료 판정 계약 · `port/in` · `port/out` 폴더.** 3-2의 이유로 개념별 port + `Pick`, 설정 타입, 내부 협력자, driving/driven + `for-<목적>`으로 바꿨습니다.
+- **쓰임새별 저장소 port · 설정 port · 완료 판정 port · `port/in` · `port/out` 폴더.** 3-2의 이유로 개념별 port + `Pick`, 설정 타입, 내부 협력자, driving/driven + `for-<목적>`으로 바꿨습니다.
 - **목록 키 `items`.** 데이터 모델 예시와 같은 `alarms`로 바꿨습니다.
 - **문서의 시각 기준.** claim · 복구도 DB 시계로 판정한다고 적었지만 실제로 필요한 것은 제한기뿐이어서, 근거와 함께 구현대로 고쳤습니다.
 
