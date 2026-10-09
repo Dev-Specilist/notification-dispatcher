@@ -132,6 +132,10 @@ export class DeliveryRepositoryContract {
         'RETRY_WAIT',
         (delivery: Delivery): Delivery => DeliveryRepositoryContract.retryWaiting(delivery),
       ],
+      [
+        'RETRY_WAIT(연결 실패)',
+        (delivery: Delivery): Delivery => DeliveryRepositoryContract.unreachableWaiting(delivery),
+      ],
       ['UNKNOWN', (delivery: Delivery): Delivery => DeliveryRepositoryContract.timedOut(delivery)],
       ['SENT', (delivery: Delivery): Delivery => DeliveryRepositoryContract.sent(delivery)],
       ['FAILED', (delivery: Delivery): Delivery => DeliveryRepositoryContract.failed(delivery)],
@@ -681,6 +685,16 @@ export class DeliveryRepositoryContract {
         DeliveryRepositoryContract.token(TOKEN),
         new Date(SETTLED_ISO),
         DeliveryRepositoryContract.retryAfter(2_000),
+      ),
+    );
+  }
+
+  private static unreachableWaiting(delivery: Delivery): Delivery {
+    return DeliveryRepositoryContract.transitioned(
+      DeliveryRepositoryContract.start(delivery).recordUnreachable(
+        DeliveryRepositoryContract.token(TOKEN),
+        new Date(SETTLED_ISO),
+        DeliveryRepositoryContract.retryAfter(5_000),
       ),
     );
   }

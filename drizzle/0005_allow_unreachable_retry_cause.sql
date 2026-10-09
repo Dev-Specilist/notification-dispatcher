@@ -1,0 +1,2 @@
+ALTER TABLE "deliveries" DROP CONSTRAINT "deliveries_retry_cause_check";--> statement-breakpoint
+ALTER TABLE "deliveries" ADD CONSTRAINT "deliveries_retry_cause_check" CHECK ("deliveries"."retry_cause" IN ('TRANSIENT_FAILURE', 'RATE_LIMITED', 'UNREACHABLE', 'NOT_DELIVERED'));

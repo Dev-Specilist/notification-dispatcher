@@ -45,6 +45,7 @@ export class DeliveryRowMapper {
   private static readonly RETRY_CAUSES: ReadonlySet<string> = new Set<RetryCause>([
     'TRANSIENT_FAILURE',
     'RATE_LIMITED',
+    'UNREACHABLE',
     'NOT_DELIVERED',
   ]);
 

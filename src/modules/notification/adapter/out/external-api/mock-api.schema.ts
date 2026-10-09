@@ -15,6 +15,10 @@ export const lookupBodySchema = z.object({
   messages: z.array(z.object({ messageId: z.string(), sentAt: z.iso.datetime({ offset: true }) })),
 });
 
+export const connectionNotEstablishedSchema = z.object({
+  cause: z.object({ code: z.enum(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN']) }),
+});
+
 export const usersBodySchema = z.object({
   users: z.array(z.object({ id: z.string() })),
   nextCursor: z.string().nullable(),

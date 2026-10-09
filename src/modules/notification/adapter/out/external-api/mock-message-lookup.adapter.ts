@@ -18,7 +18,8 @@ export class MockMessageLookupAdapter implements MessageLookupPort {
 
   findByClientRef(clientRef: DeliveryId): Promise<MessageLookupResult> {
     return MockApiHttp.attempt((): Promise<MessageLookupResult> => this.request(clientRef), {
-      kind: 'lookup-failed',
+      notConnected: { kind: 'lookup-failed' },
+      interrupted: { kind: 'lookup-failed' },
     });
   }
 

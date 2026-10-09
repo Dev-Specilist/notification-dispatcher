@@ -278,7 +278,7 @@ describe('MockMessageSenderAdapter', () => {
     }
   });
 
-  it('EXT-06 연결할 수 없는 주소로 발송하면 예외 대신 Indeterminate 결과가 나온다', async (): Promise<void> => {
+  it('EXT-12 연결을 거부하는 발송 API / 발송 → 요청이 나가지 않았으므로 Unreachable(retryAfterMs) 결과가 나온다', async (): Promise<void> => {
     const stub: StubHttpServer = await StubHttpServer.respondingWith({
       status: 202,
       headers: {},
@@ -288,6 +288,12 @@ describe('MockMessageSenderAdapter', () => {
 
     const outcome: SendOutcome = await senderAt(stub.baseUrl).send(messageTo('u_000001'));
 
-    expect(outcome).toEqual({ kind: 'indeterminate' });
+    expect(outcome).toEqual({ kind: 'unreachable', retryAfterMs: 5_000 });
+  });
+
+  it('EXT-13 요청을 받은 뒤 연결을 끊는 발송 API / 발송 → 발송됐을 수 있으므로 Indeterminate 결과가 나온다', async (): Promise<void> => {
+    const stub: StubHttpServer = await StubHttpServer.droppingConnection();
+
+    expect(await sendThrough(stub)).toEqual({ kind: 'indeterminate' });
   });
 });

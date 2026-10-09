@@ -43,7 +43,7 @@ Delivery
   PENDING ──claim(leaseToken)──▶ IN_FLIGHT ──202──────────────────────▶ SENT
      ▲                              │ ──400 (영구 실패)────────────────▶ FAILED
      │                              │ ──500/503/429─▶ RETRY_WAIT ─(재시도 시각 이후 바로 claim)─▶ IN_FLIGHT
-     │                              │ ──타임아웃·연결 오류·lease 만료─▶ UNKNOWN
+     │                              │ ──타임아웃·요청 후 연결 끊김·lease 만료─▶ UNKNOWN
      └──────────────────────────────┘
   UNKNOWN ──(reconcile 가능 시각 이후) 내역 있음──▶ SENT
           ──(reconcile 가능 시각 이후) 내역 없음──▶ RETRY_WAIT (시도 소진이면 FAILED, 알림이 취소됐으면 CANCELLED)
@@ -89,7 +89,7 @@ Delivery
 | DLV-05 | `IN_FLIGHT` Delivery | 500/503을 받는다 | `RETRY_WAIT`가 되고 지수 백오프(+jitter)로 다음 시도 시각이 정해진다 |
 | DLV-06 | 최대 시도 횟수에 도달한 Delivery | 500/503을 받는다 | `FAILED`(`RETRY_EXHAUSTED`)가 된다 |
 | DLV-07 | `IN_FLIGHT` Delivery | 429와 `Retry-After: n`을 받는다 | `RETRY_WAIT`가 되고 n초 뒤로 미뤄지며 시도 횟수는 되돌린다 |
-| DLV-08 | `IN_FLIGHT` Delivery | 응답 타임아웃·연결 오류가 난다 | 재전송하지 않고 `UNKNOWN`이 되며 reconcile 가능 시각(요청 시작 + `RECONCILE_DELAY_MS`)이 기록된다 |
+| DLV-08 | `IN_FLIGHT` Delivery | 응답 타임아웃이 나거나 요청을 보낸 뒤 연결이 끊긴다 | 재전송하지 않고 `UNKNOWN`이 되며 reconcile 가능 시각(요청 시작 + `RECONCILE_DELAY_MS`)이 기록된다 |
 | DLV-09 | `UNKNOWN` Delivery | reconcile에서 같은 clientRef의 발송 내역 1건을 찾는다 | `SENT`가 되고 messageId가 기록된다 |
 | DLV-10 | reconcile 가능 시각이 지난 `UNKNOWN` Delivery | reconcile에서 발송 내역이 없다 | 최대 시도 횟수 안이면 `RETRY_WAIT`, 소진했으면 `FAILED`(`RETRY_EXHAUSTED`)가 된다 |
 | DLV-11 | reconcile 가능 시각 전의 `UNKNOWN` Delivery | reconcile 대상을 고른다 | 대상에서 빠진다 (이전 요청이 아직 진행 중일 수 있음) |
@@ -103,6 +103,7 @@ Delivery
 | DLV-19 | `UNKNOWN` Delivery이고 알림이 취소됐다 | reconcile에서 발송 내역이 없다 | 재시도 대신 `CANCELLED`가 된다 |
 | DLV-20 | `SENT`·`FAILED`·`CANCELLED`·`UNCONFIRMED` Delivery | 어떤 결과든 다시 기록하려 한다 | 종결 상태는 바뀌지 않는다 |
 | DLV-21 | 확인 기간(`UNCONFIRMED_AFTER_MS`)이 지난 `UNKNOWN` Delivery | reconcile 대상을 고른다 | 재전송하지 않고 `UNCONFIRMED`로 종결된다 |
+| DLV-22 | `IN_FLIGHT` Delivery | 발송 API에 연결 자체를 하지 못한다 | `RETRY_WAIT`(`UNREACHABLE`)가 되고 대기 시간 뒤로 미뤄지며 시도 횟수는 되돌린다 |
 
 ## UC · 유스케이스
 
@@ -127,6 +128,7 @@ Delivery
 | UC-17 | 상태·종류가 다른 알림 여러 개 | 목록 조회 유스케이스 | 필터에 맞는 알림을 생성 역순으로 한 페이지 반환하고, 더 있으면 다음 시작 위치를 함께 반환한다 |
 | UC-18 | 진행 중인 확장 작업 여러 개 | 다음 확장 페이지 유스케이스 | 잡을 수 있는 작업 하나의 한 페이지만 처리하고 진행을 기록해, 다음 페이지는 다른 워커도 이어받을 수 있다 |
 | UC-19 | 발송 중인 알림 여러 개 | 완료 확인 유스케이스 | 발송 중인 알림을 모두 확인해 확장이 끝나고 미종결 Delivery가 없는 알림만 `COMPLETED`로 바꾼다 |
+| UC-20 | 발송 API 연결 실패 | 발송 유스케이스 | 공유 처리량 제한기에 대기 시간만큼 정지가 걸려 모든 워커가 함께 멈추고, 해당 건은 시도 횟수를 쓰지 않고 `RETRY_WAIT`가 된다 (장애가 길어도 대기 건이 소모되거나 `UNKNOWN`으로 넘어가지 않는다) |
 
 ## CFG · 종료 타이머 설정
 
@@ -183,6 +185,8 @@ Delivery
 | EXT-09 | 조회 API가 오류를 내거나 스키마와 다른 응답을 준다 | 발송 내역을 조회한다 | 빈 내역이 아니라 `LookupFailed` 결과가 나온다 |
 | EXT-10 | 기본 `RATE_LIMIT` mock | 제한기를 거쳐 2초 동안 연속 발송한다 | 429가 나오지 않는다 (mock 한도 구간 방식에 대한 특성 테스트) |
 | EXT-11 | `TIMEOUT_RATE=1` mock | 발송 요청 직후 응답을 기다리는 동안 발송 내역을 조회한다 | 내역이 이미 있다 (발송 기록 시점에 대한 특성 테스트, reconcile 가정의 근거) |
+| EXT-12 | 연결을 거부하는 발송 API (연결 거부·주소 해석 실패) | 발송 | 요청이 나가지 않았으므로 `Unreachable(retryAfterMs)` 결과가 나온다 |
+| EXT-13 | 요청을 받은 뒤 연결을 끊는 발송 API | 발송 | 발송됐을 수 있으므로 `Indeterminate` 결과가 나온다 |
 
 ## API · REST 계약
 

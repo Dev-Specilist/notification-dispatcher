@@ -42,7 +42,7 @@ export const deliveries = pgTable(
     requestStartedAt: timestamp('request_started_at', { withTimezone: true, mode: 'date' }),
     retryAt: timestamp('retry_at', { withTimezone: true, mode: 'date' }),
     retryCause: text('retry_cause', {
-      enum: ['TRANSIENT_FAILURE', 'RATE_LIMITED', 'NOT_DELIVERED'],
+      enum: ['TRANSIENT_FAILURE', 'RATE_LIMITED', 'UNREACHABLE', 'NOT_DELIVERED'],
     }),
     unknownSince: timestamp('unknown_since', { withTimezone: true, mode: 'date' }),
     reconcileAt: timestamp('reconcile_at', { withTimezone: true, mode: 'date' }),
@@ -77,7 +77,7 @@ export const deliveries = pgTable(
     check('deliveries_attempts_check', sql`${table.attempts} >= 0`),
     check(
       'deliveries_retry_cause_check',
-      sql`${table.retryCause} IN ('TRANSIENT_FAILURE', 'RATE_LIMITED', 'NOT_DELIVERED')`,
+      sql`${table.retryCause} IN ('TRANSIENT_FAILURE', 'RATE_LIMITED', 'UNREACHABLE', 'NOT_DELIVERED')`,
     ),
     check(
       'deliveries_failure_reason_check',

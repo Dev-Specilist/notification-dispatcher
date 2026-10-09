@@ -35,7 +35,10 @@ export class MockRecipientDirectoryAdapter implements RecipientDirectoryPort {
   async fetchPage(cursor: PageCursor): Promise<RecipientPage> {
     const fetched: DirectoryFetch = await MockApiHttp.attempt(
       (): Promise<DirectoryFetch> => this.request(cursor),
-      { kind: 'failed', reason: 'is unreachable or timed out' },
+      {
+        notConnected: { kind: 'failed', reason: 'is unreachable' },
+        interrupted: { kind: 'failed', reason: 'dropped the connection or timed out' },
+      },
     );
     if (fetched.kind === 'failed') {
       throw new Error(`recipient directory ${fetched.reason}`);

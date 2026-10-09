@@ -1,15 +1,20 @@
 import { z } from 'zod';
+import { connectionNotEstablishedSchema } from '@/modules/notification/adapter/out/external-api/mock-api.schema';
+import { TransportFailures } from '@/modules/notification/adapter/out/external-api/mock-api.type';
 
 export class MockApiHttp {
   static async attempt<TResult>(
     request: () => Promise<TResult>,
-    onTransportFailure: TResult,
+    failures: Readonly<TransportFailures<TResult>>,
   ): Promise<TResult> {
     try {
       return await request();
     } catch (error) {
+      if (error instanceof TypeError && connectionNotEstablishedSchema.safeParse(error).success) {
+        return failures.notConnected;
+      }
       if (error instanceof TypeError || error instanceof DOMException) {
-        return onTransportFailure;
+        return failures.interrupted;
       }
       throw error;
     }

@@ -172,6 +172,22 @@ export class Delivery {
     });
   }
 
+  recordUnreachable(
+    token: LeaseToken,
+    now: Readonly<Date>,
+    retryAfterMs: RetryAfterMs,
+  ): DeliveryTransition {
+    const check: StartedCheck = this.checkStartedRequest(token);
+    if (check.kind === 'rejected') {
+      return check;
+    }
+    return this.transitionTo(Math.max(0, this.props.attempts - 1), {
+      status: 'RETRY_WAIT',
+      retryAt: new Date(now.getTime() + retryAfterMs),
+      cause: 'UNREACHABLE',
+    });
+  }
+
   recordUnknown(
     token: LeaseToken,
     now: Readonly<Date>,

@@ -905,4 +905,43 @@ describe('SendNextDeliveryService', () => {
 
     expect(permit.holds).toEqual([3_000]);
   });
+
+  it('UC-20 발송 API 연결 실패 / 발송 유스케이스 → 공유 처리량 제한기에 대기 시간만큼 정지가 걸려 모든 워커가 함께 멈추고, 해당 건은 시도 횟수를 쓰지 않고 RETRY_WAIT가 된다', async (): Promise<void> => {
+    const clock: AdjustableClock = new AdjustableClock();
+    const sharedPermit: SharedSendPermit = new SharedSendPermit(clock);
+    const { deliveryRepository, service, newWorker }: Fixture = await fixture(
+      [
+        pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO),
+        pendingDelivery(2, BULK_ALARM_ID, 'BULK', DISPATCHED_ISO),
+      ],
+      {
+        clock,
+        permit: sharedPermit,
+        sender: new RecordingMessageSender((sentCount: number): SendOutcome =>
+          sentCount === 1
+            ? { kind: 'unreachable', retryAfterMs: retryAfterMs(5_000) }
+            : acceptWithSequentialId(sentCount),
+        ),
+      },
+    );
+    const otherWorker: SendNextDeliveryService = newWorker(sharedPermit);
+
+    expect(await service.execute()).toMatchObject({ outcome: 'unreachable' });
+    const [unreachable]: ReadonlyArray<Delivery> = await deliveryRepository.findByAlarmId(
+      alarmId(BULK_ALARM_ID),
+    );
+    expect(unreachable.snapshot()).toMatchObject({
+      attempts: 0,
+      state: {
+        status: 'RETRY_WAIT',
+        retryAt: new Date(at(NOW_ISO).getTime() + 5_000),
+        cause: 'UNREACHABLE',
+      },
+    });
+    expect(await otherWorker.execute()).toEqual({ kind: 'no-permit' });
+
+    clock.advanceBy(5_000);
+
+    expect(await otherWorker.execute()).toMatchObject({ outcome: 'accepted' });
+  });
 });

@@ -31,11 +31,19 @@ export class MockMessageSenderAdapter implements MessageSenderPort {
 
   private static readonly DEFAULT_RETRY_AFTER_MS: number = 1_000;
 
+  private static readonly UNREACHABLE_RETRY_AFTER_MS: number = 5_000;
+
   constructor(private readonly settings: Readonly<MockApiSettings>) {}
 
   send(message: OutgoingMessage): Promise<SendOutcome> {
     return MockApiHttp.attempt((): Promise<SendOutcome> => this.request(message), {
-      kind: 'indeterminate',
+      notConnected: {
+        kind: 'unreachable',
+        retryAfterMs: MockMessageSenderAdapter.retryAfterMsOf(
+          MockMessageSenderAdapter.UNREACHABLE_RETRY_AFTER_MS,
+        ),
+      },
+      interrupted: { kind: 'indeterminate' },
     });
   }
 
@@ -73,9 +81,14 @@ export class MockMessageSenderAdapter implements MessageSenderPort {
     const seconds: RetryAfterSecondsParse = retryAfterSecondsSchema.safeParse(
       headers.get('retry-after'),
     );
-    const milliseconds: number = seconds.success
-      ? Math.min(seconds.data * 1_000, DeliveryPredicates.MAX_RETRY_AFTER_MS)
-      : MockMessageSenderAdapter.DEFAULT_RETRY_AFTER_MS;
+    return MockMessageSenderAdapter.retryAfterMsOf(
+      seconds.success
+        ? Math.min(seconds.data * 1_000, DeliveryPredicates.MAX_RETRY_AFTER_MS)
+        : MockMessageSenderAdapter.DEFAULT_RETRY_AFTER_MS,
+    );
+  }
+
+  private static retryAfterMsOf(milliseconds: number): RetryAfterMs {
     if (!DeliveryPredicates.isRetryAfterMs(milliseconds)) {
       throw new Error(`Retry-After ${milliseconds}ms is outside the allowed range`);
     }

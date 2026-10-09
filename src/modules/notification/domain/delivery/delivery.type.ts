@@ -24,7 +24,7 @@ export type PermanentFailureCode = 'RECIPIENT_BLOCKED' | 'UNKNOWN_RECIPIENT' | '
 
 export type FailureReason = PermanentFailureCode | 'RETRY_EXHAUSTED';
 
-export type RetryCause = 'TRANSIENT_FAILURE' | 'RATE_LIMITED' | 'NOT_DELIVERED';
+export type RetryCause = 'TRANSIENT_FAILURE' | 'RATE_LIMITED' | 'UNREACHABLE' | 'NOT_DELIVERED';
 
 export interface Lease {
   readonly token: LeaseToken;

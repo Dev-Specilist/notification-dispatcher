@@ -32,6 +32,11 @@ export interface SendRateLimited {
   readonly retryAfterMs: RetryAfterMs;
 }
 
+export interface SendUnreachable {
+  readonly kind: 'unreachable';
+  readonly retryAfterMs: RetryAfterMs;
+}
+
 export interface SendOutcomeIndeterminate {
   readonly kind: 'indeterminate';
 }
@@ -41,6 +46,7 @@ export type SendOutcome =
   | SendPermanentlyFailed
   | SendTransientlyFailed
   | SendRateLimited
+  | SendUnreachable
   | SendOutcomeIndeterminate;
 
 export type SendOutcomeKind = SendOutcome['kind'];

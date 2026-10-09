@@ -419,6 +419,31 @@ describe('Delivery', () => {
     },
   );
 
+  it('DLV-22 IN_FLIGHT Delivery / 발송 API에 연결 자체를 하지 못한다 → RETRY_WAIT(UNREACHABLE)가 되고 대기 시간 뒤로 미뤄지며 시도 횟수는 되돌린다', (): void => {
+    const delivery: Delivery = transitioned(
+      started().recordUnreachable(TOKEN_A(), at(SETTLED_ISO), retryAfterMs(5_000)),
+    );
+
+    expect(delivery.snapshot()).toMatchObject({
+      attempts: 0,
+      state: {
+        status: 'RETRY_WAIT',
+        cause: 'UNREACHABLE',
+        retryAt: new Date(at(SETTLED_ISO).getTime() + 5_000),
+      },
+    });
+  });
+
+  it('DLV-22 다른 leaseToken으로 연결 실패를 기록하면 거부된다', (): void => {
+    const transition: DeliveryTransition = started().recordUnreachable(
+      TOKEN_B(),
+      at(SETTLED_ISO),
+      retryAfterMs(5_000),
+    );
+
+    expect(transition.kind).toBe('rejected');
+  });
+
   it('DLV-07 Retry-After: 0이면 재시도 시각을 지금으로 기록하고 시도 횟수는 되돌린다', (): void => {
     const delivery: Delivery = transitioned(
       started().recordRateLimited(TOKEN_A(), at(SETTLED_ISO), retryAfterMs(0)),

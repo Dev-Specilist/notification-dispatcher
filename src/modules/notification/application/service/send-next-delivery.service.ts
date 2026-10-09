@@ -110,7 +110,7 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
     token: LeaseToken,
     outcome: SendOutcome,
   ): Promise<SendAttempt> {
-    if (outcome.kind === 'rate-limited') {
+    if (outcome.kind === 'rate-limited' || outcome.kind === 'unreachable') {
       await this.sendPermit.holdFor(outcome.retryAfterMs);
     }
     const now: Date = this.clock.now();
@@ -154,6 +154,8 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
         );
       case 'rate-limited':
         return delivery.recordRateLimited(token, now, outcome.retryAfterMs);
+      case 'unreachable':
+        return delivery.recordUnreachable(token, now, outcome.retryAfterMs);
       case 'indeterminate':
         break;
     }

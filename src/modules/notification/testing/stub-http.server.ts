@@ -37,6 +37,12 @@ export class StubHttpServer {
     });
   }
 
+  static droppingConnection(): Promise<StubHttpServer> {
+    return StubHttpServer.start((response: ServerResponse): void => {
+      response.destroy();
+    });
+  }
+
   close(): Promise<void> {
     this.server.closeAllConnections();
     return new Promise<void>((resolve: () => void, reject: (error: Error) => void): void => {
