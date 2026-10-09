@@ -31,12 +31,8 @@ import { DispatchWorker } from '@/modules/notification/adapter/driving/worker/di
 import { createEnvSchema } from '@/shared/config/env.schema';
 import { portSchema } from '@/shared/config/primitive.schema';
 import { WorkerShutdownSignalAdapter } from '@/modules/notification/adapter/driven/process-state/worker-shutdown-signal.adapter';
+import { createGate, Gate } from '@/shared/testing/gate.factory';
 import { TypedConfigModule } from '@/shared/config/typed-config.module';
-
-interface Gate {
-  readonly opened: Promise<void>;
-  readonly open: () => void;
-}
 
 interface ExecutionCounts {
   readonly expansions: number;
@@ -71,8 +67,6 @@ class ExitCalled extends Error {}
 
 const UNCONNECTED_DATABASE_URL: string = 'postgres://app:secret@localhost:5432/notification';
 
-const NOT_YET_OPENED: () => void = (): void => {};
-
 const delay = (delayMs: number): Promise<void> =>
   new Promise<void>((resolve: () => void): void => {
     setTimeout(resolve, delayMs);
@@ -92,14 +86,6 @@ const advanceUntilSettled = async (pending: Promise<void>): Promise<void> => {
   };
   await advanceStepsUntilSettled();
   await watched;
-};
-
-const createGate = (): Gate => {
-  let release: () => void = NOT_YET_OPENED;
-  const opened: Promise<void> = new Promise<void>((resolve: () => void): void => {
-    release = resolve;
-  });
-  return { opened, open: (): void => release() };
 };
 
 class IdleExpansion implements ExpandNextPageUseCase {
