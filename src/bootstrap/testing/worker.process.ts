@@ -131,7 +131,11 @@ export class WorkerProcess {
 
   private static async freePort(): Promise<number> {
     const probe: net.Server = net.createServer();
-    await new Promise<void>((resolve: () => void): void => {
+    await new Promise<void>((resolve: () => void, reject: (failure: Error) => void): void => {
+      probe.once('error', (failure: Error): void => {
+        probe.close();
+        reject(failure);
+      });
       probe.listen(0, WorkerProcess.HOST, resolve);
     });
     const address: ReturnType<net.Server['address']> = probe.address();
