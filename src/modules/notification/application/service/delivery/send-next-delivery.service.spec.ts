@@ -900,6 +900,70 @@ describe('SendNextDeliveryService', () => {
     });
   });
 
+  it('UC-26 claim을 커밋한 뒤 요청을 보내기 전에 알림이 취소됐다 / 발송 유스케이스 → 보내기 직전 알림을 다시 확인해 요청을 보내지 않고, leaseToken이 그대로일 때만 시도 횟수를 쓰지 않은 채 CANCELLED로 정리한다', async (): Promise<void> => {
+    const {
+      deliveryRepository,
+      transaction,
+      clock,
+      sender,
+      service,
+      slowTransaction,
+    }: SlowClaimCommitFixture = await slowClaimCommitFixture(
+      pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO),
+    );
+
+    const attempt: Promise<SendAttempt> = service.execute();
+    await slowTransaction.committing.opened;
+    await new CancelAlarmService(transaction, clock).execute({ alarmId: BULK_ALARM_ID });
+    slowTransaction.commitFinished.open();
+
+    expect(await attempt).toEqual({ kind: 'skipped', deliveryId: deliveryId(1) });
+    expect(sender.sent).toEqual([]);
+    const [stored]: ReadonlyArray<Delivery> = await deliveryRepository.findByAlarmId(
+      alarmId(BULK_ALARM_ID),
+    );
+    expect(stored.snapshot()).toMatchObject({
+      attempts: 0,
+      state: { status: 'CANCELLED', cancelledAt: at(NOW_ISO) },
+    });
+  });
+
+  it('UC-26 보내기 전에 알림이 취소됐지만 그 사이 다른 워커가 같은 Delivery를 이어받았으면 보내지 않고 취소를 저장하지 않는다', async (): Promise<void> => {
+    const {
+      deliveryRepository,
+      transaction,
+      clock,
+      sender,
+      service,
+      slowTransaction,
+    }: SlowClaimCommitFixture = await slowClaimCommitFixture(
+      pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO),
+    );
+
+    const attempt: Promise<SendAttempt> = service.execute();
+    await slowTransaction.committing.opened;
+    await new CancelAlarmService(transaction, clock).execute({ alarmId: BULK_ALARM_ID });
+    const reclaimed: Delivery = transitionedDelivery(
+      pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO).claim(
+        leaseToken(PREVIOUS_TOKEN),
+        at(NOW_ISO),
+        durationMs(60_000),
+      ),
+    );
+    await deliveryRepository.saveAll([reclaimed]);
+    slowTransaction.commitFinished.open();
+
+    expect(await attempt).toEqual({ kind: 'lease-lost', deliveryId: deliveryId(1) });
+    expect(sender.sent).toEqual([]);
+    const [stored]: ReadonlyArray<Delivery> = await deliveryRepository.findByAlarmId(
+      alarmId(BULK_ALARM_ID),
+    );
+    expect(stored.snapshot().state).toMatchObject({
+      status: 'IN_FLIGHT',
+      lease: { token: PREVIOUS_TOKEN },
+    });
+  });
+
   it('UC-25 허가를 얻은 뒤 claim이 늦어져 허가가 허가 유효 시간(허가 간격 × 2)보다 오래됐다 / 발송 유스케이스 → 오래된 허가로 보내지 않고 claim한 Delivery를 쥔 채 허가를 한 번 새로 얻어 보낸다', async (): Promise<void> => {
     const clock: AdjustableClock = new AdjustableClock();
     const permit: PacedSendPermit = new PacedSendPermit(clock, 20);

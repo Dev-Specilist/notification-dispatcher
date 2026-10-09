@@ -21,6 +21,7 @@ import { SendPermitPort } from '@/modules/notification/application/port/driven/f
 import { SendPermit } from '@/modules/notification/application/port/driven/for-permitting-sends/send-permit.type';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
 import {
+  DeliverySkipped,
   LeaseTooShortToSend,
   ResultDiscarded,
   SendAttempt,
@@ -48,6 +49,12 @@ type ClaimStep = SendAttempt | RequestReady;
 
 type UnsentReleaseLost = LeaseTooShortToSend | ResultDiscarded;
 
+interface AlarmStillDispatching {
+  readonly kind: 'proceed';
+}
+
+type CancelCheck = AlarmStillDispatching | DeliverySkipped | ResultDiscarded;
+
 export class SendNextDeliveryService implements SendNextDeliveryUseCase {
   constructor(
     private readonly transaction: TransactionPort,
@@ -74,6 +81,10 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
     if (step.kind !== 'ready') {
       return step;
     }
+    const cancelCheck: CancelCheck = await this.cancelIfAlarmCancelled(step.delivery, token);
+    if (cancelCheck.kind !== 'proceed') {
+      return cancelCheck;
+    }
     const { alarmId, recipientId, id }: DeliverySnapshot = step.delivery.snapshot();
     if (!(await this.holdsFreshPermit(permitRequestedAt))) {
       return this.abandonUnsent(step.delivery, token, 'lease-lost');
@@ -91,6 +102,27 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
       clientRef: id,
     });
     return this.recordOutcome(step.delivery, token, outcome);
+  }
+
+  private cancelIfAlarmCancelled(delivery: Delivery, token: LeaseToken): Promise<CancelCheck> {
+    const { id: deliveryId, alarmId }: DeliverySnapshot = delivery.snapshot();
+    return this.transaction.run(
+      async ({
+        alarmRepository,
+        deliveryRepository,
+      }: SendNextDeliveryRepositories): Promise<CancelCheck> => {
+        const alarm: AlarmLookup = await alarmRepository.findByIdForShare(alarmId);
+        if (alarm.kind === 'found' && !alarm.alarm.isCancelled()) {
+          return { kind: 'proceed' };
+        }
+        const unsent: Delivery = AcceptedTransition.delivery(delivery.abandonUnsentRequest(token));
+        const cancelled: Delivery = AcceptedTransition.delivery(unsent.cancel(this.clock.now()));
+        const saved: LeasedSave = await deliveryRepository.saveLeased(cancelled, token);
+        return saved.kind === 'saved'
+          ? { kind: 'skipped', deliveryId }
+          : { kind: 'lease-lost', deliveryId };
+      },
+    );
   }
 
   private async holdsFreshPermit(permitRequestedAt: Readonly<Date>): Promise<boolean> {

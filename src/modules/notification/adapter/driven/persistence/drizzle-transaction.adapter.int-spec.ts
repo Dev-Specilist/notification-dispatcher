@@ -295,6 +295,31 @@ class CommitHoldingTransaction implements TransactionPort {
   }
 }
 
+class PausingAfterClaimTransaction implements TransactionPort {
+  readonly claimCommitted: Gate = createGate();
+
+  readonly resumed: Gate = createGate();
+
+  private runs: number = 0;
+
+  constructor(private readonly innerTransaction: TransactionPort) {}
+
+  async run<TResult>(work: TransactionWork<TResult>): Promise<TResult> {
+    this.runs += 1;
+    const isClaim: boolean = this.runs === 1;
+    const result: TResult = await this.innerTransaction.run(work);
+    if (isClaim) {
+      this.claimCommitted.open();
+      await this.resumed.opened;
+    }
+    return result;
+  }
+
+  readSnapshot<TResult>(work: SnapshotWork<TResult>): Promise<TResult> {
+    return this.innerTransaction.readSnapshot(work);
+  }
+}
+
 class BothWorkersFetchFirstDirectory implements RecipientDirectoryPort {
   readonly firstFetchStarted: Gate = createGate();
 
@@ -387,9 +412,12 @@ describe('DrizzleTransactionAdapter', () => {
   const deliveryStatusesOf = async (id: AlarmId): Promise<ReadonlyArray<string>> =>
     (await deliveriesOf(id)).map((delivery: Delivery): string => delivery.snapshot().state.status);
 
-  const sendWorker = (sender: MessageSenderPort): SendNextDeliveryService =>
+  const sendWorker = (
+    sender: MessageSenderPort,
+    workerTransaction: TransactionPort = transaction,
+  ): SendNextDeliveryService =>
     new SendNextDeliveryService(
-      transaction,
+      workerTransaction,
       new AlwaysGrantedPermit(),
       sender,
       new RandomLeaseTokenGenerator(),
@@ -847,6 +875,38 @@ describe('DrizzleTransactionAdapter', () => {
 
     expect(await deliveryStatusesOf(alarmId)).toEqual(['CANCELLED']);
     expect(resultSavingOrder).toBe(WAITED_FOR_CANCEL_COMMIT);
+    expect(await cancelling).toMatchObject({ kind: 'cancelled' });
+  });
+
+  it('DB-21 claim을 커밋한 Delivery가 있는 알림을 취소 트랜잭션이 잠그고 대기 Delivery를 취소한 채 아직 커밋하지 않았다 / 워커가 보내기 직전 알림을 확인한다 → 확인이 취소 커밋을 기다렸다가 취소된 알림을 보고 요청을 보내지 않은 채 CANCELLED로 저장한다', async (): Promise<void> => {
+    const alarmId: AlarmId = await dispatchedBulkAlarm();
+    await insertPendingDeliveries(alarmId, ['BULK']);
+    const sender: RecordingMessageSender = new RecordingMessageSender('worker');
+    const workerTransaction: PausingAfterClaimTransaction = new PausingAfterClaimTransaction(
+      transaction,
+    );
+    const sendAttempt: Promise<SendAttempt> = sendWorker(sender, workerTransaction).execute();
+    await workerTransaction.claimCommitted.opened;
+    const cancelTransaction: CommitHoldingTransaction = new CommitHoldingTransaction(transaction);
+    const cancelling: Promise<CancelAlarmResult> = new CancelAlarmService(
+      cancelTransaction,
+      new FixedClock(),
+    ).execute({ alarmId });
+
+    let cancelCheckOrder: string = '';
+    try {
+      await cancelTransaction.workFinished.opened;
+      workerTransaction.resumed.open();
+      cancelCheckOrder = await firstOfSavedOrWaitingForLock(sendAttempt);
+    } finally {
+      cancelTransaction.commitAllowed.open();
+      await Promise.allSettled([sendAttempt, cancelling]);
+    }
+
+    expect(await sendAttempt).toMatchObject({ kind: 'skipped' });
+    expect(sender.clientRefs).toEqual([]);
+    expect(await deliveryStatusesOf(alarmId)).toEqual(['CANCELLED']);
+    expect(cancelCheckOrder).toBe(WAITED_FOR_CANCEL_COMMIT);
     expect(await cancelling).toMatchObject({ kind: 'cancelled' });
   });
 });
