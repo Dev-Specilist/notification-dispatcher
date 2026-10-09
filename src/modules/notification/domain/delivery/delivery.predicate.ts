@@ -6,21 +6,19 @@ import {
   MessageId,
   RetryAfterMs,
 } from '@/modules/notification/domain/delivery/delivery.type';
+import { UuidPredicates } from '@/shared/domain/uuid.predicate';
 
 export class DeliveryPredicates {
   static readonly MAX_RETRY_AFTER_MS: number = 3_600_000;
 
-  private static readonly UUID: RegExp =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
   private static readonly NON_BLANK: RegExp = /^\S+$/;
 
   static isDeliveryId(value: string): value is DeliveryId {
-    return DeliveryPredicates.UUID.test(value);
+    return UuidPredicates.isUuid(value);
   }
 
   static isLeaseToken(value: string): value is LeaseToken {
-    return DeliveryPredicates.UUID.test(value);
+    return UuidPredicates.isUuid(value);
   }
 
   static isMessageId(value: string): value is MessageId {

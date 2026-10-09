@@ -1,3 +1,4 @@
+import { HttpStatus } from '@nestjs/common';
 import { z } from 'zod';
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import { RetryAfterMs } from '@/modules/notification/domain/delivery/delivery.type';
@@ -21,13 +22,16 @@ type RejectedBodyParse = z.ZodSafeParseResult<z.output<typeof rejectedBodySchema
 type RetryAfterSecondsParse = z.ZodSafeParseResult<z.output<typeof retryAfterSecondsSchema>>;
 
 export class MockMessageSenderAdapter implements MessageSenderPort {
-  private static readonly ACCEPTED: number = 202;
+  private static readonly ACCEPTED: number = HttpStatus.ACCEPTED;
 
-  private static readonly REJECTED: number = 400;
+  private static readonly REJECTED: number = HttpStatus.BAD_REQUEST;
 
-  private static readonly RATE_LIMITED: number = 429;
+  private static readonly RATE_LIMITED: number = HttpStatus.TOO_MANY_REQUESTS;
 
-  private static readonly NOT_SENT_FAILURES: ReadonlyArray<number> = [500, 503];
+  private static readonly NOT_SENT_FAILURES: ReadonlyArray<number> = [
+    HttpStatus.INTERNAL_SERVER_ERROR,
+    HttpStatus.SERVICE_UNAVAILABLE,
+  ];
 
   private static readonly DEFAULT_RETRY_AFTER_MS: number = 1_000;
 

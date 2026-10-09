@@ -1,3 +1,4 @@
+import { HttpStatus } from '@nestjs/common';
 import { z } from 'zod';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { RecipientId } from '@/modules/notification/domain/alarm/alarm.type';
@@ -28,7 +29,7 @@ interface DirectoryFailed {
 type DirectoryFetch = PageFetched | DirectoryFailed;
 
 export class MockRecipientDirectoryAdapter implements RecipientDirectoryPort {
-  private static readonly OK: number = 200;
+  private static readonly OK: number = HttpStatus.OK;
 
   constructor(
     private readonly settings: Readonly<RecipientDirectorySettings>,

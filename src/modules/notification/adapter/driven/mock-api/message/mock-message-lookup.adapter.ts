@@ -1,3 +1,4 @@
+import { HttpStatus } from '@nestjs/common';
 import { z } from 'zod';
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import { DeliveryId, RecordedMessage } from '@/modules/notification/domain/delivery/delivery.type';
@@ -12,7 +13,7 @@ type LookupBody = z.output<typeof lookupBodySchema>;
 type LookupMessage = LookupBody['messages'][number];
 
 export class MockMessageLookupAdapter implements MessageLookupPort {
-  private static readonly OK: number = 200;
+  private static readonly OK: number = HttpStatus.OK;
 
   constructor(
     private readonly settings: Readonly<MockApiSettings>,

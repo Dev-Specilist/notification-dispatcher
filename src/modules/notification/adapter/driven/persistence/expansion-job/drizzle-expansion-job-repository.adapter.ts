@@ -60,7 +60,7 @@ export class DrizzleExpansionJobRepositoryAdapter implements ExpansionJobReposit
       .update(expansionJobs)
       .set({
         ...ExpansionJobRowMapper.toProgressColumns(progress),
-        leaseExpiresAt: sql`NULL`,
+        leaseExpiresAt: ExpansionJobRowMapper.CLEARED,
         updatedAt: sql`now()`,
       })
       .where(eq(expansionJobs.alarmId, alarmId))

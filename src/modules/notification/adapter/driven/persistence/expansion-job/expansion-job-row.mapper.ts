@@ -14,7 +14,7 @@ interface ProgressColumns {
 }
 
 export class ExpansionJobRowMapper {
-  private static readonly CLEARED: SQL = sql`NULL`;
+  static readonly CLEARED: SQL = sql`NULL`;
 
   static toProgressColumns(progress: ExpansionProgress): ProgressColumns {
     const cleared: Omit<ProgressColumns, 'status'> = {
