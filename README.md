@@ -12,9 +12,11 @@
 ┌─ docker compose ───┼────────────────────────────────────────────────────────────────┐
 │                    ▼                                                                │
 │  ┌─ api ×1 ───────────────────────────┐     ┌─ worker ×N (--scale worker=3) ──────┐ │
-│  │ /alarms        REST + OpenAPI      │     │ ExpansionLoop   users → deliveries  │ │
-│  │ /livez /readyz probes              │     │ DispatchLoop    claim → send        │ │
-│  │                                    │     │ ReconcileLoop   UNKNOWN → settle    │ │
+│  │ /alarms        REST + OpenAPI      │     │ expansion       users → deliveries  │ │
+│  │ /livez /readyz probes              │     │ dispatch ×8     permit → claim→send │ │
+│  │                                    │     │ reconcile       UNKNOWN → settle    │ │
+│  │                                    │     │ lease recovery  expired → UNKNOWN   │ │
+│  │                                    │     │ completion      settled → COMPLETED │ │
 │  └─────────────────┬──────────────────┘     └───────┬───────────────────┬─────────┘ │
 │                    │                                │                   │           │
 │                    │ 1 transaction                  │ SKIP LOCKED       │ HTTP      │
@@ -23,7 +25,7 @@
 │  ┌─ PostgreSQL ───────────────────────────────────────────┐  ┌─ mock :4000 ──────┐  │
 │  │ alarms                                                 │  │ GET  /v1/users    │  │
 │  │ deliveries          (work queue, unique alarm+user)    │  │ POST /v1/messages │  │
-│  │ recipient_expansions (cursor checkpoint)               │  │ GET  /v1/messages │  │
+│  │ expansion_jobs       (cursor checkpoint · lease)       │  │ GET  /v1/messages │  │
 │  │ rate_limiters        (shared 50/s GCRA, Retry-After)   │  │      ?clientRef=  │  │
 │  └────────────────────────────────────────────────────────┘  └───────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────────────────┘
@@ -41,19 +43,20 @@
 ┌─ adapter/in (driving) ─────────────┐      ┌─ adapter/out (driven) ─────────────┐
 │ web    : controller · schema       │      │ persistence : Drizzle repositories │
 │          presenter                 │      │               transaction          │
-│ worker : expand · send             │      │               rate limiter         │
-│          reconcile                 │      │ external-api: mock API adapters    │
-│          lease recovery loops      │      │ system      : clock · id generator │
+│ worker : polling loops (expand ·   │      │               rate limiter         │
+│          send · reconcile · lease  │      │ external-api: mock API adapters    │
+│          recovery · completion)    │      │ system      : clock · id · settings│
 │                                    │      │ in-memory   : fakes for unit tests │
 └──────────────────┬─────────────────┘      └──────────────────┬─────────────────┘
                    │ calls use cases                           │ implements ports
                    ▼                                           ▼
 ┌─ application ──────────────────────────────────────────────────────────────────┐
 │ port/in  : CreateAlarm · GetAlarm · ListAlarms · StartDispatch · CancelAlarm   │
-│            ExpandRecipients · SendNextDelivery · ReconcileNextDelivery         │
-│            RecoverExpiredLease · CompleteAlarmIfSettled (+ result DTOs)        │
+│            ExpandNextPage · SendNextDelivery · ReconcileNextDelivery           │
+│            RecoverExpiredLease · CompleteSettledAlarms (+ result DTOs)         │
 │ service  : implements port/in with the domain model                            │
-│ port/out : AlarmRepository · ExpansionJobRepository · Transaction              │
+│ port/out : AlarmRepository · ExpansionJobRepository · ExpansionQueue           │
+│            Transaction                                                         │
 │            DeliveryCreation · DispatchQueue · LeaseRecoveryQueue               │
 │            ReconcileQueue · DeliveryCancellation · DeliveryProgress            │
 │            RecipientDirectory · MessageSender (+ SendOutcome union)            │
@@ -115,10 +118,11 @@
 │   │   ├── 📂 lifecycle/
 │   │   │   ├── 📄 lifecycle.module.ts
 │   │   │   └── 📄 shutdown.service.ts               신호 즉시 readiness down · drain · watchdog
-│   │   └── 📂 server/
-│   │       ├── 📄 server.bootstrap.ts               기동 · 기동 실패 처리 · 종료 hook(exit 0)
-│   │       ├── 📄 listen-address.type.ts
-│   │       └── 📄 listen-address.util.ts            Local/Network 주소 로그
+│   │   ├── 📂 server/
+│   │   │   ├── 📄 server.bootstrap.ts               기동 · 기동 실패 처리 · 종료 hook(exit 0)
+│   │   │   ├── 📄 api-documentation.bootstrap.ts    OpenAPI 3.0 문서 · Swagger UI
+│   │   │   └── 📄 listen-address.util.ts            Local/Network 주소 로그
+│   │   └── 📂 testing/                              worker.process (e2e용 실제 worker 자식 프로세스)
 │   ├── 📂 modules/
 │   │   ├── 📂 health/                               /livez · /readyz · readiness 상태
 │   │   │   ├── 📂 application/port/out/             readiness.port.ts
@@ -137,10 +141,10 @@
 │   │       │   └── 📂 service/                      *.service.ts (port/in 구현) · alarm-view.mapper
 │   │       ├── 📂 adapter/
 │   │       │   ├── 📂 in/web/                       controller · 요청 schema · presenter
-│   │       │   ├── 📂 in/worker/                    확장 · 발송 · reconcile · lease 복구 루프
+│   │       │   ├── 📂 in/worker/                    폴링 루프 · 발송 워커(확장 · 발송 · reconcile · lease 복구 · 완료 확인)
 │   │       │   ├── 📂 out/persistence/              Drizzle 저장소 · 트랜잭션 · 테이블 · PG 제한기
 │   │       │   ├── 📂 out/external-api/             mock 사용자 · 발송 · 조회 API adapter
-│   │       │   ├── 📂 out/system/                   시계 · id 생성기
+│   │       │   ├── 📂 out/system/                   시계 · id · lease token · 지터 · 워커 설정
 │   │       │   └── 📂 out/in-memory/                unit 테스트용 fake 저장소 · 트랜잭션
 │   │       ├── 📂 testing/                          계약 테스트(contract/) · mock 컨테이너 · stub 서버
 │   │       ├── 📄 notification-api.module.ts
@@ -151,9 +155,9 @@
 │       ├── 📂 logging/                              Nest ConsoleLogger 기반 AppLogger
 │       └── 📂 database/                             PostgreSQL Pool · 마이그레이션 실행기
 ├── 📂 drizzle/                                      마이그레이션 SQL
-├── 📂 test/                                         e2e (api 전체 · 발송 전체 흐름)
-├── 📄 Dockerfile                                    target: api · worker
-├── 📄 docker-compose.yml                            api · worker · postgres · mock
+├── 📂 test/                                         e2e (REST API · 발송 전체 흐름 · worker 프로세스 종료)
+├── 📄 Dockerfile                                    target: api · worker · migrate
+├── 📄 docker-compose.yml                            api · worker · migrate · postgres · mock
 ├── 📄 vitest.config.mts                             unit · integration · characterization · e2e 프로젝트
 ├── 📄 SCENARIO.md                                   테스트 시나리오 (ID ↔ 테스트 이름)
 └── 📄 README.md
@@ -166,9 +170,10 @@
 | unit | `*.spec.ts` | `pnpm test` | domain · use case (port는 in-memory fake) | 없음 |
 | integration | `*.int-spec.ts` | `pnpm test:int` | adapter (Drizzle 저장소, 제한기, mock API adapter) | PostgreSQL · mock (Testcontainers) |
 | characterization | `*.characterization.int-spec.ts` | `pnpm test:int` (integration 다음에 단독 실행) | mock 한도·발송 기록 시점, 제한기를 거친 처리량 | PostgreSQL · mock (Testcontainers) |
-| e2e | `test/*.e2e-spec.ts` | `pnpm test:e2e` | HTTP 계약과 api + worker 전체 흐름 | PostgreSQL · mock (Testcontainers) |
+| e2e | `test/*.e2e-spec.ts` | `pnpm test:e2e` | HTTP 계약, 실제 worker 프로세스(1~3대)로 발송 전체 흐름 · 강제 종료 · 취소 · SIGTERM | PostgreSQL · mock (Testcontainers) |
 
-- 컨테이너는 vitest `globalSetup`에서 실행 단위마다 한 번만 띄우고, 테스트 파일마다 별도 database를 써서 서로 섞이지 않게 합니다. mock은 `RATE_LIMIT` · `ERROR_RATE` · `TIMEOUT_RATE` 설정별로 따로 띄웁니다.
+- PostgreSQL은 vitest `globalSetup`에서 실행 단위마다 한 번 띄우고 마이그레이션한 템플릿 DB를 만든 뒤, 테스트 파일마다 템플릿을 복제한 별도 database를 써서 서로 섞이지 않게 합니다. mock은 필요한 테스트에서 `USER_COUNT` · `ERROR_RATE` · `TIMEOUT_RATE` 등 시나리오에 맞는 설정으로 따로 띄웁니다.
+- e2e의 worker는 테스트가 `src`를 SWC로 빌드해 실제 자식 프로세스로 띄웁니다. 발송 횟수는 DB가 아니라 mock의 발송 내역(`GET /v1/messages?clientRef=`)으로 Delivery마다 셉니다.
 - 저장소 port의 계약 테스트(`testing/contract/`) 하나를 in-memory fake와 Drizzle adapter 양쪽에 돌려서, unit 테스트의 fake가 실제 구현과 같은 계약을 지킨다는 것을 보장합니다.
 - pre-push hook이 integration과 e2e까지 돌리므로 push하려면 로컬에 Docker가 실행 중이어야 합니다.
 
