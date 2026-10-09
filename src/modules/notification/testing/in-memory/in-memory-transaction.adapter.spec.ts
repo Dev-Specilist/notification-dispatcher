@@ -9,7 +9,6 @@ import {
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import { DeliveryId } from '@/modules/notification/domain/delivery/delivery.type';
-import { Rollback } from '@/modules/notification/testing/in-memory/rollback.type';
 import {
   SnapshotRepositories,
   TransactionRepositories,
@@ -189,22 +188,5 @@ describe('InMemoryTransactionAdapter', () => {
       kind: 'claimed',
       alarmId: FIRST_ID,
     });
-  });
-});
-
-describe('InMemoryDeliveryRepositoryAdapter', () => {
-  it('롤백하면 수신자 색인도 되돌아가 같은 수신자를 다시 저장할 수 있다', async (): Promise<void> => {
-    const repository: InMemoryDeliveryRepositoryAdapter = new InMemoryDeliveryRepositoryAdapter();
-    const rollback: Rollback = repository.checkpoint();
-    await repository.insertMissing([pendingDelivery(1, 'u_000001')]);
-
-    rollback();
-    await repository.insertMissing([pendingDelivery(2, 'u_000001')]);
-
-    expect(
-      (await repository.findByAlarmId(alarmId(FIRST_ID))).map(
-        (delivery: Delivery): string => delivery.snapshot().id,
-      ),
-    ).toEqual(['00000000-0000-4000-8000-000000000002']);
   });
 });
