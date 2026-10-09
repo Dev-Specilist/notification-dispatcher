@@ -31,6 +31,10 @@ interface StartedCountRow {
   readonly started: number;
 }
 
+interface UnsettledCountRow {
+  readonly unsettled: number;
+}
+
 interface SentCountRow {
   readonly sent: number;
 }
@@ -194,11 +198,22 @@ describe('발송 전체 흐름', () => {
     const result: QueryResult<StartedCountRow> = await api
       .get(Pool)
       .query<StartedCountRow>(
-        "SELECT count(*)::int AS started FROM deliveries WHERE alarm_id = $1 AND status <> 'PENDING'",
+        "SELECT count(*)::int AS started FROM deliveries WHERE alarm_id = $1 AND status NOT IN ('PENDING', 'CANCELLED')",
         [alarmId],
       );
     const [{ started }]: ReadonlyArray<StartedCountRow> = result.rows;
     return started;
+  };
+
+  const unsettledDeliveryCount = async (alarmId: string): Promise<number> => {
+    const result: QueryResult<UnsettledCountRow> = await api
+      .get(Pool)
+      .query<UnsettledCountRow>(
+        "SELECT count(*)::int AS unsettled FROM deliveries WHERE alarm_id = $1 AND status NOT IN ('SENT', 'FAILED', 'CANCELLED', 'UNCONFIRMED')",
+        [alarmId],
+      );
+    const [{ unsettled }]: ReadonlyArray<UnsettledCountRow> = result.rows;
+    return unsettled;
   };
 
   const resetRateLimiter = async (): Promise<void> => {
@@ -457,7 +472,56 @@ describe('발송 전체 흐름', () => {
     },
     120_000,
   );
-  it.todo(
-    'E2E-06 대량 알림 발송 중 / 알림을 취소한다 → 새 발송이 멈추고, 이미 나간 건은 SENT로 남으며 나머지는 CANCELLED가 된다',
-  );
+  it('E2E-06 대량 알림 발송 중 / 알림을 취소한다 → 새 발송이 멈추고, 이미 나간 건은 SENT로 남으며 나머지는 CANCELLED가 된다', async (): Promise<void> => {
+    await withMockApi(
+      { USER_COUNT: '300', RATE_LIMIT: '50' },
+      async (mockApi: MockApiContainer): Promise<void> => {
+        await resetRateLimiter();
+        const { id: alarmId }: CreatedAlarm = await dispatchedBulkAlarm();
+
+        const startedBeforeCancel: number = await runWorkers(
+          1,
+          mockApi,
+          async (): Promise<number> => {
+            await vi.waitFor(
+              async (): Promise<void> => {
+                expect(await sentDeliveryCount(alarmId)).toBeGreaterThanOrEqual(50);
+              },
+              { timeout: COMPLETION_TIMEOUT_MS, interval: 50 },
+            );
+            await spec().post(`/alarms/${alarmId}/cancel`).expectStatus(200);
+            const started: number = await startedDeliveryCount(alarmId);
+            expect(started).toBeLessThan(300);
+            await vi.waitFor(
+              async (): Promise<void> => {
+                expect(await unsettledDeliveryCount(alarmId)).toBe(0);
+              },
+              { timeout: COMPLETION_TIMEOUT_MS, interval: 200 },
+            );
+            return started;
+          },
+        );
+
+        const deliveries: ReadonlyArray<DeliveryDelivered> = await deliveriesOf(alarmId, mockApi);
+        const sent: ReadonlyArray<DeliveryDelivered> = deliveries.filter(
+          ({ status }: DeliveryDelivered): boolean => status === 'SENT',
+        );
+        const cancelled: ReadonlyArray<DeliveryDelivered> = deliveries.filter(
+          ({ status }: DeliveryDelivered): boolean => status === 'CANCELLED',
+        );
+        expect(await alarmStatus(alarmId)).toBe('CANCELLED');
+        expect(deliveries).toHaveLength(300);
+        expect(
+          deliveries.filter(
+            ({ status, mockMessages }: DeliveryDelivered): boolean =>
+              !(status === 'SENT' && mockMessages === 1) &&
+              !(status === 'CANCELLED' && mockMessages === 0),
+          ),
+        ).toEqual([]);
+        expect(sent.length).toBeGreaterThanOrEqual(50);
+        expect(sent.length).toBeLessThanOrEqual(startedBeforeCancel);
+        expect(cancelled.length).toBeGreaterThan(0);
+      },
+    );
+  }, 120_000);
 });
