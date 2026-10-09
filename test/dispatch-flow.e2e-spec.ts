@@ -14,7 +14,7 @@ import { TestDatabase } from '@/shared/database/testing/test-database';
 interface DeliveryRow {
   readonly id: string;
   readonly status: string;
-  readonly failure_reason: string;
+  readonly failureReason: string;
   readonly attempts: number;
 }
 
@@ -24,11 +24,11 @@ interface HeldRow {
 
 interface UrgentDispatch {
   readonly alarmId: string;
-  readonly bulkStartedBeforeUrgent: number;
+  readonly bulkClaimedOrSettledBeforeUrgent: number;
 }
 
-interface StartedCountRow {
-  readonly started: number;
+interface ClaimedOrSettledCountRow {
+  readonly claimedOrSettled: number;
 }
 
 interface UnsettledCountRow {
@@ -159,7 +159,7 @@ describe('발송 전체 흐름', () => {
     const result: QueryResult<DeliveryRow> = await api
       .get(Pool)
       .query<DeliveryRow>(
-        "SELECT id, status, coalesce(failure_reason, 'none') AS failure_reason, attempts FROM deliveries WHERE alarm_id = $1",
+        `SELECT id, status, coalesce(failure_reason, 'none') AS "failureReason", attempts FROM deliveries WHERE alarm_id = $1`,
         [alarmId],
       );
     return Promise.all(
@@ -167,13 +167,13 @@ describe('발송 전체 흐름', () => {
         async ({
           id,
           status,
-          failure_reason,
+          failureReason,
           attempts,
         }: DeliveryRow): Promise<DeliveryDelivered> => {
           const { messages }: MockMessages = await mockMessagesOf(mockApi, id);
           return {
             status,
-            failureReason: failure_reason,
+            failureReason,
             attempts,
             mockMessages: messages.length,
             mockSentAt: messages.map(({ sentAt }: MockMessage): number => Date.parse(sentAt)),
@@ -194,15 +194,15 @@ describe('발송 전체 흐름', () => {
     return sent;
   };
 
-  const startedDeliveryCount = async (alarmId: string): Promise<number> => {
-    const result: QueryResult<StartedCountRow> = await api
+  const claimedOrSettledDeliveryCount = async (alarmId: string): Promise<number> => {
+    const result: QueryResult<ClaimedOrSettledCountRow> = await api
       .get(Pool)
-      .query<StartedCountRow>(
-        "SELECT count(*)::int AS started FROM deliveries WHERE alarm_id = $1 AND status NOT IN ('PENDING', 'CANCELLED')",
+      .query<ClaimedOrSettledCountRow>(
+        "SELECT count(*)::int AS \"claimedOrSettled\" FROM deliveries WHERE alarm_id = $1 AND status NOT IN ('PENDING', 'CANCELLED')",
         [alarmId],
       );
-    const [{ started }]: ReadonlyArray<StartedCountRow> = result.rows;
-    return started;
+    const [{ claimedOrSettled }]: ReadonlyArray<ClaimedOrSettledCountRow> = result.rows;
+    return claimedOrSettled;
   };
 
   const unsettledDeliveryCount = async (alarmId: string): Promise<number> => {
@@ -350,7 +350,7 @@ describe('발송 전체 흐름', () => {
       async (mockApi: MockApiContainer): Promise<void> => {
         const { id: bulkAlarmId }: CreatedAlarm = await dispatchedBulkAlarm();
         await resetRateLimiter();
-        const { alarmId: urgentAlarmId, bulkStartedBeforeUrgent }: UrgentDispatch =
+        const { alarmId: urgentAlarmId, bulkClaimedOrSettledBeforeUrgent }: UrgentDispatch =
           await runWorkers(
             1,
             mockApi,
@@ -363,7 +363,7 @@ describe('발송 전체 흐름', () => {
               );
               const { id: alarmId }: CreatedAlarm = await createUrgentAlarm(URGENT_RECIPIENTS);
               await spec().post(`/alarms/${alarmId}/dispatch`).expectStatus(202);
-              const startedBulk: number = await startedDeliveryCount(bulkAlarmId);
+              const claimedOrSettledBulk: number = await claimedOrSettledDeliveryCount(bulkAlarmId);
               await vi.waitFor(
                 async (): Promise<void> => {
                   expect(await alarmStatus(alarmId)).toBe('COMPLETED');
@@ -371,7 +371,7 @@ describe('발송 전체 흐름', () => {
                 },
                 { timeout: COMPLETION_TIMEOUT_MS, interval: 500 },
               );
-              return { alarmId, bulkStartedBeforeUrgent: startedBulk };
+              return { alarmId, bulkClaimedOrSettledBeforeUrgent: claimedOrSettledBulk };
             },
             { DISPATCH_CONCURRENCY: String(DISPATCH_CONCURRENCY) },
           );
@@ -387,7 +387,7 @@ describe('발송 전체 흐름', () => {
           .filter((sentAt: number): boolean => sentAt < lastUrgentSentAt);
         expect(urgentSentAt).toHaveLength(URGENT_RECIPIENTS);
         expect(bulkSentBeforeLastUrgent.length).toBeLessThanOrEqual(
-          bulkStartedBeforeUrgent + DISPATCH_CONCURRENCY,
+          bulkClaimedOrSettledBeforeUrgent + DISPATCH_CONCURRENCY,
         );
       },
     );
@@ -479,7 +479,7 @@ describe('발송 전체 흐름', () => {
         await resetRateLimiter();
         const { id: alarmId }: CreatedAlarm = await dispatchedBulkAlarm();
 
-        const startedBeforeCancel: number = await runWorkers(
+        const claimedOrSettledAtCancel: number = await runWorkers(
           1,
           mockApi,
           async (): Promise<number> => {
@@ -490,15 +490,15 @@ describe('발송 전체 흐름', () => {
               { timeout: COMPLETION_TIMEOUT_MS, interval: 50 },
             );
             await spec().post(`/alarms/${alarmId}/cancel`).expectStatus(200);
-            const started: number = await startedDeliveryCount(alarmId);
-            expect(started).toBeLessThan(300);
+            const claimedOrSettled: number = await claimedOrSettledDeliveryCount(alarmId);
+            expect(claimedOrSettled).toBeLessThan(300);
             await vi.waitFor(
               async (): Promise<void> => {
                 expect(await unsettledDeliveryCount(alarmId)).toBe(0);
               },
               { timeout: COMPLETION_TIMEOUT_MS, interval: 200 },
             );
-            return started;
+            return claimedOrSettled;
           },
         );
 
@@ -519,7 +519,7 @@ describe('발송 전체 흐름', () => {
           ),
         ).toEqual([]);
         expect(sent.length).toBeGreaterThanOrEqual(50);
-        expect(sent.length).toBeLessThanOrEqual(startedBeforeCancel);
+        expect(sent.length).toBeLessThanOrEqual(claimedOrSettledAtCancel);
         expect(cancelled.length).toBeGreaterThan(0);
       },
     );
