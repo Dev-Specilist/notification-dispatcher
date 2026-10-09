@@ -18,11 +18,21 @@ interface DeliveryRow {
   readonly attempts: number;
 }
 
+interface UrgentDispatch {
+  readonly alarmId: string;
+  readonly dispatchedAt: number;
+}
+
+interface SentCountRow {
+  readonly sent: number;
+}
+
 interface DeliveryDelivered {
   readonly status: string;
   readonly failureReason: string;
   readonly mockMessages: number;
   readonly attempts: number;
+  readonly mockSentAt: ReadonlyArray<number>;
 }
 
 const createdAlarmSchema = z.object({ id: z.string() });
@@ -33,11 +43,17 @@ const alarmStatusSchema = z.object({ status: z.string() });
 
 type AlarmStatusView = z.infer<typeof alarmStatusSchema>;
 
-const mockMessagesSchema = z.object({ messages: z.array(z.object({ messageId: z.string() })) });
+const mockMessagesSchema = z.object({
+  messages: z.array(z.object({ messageId: z.string(), sentAt: z.iso.datetime() })),
+});
 
 type MockMessages = z.infer<typeof mockMessagesSchema>;
 
+type MockMessage = MockMessages['messages'][number];
+
 const COMPLETION_TIMEOUT_MS: number = 60_000;
+
+const ALREADY_IN_FLIGHT_TOLERANCE_MS: number = 500;
 
 const dispatchedBulkAlarm = async (): Promise<CreatedAlarm> => {
   const createdAlarm: CreatedAlarm = createdAlarmSchema.parse(
@@ -58,13 +74,32 @@ const alarmStatus = async (alarmId: string): Promise<string> => {
   return status;
 };
 
-const mockMessageCount = async (mockApi: MockApiContainer, clientRef: string): Promise<number> => {
+const mockMessagesOf = async (
+  mockApi: MockApiContainer,
+  clientRef: string,
+): Promise<MockMessages> => {
   const response: Response = await fetch(
     new URL(`/v1/messages?clientRef=${clientRef}`, mockApi.baseUrl),
   );
-  const { messages }: MockMessages = mockMessagesSchema.parse(await response.json());
-  return messages.length;
+  return mockMessagesSchema.parse(await response.json());
 };
+
+const createUrgentAlarm = async (recipientCount: number): Promise<CreatedAlarm> =>
+  createdAlarmSchema.parse(
+    await spec()
+      .post('/alarms')
+      .withJson({
+        title: '서버 점검',
+        body: '10분 뒤 점검이 시작됩니다',
+        kind: 'URGENT',
+        recipientIds: Array.from(
+          { length: recipientCount },
+          (_entry: object, index: number): string => `u_${String(index + 1).padStart(6, '0')}`,
+        ),
+      })
+      .expectStatus(201)
+      .returns('res.body'),
+  );
 
 const withMockApi = async (
   environment: Readonly<Partial<MockApiEnvironment>>,
@@ -120,22 +155,37 @@ describe('발송 전체 흐름', () => {
           status,
           failure_reason,
           attempts,
-        }: DeliveryRow): Promise<DeliveryDelivered> => ({
-          status,
-          failureReason: failure_reason,
-          attempts,
-          mockMessages: await mockMessageCount(mockApi, id),
-        }),
+        }: DeliveryRow): Promise<DeliveryDelivered> => {
+          const { messages }: MockMessages = await mockMessagesOf(mockApi, id);
+          return {
+            status,
+            failureReason: failure_reason,
+            attempts,
+            mockMessages: messages.length,
+            mockSentAt: messages.map(({ sentAt }: MockMessage): number => Date.parse(sentAt)),
+          };
+        },
       ),
     );
   };
 
-  const runWorkers = async (
+  const sentDeliveryCount = async (alarmId: string): Promise<number> => {
+    const result: QueryResult<SentCountRow> = await api
+      .get(Pool)
+      .query<SentCountRow>(
+        "SELECT count(*)::int AS sent FROM deliveries WHERE alarm_id = $1 AND status = 'SENT'",
+        [alarmId],
+      );
+    const [{ sent }]: ReadonlyArray<SentCountRow> = result.rows;
+    return sent;
+  };
+
+  const runWorkers = async <TResult>(
     workerCount: number,
     mockApi: MockApiContainer,
-    run: () => Promise<void>,
+    run: () => Promise<TResult>,
     workerEnvironment: WorkerEnvironment = {},
-  ): Promise<void> => {
+  ): Promise<TResult> => {
     const workers: Array<WorkerProcess> = [];
     try {
       for (let index: number = 0; index < workerCount; index += 1) {
@@ -148,7 +198,7 @@ describe('발송 전체 흐름', () => {
           }),
         );
       }
-      await run();
+      return await run();
     } finally {
       await Promise.all(workers.map((worker: WorkerProcess): Promise<void> => worker.kill()));
     }
@@ -244,9 +294,50 @@ describe('발송 전체 흐름', () => {
       },
     );
   }, 120_000);
-  it.todo(
-    'E2E-03 대량 알림 발송 중 / 긴급 알림이 발송 가능해진다 → 발송 가능한 긴급 Delivery가 남아 있는 동안 발송 허가를 얻은 요청은 모두 긴급 Delivery를 보낸다 (이미 시작된 대량 요청은 제외)',
-  );
+  it('E2E-03 대량 알림 발송 중 / 긴급 알림이 발송 가능해진다 → 발송 가능한 긴급 Delivery가 남아 있는 동안 발송 허가를 얻은 요청은 모두 긴급 Delivery를 보낸다 (이미 시작된 대량 요청은 제외)', async (): Promise<void> => {
+    await withMockApi(
+      { USER_COUNT: '300', RATE_LIMIT: '50' },
+      async (mockApi: MockApiContainer): Promise<void> => {
+        const { id: bulkAlarmId }: CreatedAlarm = await dispatchedBulkAlarm();
+        const { alarmId: urgentAlarmId, dispatchedAt: urgentDispatchedAt }: UrgentDispatch =
+          await runWorkers(1, mockApi, async (): Promise<UrgentDispatch> => {
+            await vi.waitFor(
+              async (): Promise<void> => {
+                expect(await sentDeliveryCount(bulkAlarmId)).toBeGreaterThanOrEqual(50);
+              },
+              { timeout: COMPLETION_TIMEOUT_MS, interval: 100 },
+            );
+            const { id: alarmId }: CreatedAlarm = await createUrgentAlarm(20);
+            const dispatchedAt: number = Date.now();
+            await spec().post(`/alarms/${alarmId}/dispatch`).expectStatus(202);
+            await vi.waitFor(
+              async (): Promise<void> => {
+                expect(await alarmStatus(alarmId)).toBe('COMPLETED');
+                expect(await alarmStatus(bulkAlarmId)).toBe('COMPLETED');
+              },
+              { timeout: COMPLETION_TIMEOUT_MS, interval: 500 },
+            );
+            return { alarmId, dispatchedAt };
+          });
+
+        const urgentSentAt: ReadonlyArray<number> = (
+          await deliveriesOf(urgentAlarmId, mockApi)
+        ).flatMap(({ mockSentAt }: DeliveryDelivered): ReadonlyArray<number> => mockSentAt);
+        const lastUrgentSentAt: number = Math.max(...urgentSentAt);
+        const bulkSentWhileUrgentWaiting: ReadonlyArray<number> = (
+          await deliveriesOf(bulkAlarmId, mockApi)
+        )
+          .flatMap(({ mockSentAt }: DeliveryDelivered): ReadonlyArray<number> => mockSentAt)
+          .filter(
+            (sentAt: number): boolean =>
+              sentAt > urgentDispatchedAt + ALREADY_IN_FLIGHT_TOLERANCE_MS &&
+              sentAt < lastUrgentSentAt,
+          );
+        expect(urgentSentAt).toHaveLength(20);
+        expect(bulkSentWhileUrgentWaiting).toEqual([]);
+      },
+    );
+  }, 120_000);
   it.todo('E2E-04 워커 3개 / 대량 알림 발송 → 429가 지속되지 않고 중복·누락 없이 끝난다');
   it.todo(
     'E2E-05 워커 3개로 발송 중 / 워커 하나를 강제로 멈춘다 → 남은 워커가 lease 만료분까지 이어받아 중복·누락 없이 끝난다',
