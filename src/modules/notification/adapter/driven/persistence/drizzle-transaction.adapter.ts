@@ -30,28 +30,18 @@ export class DrizzleTransactionAdapter implements TransactionPort {
     return this.database.transaction(
       (transaction: NotificationDatabase): Promise<TResult> =>
         work({
-          alarmReader: new DrizzleAlarmRepositoryAdapter(transaction),
-          deliveryProgress: new DrizzleDeliveryRepositoryAdapter(transaction),
+          alarmRepository: new DrizzleAlarmRepositoryAdapter(transaction),
+          deliveryRepository: new DrizzleDeliveryRepositoryAdapter(transaction),
         }),
       DrizzleTransactionAdapter.SNAPSHOT_TRANSACTION_CONFIG,
     );
   }
 
   private static repositoriesOf(transaction: NotificationDatabase): TransactionRepositories {
-    const deliveryRepository: DrizzleDeliveryRepositoryAdapter =
-      new DrizzleDeliveryRepositoryAdapter(transaction);
-    const expansionJobRepository: DrizzleExpansionJobRepositoryAdapter =
-      new DrizzleExpansionJobRepositoryAdapter(transaction);
     return {
       alarmRepository: new DrizzleAlarmRepositoryAdapter(transaction),
-      deliveryCreation: deliveryRepository,
-      dispatchQueue: deliveryRepository,
-      leaseRecoveryQueue: deliveryRepository,
-      reconcileQueue: deliveryRepository,
-      deliveryCancellation: deliveryRepository,
-      deliveryProgress: deliveryRepository,
-      expansionJobRepository,
-      expansionQueue: expansionJobRepository,
+      deliveryRepository: new DrizzleDeliveryRepositoryAdapter(transaction),
+      expansionJobRepository: new DrizzleExpansionJobRepositoryAdapter(transaction),
     };
   }
 }

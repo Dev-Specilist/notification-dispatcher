@@ -1,6 +1,5 @@
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmId, AlarmSnapshot } from '@/modules/notification/domain/alarm/alarm.type';
-import { AlarmReaderPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-reader.port';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
 import {
   AlarmFound,
@@ -13,7 +12,7 @@ import {
 } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
 import { Rollback } from '@/modules/notification/testing/in-memory/rollback.type';
 
-export class InMemoryAlarmRepositoryAdapter implements AlarmRepositoryPort, AlarmReaderPort {
+export class InMemoryAlarmRepositoryAdapter implements AlarmRepositoryPort {
   private readonly alarmsById: Map<AlarmId, AlarmFound> = new Map<AlarmId, AlarmFound>();
 
   save(alarm: Alarm): Promise<void> {

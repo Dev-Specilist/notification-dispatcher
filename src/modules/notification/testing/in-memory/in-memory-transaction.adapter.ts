@@ -27,7 +27,7 @@ export class InMemoryTransactionAdapter implements TransactionPort {
   readSnapshot<TResult>(work: SnapshotWork<TResult>): Promise<TResult> {
     const { alarmRepository, deliveryRepository }: InMemoryRepositories = this.repositories;
     return this.run((): Promise<TResult> =>
-      work({ alarmReader: alarmRepository, deliveryProgress: deliveryRepository }),
+      work({ alarmRepository: alarmRepository, deliveryRepository: deliveryRepository }),
     );
   }
 
@@ -40,17 +40,7 @@ export class InMemoryTransactionAdapter implements TransactionPort {
       expansionJobRepository.checkpoint(),
     ];
     try {
-      return await work({
-        alarmRepository,
-        deliveryCreation: deliveryRepository,
-        dispatchQueue: deliveryRepository,
-        leaseRecoveryQueue: deliveryRepository,
-        reconcileQueue: deliveryRepository,
-        deliveryCancellation: deliveryRepository,
-        deliveryProgress: deliveryRepository,
-        expansionJobRepository,
-        expansionQueue: expansionJobRepository,
-      });
+      return await work({ alarmRepository, deliveryRepository, expansionJobRepository });
     } catch (error) {
       rollbacks.forEach((rollback: Rollback): void => rollback());
       throw error;

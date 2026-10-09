@@ -72,8 +72,8 @@ export class CompleteSettledAlarmsService implements CompleteSettledAlarmsUseCas
 
   private dispatchingPage(start: Readonly<AlarmPageStart>): Promise<AlarmPage> {
     return this.transaction.readSnapshot(
-      ({ alarmReader }: SnapshotRepositories): Promise<AlarmPage> =>
-        alarmReader.findPage({
+      ({ alarmRepository }: SnapshotRepositories): Promise<AlarmPage> =>
+        alarmRepository.findPage({
           status: { kind: 'exactly', value: 'DISPATCHING' },
           alarmKind: { kind: 'any' },
           start,

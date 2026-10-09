@@ -2,7 +2,6 @@ import { eq, sql } from 'drizzle-orm';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
 import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.port';
-import { ExpansionQueuePort } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-queue.port';
 import {
   ExpansionClaim,
   ExpansionJobLookup,
@@ -19,9 +18,7 @@ interface UpdatedAlarmId {
   readonly alarmId: string;
 }
 
-export class DrizzleExpansionJobRepositoryAdapter
-  implements ExpansionJobRepositoryPort, ExpansionQueuePort
-{
+export class DrizzleExpansionJobRepositoryAdapter implements ExpansionJobRepositoryPort {
   constructor(private readonly database: NotificationDatabase) {}
 
   async enqueue(alarmId: AlarmId, now: Readonly<Date>): Promise<void> {

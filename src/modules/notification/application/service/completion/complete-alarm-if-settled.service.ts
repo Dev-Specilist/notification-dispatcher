@@ -11,10 +11,19 @@ import { ClockPort } from '@/modules/notification/application/port/driven/for-te
 import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.port';
 import { ExpansionJobLookup } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import { AlarmCommand } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-command.type';
 import { CompleteAlarmResult } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
 import { CompleteAlarmIfSettledUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-alarm-if-settled.use-case';
+import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
+import { DeliveryRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.port';
+
+type ExpansionJobReader = Pick<ExpansionJobRepositoryPort, 'findByAlarmId'>;
+
+interface CompleteAlarmIfSettledRepositories {
+  readonly alarmRepository: Pick<AlarmRepositoryPort, 'findByIdForUpdate' | 'save'>;
+  readonly deliveryRepository: Pick<DeliveryRepositoryPort, 'countUnsettled'>;
+  readonly expansionJobRepository: ExpansionJobReader;
+}
 
 export class CompleteAlarmIfSettledService implements CompleteAlarmIfSettledUseCase {
   constructor(
@@ -29,14 +38,14 @@ export class CompleteAlarmIfSettledService implements CompleteAlarmIfSettledUseC
     return this.transaction.run(
       async ({
         alarmRepository,
-        deliveryProgress,
+        deliveryRepository,
         expansionJobRepository,
-      }: TransactionRepositories): Promise<CompleteAlarmResult> => {
+      }: CompleteAlarmIfSettledRepositories): Promise<CompleteAlarmResult> => {
         const lookup: AlarmLookup = await alarmRepository.findByIdForUpdate(alarmId);
         if (lookup.kind === 'missing') {
           return { kind: 'not-found', error: { code: 'ALARM_NOT_FOUND', alarmId } };
         }
-        const unsettledDeliveries: DeliveryCount = await deliveryProgress.countUnsettled(alarmId);
+        const unsettledDeliveries: DeliveryCount = await deliveryRepository.countUnsettled(alarmId);
         const evidence: CompletionEvidence = {
           expansionCompleted: await CompleteAlarmIfSettledService.isExpansionCompleted(
             lookup.alarm,
@@ -61,7 +70,7 @@ export class CompleteAlarmIfSettledService implements CompleteAlarmIfSettledUseC
 
   private static async isExpansionCompleted(
     alarm: Alarm,
-    expansionJobRepository: ExpansionJobRepositoryPort,
+    expansionJobRepository: ExpansionJobReader,
   ): Promise<boolean> {
     const { id, kind }: AlarmSnapshot = alarm.snapshot();
     if (kind === 'URGENT') {

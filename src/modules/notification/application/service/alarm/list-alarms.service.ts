@@ -48,8 +48,8 @@ export class ListAlarmsService implements ListAlarmsUseCase {
       return { kind: 'rejected', error: { code: 'INVALID_CURSOR' } };
     }
     const alarmPage: AlarmPage = await this.transaction.readSnapshot(
-      ({ alarmReader }: SnapshotRepositories): Promise<AlarmPage> =>
-        alarmReader.findPage({ status, alarmKind, start: pageStartCheck.start, size: limit }),
+      ({ alarmRepository }: SnapshotRepositories): Promise<AlarmPage> =>
+        alarmRepository.findPage({ status, alarmKind, start: pageStartCheck.start, size: limit }),
     );
     return {
       kind: 'page',

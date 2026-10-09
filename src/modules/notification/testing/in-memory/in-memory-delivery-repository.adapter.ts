@@ -15,23 +15,10 @@ import {
   LeasedSave,
   ReconciledSave,
 } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.type';
-import { DeliveryCreationPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-creation.port';
-import { DispatchQueuePort } from '@/modules/notification/application/port/driven/for-storing-deliveries/dispatch-queue.port';
-import { LeaseRecoveryQueuePort } from '@/modules/notification/application/port/driven/for-storing-deliveries/lease-recovery-queue.port';
-import { ReconcileQueuePort } from '@/modules/notification/application/port/driven/for-storing-deliveries/reconcile-queue.port';
-import { DeliveryCancellationPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-cancellation.port';
-import { DeliveryProgressPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-progress.port';
+import { DeliveryRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.port';
 import { Rollback } from '@/modules/notification/testing/in-memory/rollback.type';
 
-export class InMemoryDeliveryRepositoryAdapter
-  implements
-    DeliveryCreationPort,
-    DispatchQueuePort,
-    LeaseRecoveryQueuePort,
-    ReconcileQueuePort,
-    DeliveryCancellationPort,
-    DeliveryProgressPort
-{
+export class InMemoryDeliveryRepositoryAdapter implements DeliveryRepositoryPort {
   private readonly deliveriesById: Map<DeliveryId, Delivery> = new Map<DeliveryId, Delivery>();
 
   private readonly deliveryIdsByRecipient: Map<string, DeliveryId> = new Map<string, DeliveryId>();

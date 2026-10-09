@@ -112,8 +112,11 @@ describe('DrizzleExpansionJobRepositoryAdapter', () => {
     const release: Gate = createGate();
     const holder: Promise<ExpansionClaim> = new DrizzleTransactionAdapter(
       NotificationDatabaseFactory.create(testDatabase.pool),
-    ).run(async ({ expansionQueue }: TransactionRepositories): Promise<ExpansionClaim> => {
-      const heldClaim: ExpansionClaim = await expansionQueue.claimNext(claimedAt, leaseUntil);
+    ).run(async ({ expansionJobRepository }: TransactionRepositories): Promise<ExpansionClaim> => {
+      const heldClaim: ExpansionClaim = await expansionJobRepository.claimNext(
+        claimedAt,
+        leaseUntil,
+      );
       holding.open();
       await release.opened;
       return heldClaim;
@@ -151,8 +154,8 @@ describe('DrizzleExpansionJobRepositoryAdapter', () => {
 
     await expect(
       new DrizzleTransactionAdapter(database).run(
-        async ({ expansionQueue }: TransactionRepositories): Promise<void> => {
-          await expansionQueue.claimNext(claimedAt, leaseUntil);
+        async ({ expansionJobRepository }: TransactionRepositories): Promise<void> => {
+          await expansionJobRepository.claimNext(claimedAt, leaseUntil);
           throw new Error('expansion failed after claim');
         },
       ),

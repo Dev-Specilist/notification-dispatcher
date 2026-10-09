@@ -113,16 +113,19 @@ describe('InMemoryTransactionAdapter', () => {
     const savedAlarmId: AlarmId = alarmId(FIRST_ID);
 
     const savingAlarmWithDelivery: Promise<void> = transaction.run(
-      async ({ alarmRepository, deliveryCreation }: TransactionRepositories): Promise<void> => {
+      async ({ alarmRepository, deliveryRepository }: TransactionRepositories): Promise<void> => {
         await alarmRepository.save(bulkAlarm(FIRST_ID));
         await Promise.resolve();
-        await deliveryCreation.saveAll([pendingDelivery(1, 'u_000001')]);
+        await deliveryRepository.saveAll([pendingDelivery(1, 'u_000001')]);
       },
     );
     const snapshotReading: Promise<SnapshotReading> = transaction.readSnapshot(
-      async ({ alarmReader, deliveryProgress }: SnapshotRepositories): Promise<SnapshotReading> => [
-        (await alarmReader.findById(savedAlarmId)).kind,
-        (await deliveryProgress.countByStatus(savedAlarmId)).PENDING,
+      async ({
+        alarmRepository,
+        deliveryRepository,
+      }: SnapshotRepositories): Promise<SnapshotReading> => [
+        (await alarmRepository.findById(savedAlarmId)).kind,
+        (await deliveryRepository.countByStatus(savedAlarmId)).PENDING,
       ],
     );
     await savingAlarmWithDelivery;
@@ -172,10 +175,14 @@ describe('InMemoryTransactionAdapter', () => {
     await expansionJobRepository.enqueue(alarmId(FIRST_ID), new Date(ENQUEUED_ISO));
 
     await expect(
-      transaction.run(async ({ expansionQueue }: TransactionRepositories): Promise<void> => {
-        await expansionQueue.claimNext(claimedAt, leaseUntil);
-        throw new Error('expansion failed after claim');
-      }),
+      transaction.run(
+        async ({
+          expansionJobRepository: expansionJobRepositoryInTransaction,
+        }: TransactionRepositories): Promise<void> => {
+          await expansionJobRepositoryInTransaction.claimNext(claimedAt, leaseUntil);
+          throw new Error('expansion failed after claim');
+        },
+      ),
     ).rejects.toThrow('expansion failed after claim');
 
     expect(await expansionJobRepository.claimNext(claimedAt, leaseUntil)).toEqual({

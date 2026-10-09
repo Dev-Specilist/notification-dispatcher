@@ -334,11 +334,11 @@ describe('DrizzleTransactionAdapter', () => {
     const alarmId: AlarmId = await dispatchedUrgentAlarm();
 
     const [beforeCancel, afterCancel]: CancelCounts = await transaction.readSnapshot(
-      async ({ deliveryProgress }: SnapshotRepositories): Promise<CancelCounts> => {
+      async ({ deliveryRepository }: SnapshotRepositories): Promise<CancelCounts> => {
         const countedBeforeCancel: DeliveryStatusCounts =
-          await deliveryProgress.countByStatus(alarmId);
+          await deliveryRepository.countByStatus(alarmId);
         await new CancelAlarmService(transaction, new FixedClock()).execute({ alarmId });
-        return [countedBeforeCancel, await deliveryProgress.countByStatus(alarmId)];
+        return [countedBeforeCancel, await deliveryRepository.countByStatus(alarmId)];
       },
     );
 
@@ -367,9 +367,9 @@ describe('DrizzleTransactionAdapter', () => {
 
     await expect(
       transaction.run(
-        async ({ alarmRepository, deliveryCreation }: TransactionRepositories): Promise<void> => {
+        async ({ alarmRepository, deliveryRepository }: TransactionRepositories): Promise<void> => {
           await alarmRepository.save(dispatchedTransition.alarm);
-          await deliveryCreation.insertMissing(
+          await deliveryRepository.insertMissing(
             recipientIds(2).map((recipientId: RecipientId): Delivery =>
               Delivery.create(
                 {
@@ -483,8 +483,8 @@ describe('DrizzleTransactionAdapter', () => {
     }
     await save(dispatchedTransition.alarm);
     const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
-    await transaction.run(({ deliveryCreation }: TransactionRepositories): Promise<void> =>
-      deliveryCreation.insertMissing(
+    await transaction.run(({ deliveryRepository }: TransactionRepositories): Promise<void> =>
+      deliveryRepository.insertMissing(
         recipientIds(100).map((recipientId: RecipientId): Delivery =>
           Delivery.create(
             {

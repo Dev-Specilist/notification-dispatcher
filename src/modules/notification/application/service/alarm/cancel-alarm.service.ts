@@ -3,11 +3,17 @@ import { AlarmTransition, AlarmTransitioned } from '@/modules/notification/domai
 import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import { AlarmCommand } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-command.type';
 import { CancelAlarmResult } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
 import { CancelAlarmUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/cancel-alarm.use-case';
 import { AlarmViewMapper } from '@/modules/notification/application/service/alarm/view/alarm-view.mapper';
+import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
+import { DeliveryRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.port';
+
+interface CancelAlarmRepositories {
+  readonly alarmRepository: Pick<AlarmRepositoryPort, 'findByIdForUpdate' | 'save'>;
+  readonly deliveryRepository: Pick<DeliveryRepositoryPort, 'cancelWaiting'>;
+}
 
 export class CancelAlarmService implements CancelAlarmUseCase {
   constructor(
@@ -23,8 +29,8 @@ export class CancelAlarmService implements CancelAlarmUseCase {
     return this.transaction.run(
       async ({
         alarmRepository,
-        deliveryCancellation,
-      }: TransactionRepositories): Promise<CancelAlarmResult> => {
+        deliveryRepository,
+      }: CancelAlarmRepositories): Promise<CancelAlarmResult> => {
         const lookup: AlarmLookup = await alarmRepository.findByIdForUpdate(alarmId);
         if (lookup.kind === 'missing') {
           return { kind: 'not-found', error: { code: 'ALARM_NOT_FOUND', alarmId } };
@@ -35,7 +41,7 @@ export class CancelAlarmService implements CancelAlarmUseCase {
         }
         const { alarm }: AlarmTransitioned = transition;
         await alarmRepository.save(alarm);
-        await deliveryCancellation.cancelWaiting(alarmId, now);
+        await deliveryRepository.cancelWaiting(alarmId, now);
         return { kind: 'cancelled', alarm: AlarmViewMapper.toView(alarm) };
       },
     );

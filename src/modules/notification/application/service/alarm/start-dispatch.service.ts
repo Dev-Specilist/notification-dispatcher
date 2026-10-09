@@ -10,11 +10,19 @@ import { AlarmLookup } from '@/modules/notification/application/port/driven/for-
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
 import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/delivery-id-generator.port';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import { AlarmCommand } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-command.type';
 import { StartDispatchResult } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
 import { StartDispatchUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/start-dispatch.use-case';
 import { AlarmViewMapper } from '@/modules/notification/application/service/alarm/view/alarm-view.mapper';
+import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
+import { DeliveryRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.port';
+import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.port';
+
+interface StartDispatchRepositories {
+  readonly alarmRepository: Pick<AlarmRepositoryPort, 'findByIdForUpdate' | 'save'>;
+  readonly deliveryRepository: Pick<DeliveryRepositoryPort, 'saveAll'>;
+  readonly expansionJobRepository: Pick<ExpansionJobRepositoryPort, 'enqueue'>;
+}
 
 export class StartDispatchService implements StartDispatchUseCase {
   constructor(
@@ -31,9 +39,9 @@ export class StartDispatchService implements StartDispatchUseCase {
     return this.transaction.run(
       async ({
         alarmRepository,
-        deliveryCreation,
+        deliveryRepository,
         expansionJobRepository,
-      }: TransactionRepositories): Promise<StartDispatchResult> => {
+      }: StartDispatchRepositories): Promise<StartDispatchResult> => {
         const lookup: AlarmLookup = await alarmRepository.findByIdForUpdate(alarmId);
         if (lookup.kind === 'missing') {
           return { kind: 'not-found', error: { code: 'ALARM_NOT_FOUND', alarmId } };
@@ -46,7 +54,7 @@ export class StartDispatchService implements StartDispatchUseCase {
         await alarmRepository.save(alarm);
         const snapshot: AlarmSnapshot = alarm.snapshot();
         if (snapshot.kind === 'URGENT') {
-          await deliveryCreation.saveAll(
+          await deliveryRepository.saveAll(
             snapshot.target.recipientIds.map((recipientId: RecipientId): Delivery =>
               Delivery.create(
                 {

@@ -11,9 +11,13 @@ import {
 } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.type';
 import { LeaseRecoverySettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/lease-recovery-settings.port';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import { RecoveryAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/recover-expired-lease.type';
 import { RecoverExpiredLeaseUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/recover-expired-lease.use-case';
+import { DeliveryRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.port';
+
+interface RecoverExpiredLeaseRepositories {
+  readonly deliveryRepository: Pick<DeliveryRepositoryPort, 'findNextExpiredLease' | 'saveLeased'>;
+}
 
 export class RecoverExpiredLeaseService implements RecoverExpiredLeaseUseCase {
   constructor(
@@ -24,9 +28,9 @@ export class RecoverExpiredLeaseService implements RecoverExpiredLeaseUseCase {
 
   execute(): Promise<RecoveryAttempt> {
     return this.transaction.run(
-      async ({ leaseRecoveryQueue }: TransactionRepositories): Promise<RecoveryAttempt> => {
+      async ({ deliveryRepository }: RecoverExpiredLeaseRepositories): Promise<RecoveryAttempt> => {
         const now: Date = this.clock.now();
-        const candidate: DeliveryCandidate = await leaseRecoveryQueue.findNextExpiredLease(now);
+        const candidate: DeliveryCandidate = await deliveryRepository.findNextExpiredLease(now);
         if (candidate.kind === 'none') {
           return { kind: 'idle' };
         }
@@ -35,7 +39,7 @@ export class RecoverExpiredLeaseService implements RecoverExpiredLeaseUseCase {
         const recovered: Delivery = RecoverExpiredLeaseService.transitioned(
           expired.recoverExpiredLease(now, this.settings.reconcileDelayMs),
         );
-        const saved: LeasedSave = await leaseRecoveryQueue.saveLeased(
+        const saved: LeasedSave = await deliveryRepository.saveLeased(
           recovered,
           RecoverExpiredLeaseService.leaseTokenOf(expired),
         );

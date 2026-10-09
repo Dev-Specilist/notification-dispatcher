@@ -10,7 +10,6 @@ import {
   AlarmSnapshot,
   AlarmTransition,
 } from '@/modules/notification/domain/alarm/alarm.type';
-import { AlarmReaderPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-reader.port';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
 import { AlarmRepositoryPredicates } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.predicate';
 import {
@@ -22,7 +21,7 @@ import {
   PageSize,
 } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
 
-type ContractAlarmRepository = AlarmRepositoryPort & AlarmReaderPort;
+type ContractAlarmRepository = AlarmRepositoryPort;
 
 type AlarmRepositoryFactory = () => Promise<ContractAlarmRepository>;
 

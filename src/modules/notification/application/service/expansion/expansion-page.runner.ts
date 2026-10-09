@@ -14,12 +14,22 @@ import {
   RecipientPage,
 } from '@/modules/notification/application/port/driven/for-fetching-recipients/recipient-directory.type';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import {
   ExpansionCancelled,
   ExpansionResult,
   ExpansionStep,
 } from '@/modules/notification/application/service/expansion/expansion-page.type';
+import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
+import { DeliveryRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.port';
+
+interface ExpansionPageRepositories {
+  readonly alarmRepository: Pick<AlarmRepositoryPort, 'findById' | 'findByIdForUpdate'>;
+  readonly deliveryRepository: Pick<DeliveryRepositoryPort, 'insertMissing'>;
+  readonly expansionJobRepository: Pick<
+    ExpansionJobRepositoryPort,
+    'findByAlarmId' | 'findByAlarmIdForUpdate' | 'recordProgress'
+  >;
+}
 
 interface PageToFetch {
   readonly kind: 'fetch';
@@ -41,7 +51,7 @@ export class ExpansionPageRunner {
       async ({
         alarmRepository,
         expansionJobRepository,
-      }: TransactionRepositories): Promise<ExpansionStart> => {
+      }: ExpansionPageRepositories): Promise<ExpansionStart> => {
         const lookup: ExpansionJobLookup = await expansionJobRepository.findByAlarmId(alarmId);
         if (lookup.kind === 'missing') {
           return { kind: 'not-found', alarmId };
@@ -75,9 +85,9 @@ export class ExpansionPageRunner {
     return this.transaction.run(
       async ({
         alarmRepository,
-        deliveryCreation,
+        deliveryRepository,
         expansionJobRepository,
-      }: TransactionRepositories): Promise<ExpansionStep> => {
+      }: ExpansionPageRepositories): Promise<ExpansionStep> => {
         const lockedJob: ExpansionJobLookup =
           await expansionJobRepository.findByAlarmIdForUpdate(alarmId);
         if (!ExpansionPageRunner.isStillAt(lockedJob, fetchedWith)) {
@@ -88,7 +98,7 @@ export class ExpansionPageRunner {
         ) {
           return this.stop(expansionJobRepository, alarmId);
         }
-        await deliveryCreation.insertMissing(
+        await deliveryRepository.insertMissing(
           recipientIds.map((recipientId: RecipientId): Delivery =>
             Delivery.create(
               { id: this.deliveryIdGenerator.deliveryId(), alarmId, recipientId, priority: 'BULK' },
@@ -110,7 +120,7 @@ export class ExpansionPageRunner {
   }
 
   private async stop(
-    expansionJobRepository: ExpansionJobRepositoryPort,
+    expansionJobRepository: Pick<ExpansionJobRepositoryPort, 'recordProgress'>,
     alarmId: AlarmId,
   ): Promise<ExpansionCancelled> {
     await expansionJobRepository.recordProgress(alarmId, {

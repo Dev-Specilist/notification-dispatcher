@@ -22,9 +22,18 @@ import { SendOutcome } from '@/modules/notification/application/port/driven/for-
 import { SendPermitPort } from '@/modules/notification/application/port/driven/for-permitting-sends/send-permit.port';
 import { SendPermit } from '@/modules/notification/application/port/driven/for-permitting-sends/send-permit.type';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import { SendAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/send-next-delivery.type';
 import { SendNextDeliveryUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/send-next-delivery.use-case';
+import { DeliveryRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.port';
+import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
+
+interface SendNextDeliveryRepositories {
+  readonly alarmRepository: Pick<AlarmRepositoryPort, 'findById'>;
+  readonly deliveryRepository: Pick<
+    DeliveryRepositoryPort,
+    'findNextClaimable' | 'saveAll' | 'saveLeased'
+  >;
+}
 
 interface RequestReady {
   readonly kind: 'ready';
@@ -70,9 +79,12 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
 
   private claimNext(token: LeaseToken): Promise<ClaimStep> {
     return this.transaction.run(
-      async ({ alarmRepository, dispatchQueue }: TransactionRepositories): Promise<ClaimStep> => {
+      async ({
+        alarmRepository,
+        deliveryRepository,
+      }: SendNextDeliveryRepositories): Promise<ClaimStep> => {
         const lookupAt: Date = this.clock.now();
-        const next: DeliveryCandidate = await dispatchQueue.findNextClaimable(lookupAt);
+        const next: DeliveryCandidate = await deliveryRepository.findNextClaimable(lookupAt);
         if (next.kind === 'none') {
           return { kind: 'idle' };
         }
@@ -81,7 +93,7 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
         const alarm: AlarmLookup = await alarmRepository.findById(alarmId);
         const claimedAt: Date = this.clock.now();
         if (!SendNextDeliveryService.isActive(alarm)) {
-          await dispatchQueue.saveAll([
+          await deliveryRepository.saveAll([
             SendNextDeliveryService.transitioned(delivery.cancel(claimedAt)),
           ]);
           return { kind: 'skipped', deliveryId: id };
@@ -95,11 +107,11 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
           this.settings.maxRequestMs,
         );
         if (started.kind === 'released') {
-          await dispatchQueue.saveAll([started.delivery]);
+          await deliveryRepository.saveAll([started.delivery]);
           return { kind: 'released', deliveryId: id };
         }
         const inFlight: Delivery = SendNextDeliveryService.transitioned(started);
-        await dispatchQueue.saveAll([inFlight]);
+        await deliveryRepository.saveAll([inFlight]);
         return { kind: 'ready', delivery: inFlight, body: alarm.alarm.snapshot().body };
       },
     );
@@ -119,14 +131,17 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
     );
     const { id, alarmId }: DeliverySnapshot = delivery.snapshot();
     return this.transaction.run(
-      async ({ alarmRepository, dispatchQueue }: TransactionRepositories): Promise<SendAttempt> => {
+      async ({
+        alarmRepository,
+        deliveryRepository,
+      }: SendNextDeliveryRepositories): Promise<SendAttempt> => {
         const alarm: AlarmLookup = await alarmRepository.findById(alarmId);
         const recorded: Delivery =
           !SendNextDeliveryService.isActive(alarm) &&
           settled.snapshot().state.status === 'RETRY_WAIT'
             ? SendNextDeliveryService.transitioned(settled.cancel(now))
             : settled;
-        const saved: LeasedSave = await dispatchQueue.saveLeased(recorded, token);
+        const saved: LeasedSave = await deliveryRepository.saveLeased(recorded, token);
         return saved.kind === 'saved'
           ? { kind: 'recorded', deliveryId: id, outcome: outcome.kind }
           : { kind: 'lease-lost', deliveryId: id };

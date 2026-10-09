@@ -1,6 +1,5 @@
 import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
 import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.port';
-import { ExpansionQueuePort } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-queue.port';
 import {
   ExpansionClaim,
   ExpansionJob,
@@ -13,9 +12,7 @@ import { Rollback } from '@/modules/notification/testing/in-memory/rollback.type
 
 type LeaseEntry = [leasedAlarmId: AlarmId, leaseExpiresAt: Date];
 
-export class InMemoryExpansionJobRepositoryAdapter
-  implements ExpansionJobRepositoryPort, ExpansionQueuePort
-{
+export class InMemoryExpansionJobRepositoryAdapter implements ExpansionJobRepositoryPort {
   private readonly jobsByAlarmId: Map<AlarmId, ExpansionJobFound> = new Map<
     AlarmId,
     ExpansionJobFound

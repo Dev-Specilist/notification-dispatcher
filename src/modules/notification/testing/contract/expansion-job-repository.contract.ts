@@ -5,14 +5,13 @@ import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predi
 import { AlarmCreation, AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
 import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.port';
-import { ExpansionQueuePort } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-queue.port';
 import {
   ExpansionClaim,
   ExpansionJobLookup,
   ExpansionProgress,
 } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
 
-type ContractExpansionJobRepository = ExpansionJobRepositoryPort & ExpansionQueuePort;
+type ContractExpansionJobRepository = ExpansionJobRepositoryPort;
 
 interface ContractRepositories {
   readonly alarmRepository: AlarmRepositoryPort;
@@ -285,11 +284,11 @@ export class ExpansionJobRepositoryContract {
   }
 
   private static claimAt(
-    expansionQueue: ExpansionQueuePort,
+    expansionJobRepository: ExpansionJobRepositoryPort,
     claimedIso: string,
   ): Promise<ExpansionClaim> {
     const claimedAt: Date = new Date(claimedIso);
-    return expansionQueue.claimNext(claimedAt, new Date(claimedAt.getTime() + LEASE_MS));
+    return expansionJobRepository.claimNext(claimedAt, new Date(claimedAt.getTime() + LEASE_MS));
   }
 
   private static async scenario(createRepositories: RepositoriesFactory): Promise<Scenario> {

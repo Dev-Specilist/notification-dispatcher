@@ -18,9 +18,18 @@ import { MessageLookupPort } from '@/modules/notification/application/port/drive
 import { MessageLookupResult } from '@/modules/notification/application/port/driven/for-looking-up-messages/message-lookup.type';
 import { ReconcileSettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/reconcile-settings.port';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import { ReconcileAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/reconcile-next-delivery.type';
 import { ReconcileNextDeliveryUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/reconcile-next-delivery.use-case';
+import { DeliveryRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.port';
+import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
+
+interface ReconcileNextDeliveryRepositories {
+  readonly alarmRepository: Pick<AlarmRepositoryPort, 'findById'>;
+  readonly deliveryRepository: Pick<
+    DeliveryRepositoryPort,
+    'findNextReconcilable' | 'saveReconciled'
+  >;
+}
 
 export class ReconcileNextDeliveryService implements ReconcileNextDeliveryUseCase {
   constructor(
@@ -33,8 +42,8 @@ export class ReconcileNextDeliveryService implements ReconcileNextDeliveryUseCas
 
   async execute(): Promise<ReconcileAttempt> {
     const candidate: DeliveryCandidate = await this.transaction.run(
-      ({ reconcileQueue }: TransactionRepositories): Promise<DeliveryCandidate> =>
-        reconcileQueue.findNextReconcilable(this.clock.now()),
+      ({ deliveryRepository }: ReconcileNextDeliveryRepositories): Promise<DeliveryCandidate> =>
+        deliveryRepository.findNextReconcilable(this.clock.now()),
     );
     if (candidate.kind === 'none') {
       return { kind: 'idle' };
@@ -50,13 +59,13 @@ export class ReconcileNextDeliveryService implements ReconcileNextDeliveryUseCas
     return this.transaction.run(
       async ({
         alarmRepository,
-        reconcileQueue,
-      }: TransactionRepositories): Promise<ReconcileAttempt> => {
+        deliveryRepository,
+      }: ReconcileNextDeliveryRepositories): Promise<ReconcileAttempt> => {
         const alarm: AlarmLookup = await alarmRepository.findById(alarmId);
         const reconciled: Delivery = ReconcileNextDeliveryService.transitioned(
           this.decide(delivery, lookup, alarm, this.clock.now()),
         );
-        const saved: ReconciledSave = await reconcileQueue.saveReconciled(reconciled, delivery);
+        const saved: ReconciledSave = await deliveryRepository.saveReconciled(reconciled, delivery);
         return saved.kind === 'saved'
           ? { kind: 'reconciled', deliveryId: id, status: reconciled.snapshot().state.status }
           : { kind: 'superseded', deliveryId: id };

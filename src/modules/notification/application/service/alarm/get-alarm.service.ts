@@ -24,15 +24,15 @@ export class GetAlarmService implements GetAlarmUseCase {
   }
 
   private static async readAlarmWithProgress(
-    { alarmReader, deliveryProgress }: SnapshotRepositories,
+    { alarmRepository, deliveryRepository }: SnapshotRepositories,
     alarmId: AlarmId,
   ): Promise<AlarmResult> {
-    const lookup: AlarmLookup = await alarmReader.findById(alarmId);
+    const lookup: AlarmLookup = await alarmRepository.findById(alarmId);
     if (lookup.kind === 'missing') {
       return { kind: 'not-found', error: { code: 'ALARM_NOT_FOUND', alarmId } };
     }
     const deliveryStatusCounts: DeliveryStatusCounts =
-      await deliveryProgress.countByStatus(alarmId);
+      await deliveryRepository.countByStatus(alarmId);
     return {
       kind: 'found',
       alarm: AlarmViewMapper.toView(lookup.alarm),

@@ -4,11 +4,15 @@ import { ExpansionClaim } from '@/modules/notification/application/port/driven/f
 import { ExpansionSettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/expansion-settings.port';
 import { RecipientDirectoryPort } from '@/modules/notification/application/port/driven/for-fetching-recipients/recipient-directory.port';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import { ExpansionPageAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/expand-next-page.type';
 import { ExpandNextPageUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/expand-next-page.use-case';
 import { ExpansionPageRunner } from '@/modules/notification/application/service/expansion/expansion-page.runner';
 import { ExpansionStep } from '@/modules/notification/application/service/expansion/expansion-page.type';
+import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.port';
+
+interface ExpandNextPageRepositories {
+  readonly expansionJobRepository: Pick<ExpansionJobRepositoryPort, 'claimNext'>;
+}
 
 export class ExpandNextPageService implements ExpandNextPageUseCase {
   private readonly pageRunner: ExpansionPageRunner;
@@ -32,8 +36,8 @@ export class ExpandNextPageService implements ExpandNextPageUseCase {
     const claimedAt: Date = this.clock.now();
     const leaseUntil: Date = new Date(claimedAt.getTime() + this.expansionSettings.leaseMs);
     const claim: ExpansionClaim = await this.transaction.run(
-      ({ expansionQueue }: TransactionRepositories): Promise<ExpansionClaim> =>
-        expansionQueue.claimNext(claimedAt, leaseUntil),
+      ({ expansionJobRepository }: ExpandNextPageRepositories): Promise<ExpansionClaim> =>
+        expansionJobRepository.claimNext(claimedAt, leaseUntil),
     );
     if (claim.kind === 'none') {
       return { kind: 'idle' };

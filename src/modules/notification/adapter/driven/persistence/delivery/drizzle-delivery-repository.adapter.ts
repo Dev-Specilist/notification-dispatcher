@@ -10,12 +10,7 @@ import {
   LeaseToken,
 } from '@/modules/notification/domain/delivery/delivery.type';
 import { DeliveryStatusCountsFactory } from '@/modules/notification/domain/delivery/delivery-status-counts.factory';
-import { DeliveryCreationPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-creation.port';
-import { DispatchQueuePort } from '@/modules/notification/application/port/driven/for-storing-deliveries/dispatch-queue.port';
-import { LeaseRecoveryQueuePort } from '@/modules/notification/application/port/driven/for-storing-deliveries/lease-recovery-queue.port';
-import { ReconcileQueuePort } from '@/modules/notification/application/port/driven/for-storing-deliveries/reconcile-queue.port';
-import { DeliveryCancellationPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-cancellation.port';
-import { DeliveryProgressPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-progress.port';
+import { DeliveryRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.port';
 import {
   DeliveryCandidate,
   LeasedSave,
@@ -38,15 +33,7 @@ interface CountRow {
   readonly total: number;
 }
 
-export class DrizzleDeliveryRepositoryAdapter
-  implements
-    DeliveryCreationPort,
-    DispatchQueuePort,
-    LeaseRecoveryQueuePort,
-    ReconcileQueuePort,
-    DeliveryCancellationPort,
-    DeliveryProgressPort
-{
+export class DrizzleDeliveryRepositoryAdapter implements DeliveryRepositoryPort {
   private static readonly SETTLED_STATUSES: ReadonlyArray<DeliveryRow['status']> = [
     'SENT',
     'FAILED',
