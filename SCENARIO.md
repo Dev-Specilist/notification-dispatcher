@@ -9,7 +9,7 @@
 | `ALM` | 알림 도메인 규칙 | `src/modules/notification/domain/alarm/*.spec.ts` |
 | `DLV` | 수신자별 발송(Delivery) 도메인 규칙 | `src/modules/notification/domain/delivery/*.spec.ts` |
 | `UC` | 유스케이스 | `src/modules/notification/application/service/<개념>/*.spec.ts` (포트는 `testing/in-memory` fake) |
-| `CFG` | 종료 타이머 설정 | `src/shared/config/env.schema.spec.ts` |
+| `CFG` | 환경 설정 검증 | `src/shared/config/env.schema.spec.ts` |
 | `WRK` | 워커 실행 · 종료 | `src/modules/notification/adapter/driving/worker/*.spec.ts` |
 | `DB` | 저장소 · 동시성 (Testcontainers PostgreSQL) | `src/modules/notification/adapter/driven/persistence/**/*.int-spec.ts` · `src/modules/notification/testing/contract/*.contract.ts` |
 | `EXT` | 외부 API adapter (Testcontainers mock 서버) | `src/modules/notification/adapter/driven/mock-api/**/*.int-spec.ts` |
@@ -133,13 +133,15 @@ Delivery
 | UC-21 | 발송 허가를 기다리는 사이 워커 종료가 요청됐다 | 발송 유스케이스 | 허가를 얻어도 새 Delivery를 claim하지 않고 멈춘다 (이미 시작한 요청의 결과 저장은 계속한다) |
 | UC-22 | 결과 불명 Delivery 여러 건 | 두 워커가 동시에 reconcile한다 | 한 워커가 조회하는 동안 다른 워커는 같은 건을 고르지 않고 다른 건을 조회한다 (조회하던 워커가 멈추면 lease가 지난 뒤 다른 워커가 다시 조회한다) |
 
-## CFG · 종료 타이머 설정
+## CFG · 환경 설정 검증
 
 | ID | Given | When | Then |
 | --- | --- | --- | --- |
 | CFG-01 | 종료 drain·timeout 중 하나 또는 두 값의 합계가 2,147,483,647ms를 초과한다 | 환경변수를 검증한다 | 프로세스 기동 전에 설정을 거부한다 |
 | CFG-02 | drain이 0 이상이고 timeout이 양수이며 합계가 2,147,483,647ms 이하인 정수 설정 | 환경변수를 검증한다 | drain 0과 합계 상한을 포함해 허용한다 |
 | CFG-03 | lease·확인 기간이 Node 타이머 상한을 초과한다 | 환경변수를 검증한다 | 직접 타이머에 쓰지 않는 일반 기간은 종료 타이머 상한 때문에 거부하지 않는다 |
+| CFG-04 | `DATABASE_POOL_MAX`를 지정하지 않는다 | 환경변수를 검증한다 | 워커 루프와 헬스 검사를 함께 감당하도록 Pool 최대 연결 수를 20으로 둔다 |
+| CFG-05 | `DATABASE_POOL_MAX`가 양의 정수가 아니다 | 환경변수를 검증한다 | 프로세스 기동 전에 설정을 거부한다 |
 
 ## WRK · 워커 실행과 종료
 

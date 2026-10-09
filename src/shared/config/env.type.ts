@@ -21,6 +21,7 @@ export type EnvShape = {
   readonly LOG_LEVEL: z.ZodDefault<LogLevelSchema>;
   readonly LOG_FORMAT: z.ZodDefault<LogFormatSchema>;
   readonly DATABASE_URL: DatabaseUrlSchema;
+  readonly DATABASE_POOL_MAX: z.ZodDefault<PositiveIntegerSchema>;
   readonly MOCK_API_URL: z.ZodDefault<HttpUrlSchema>;
   readonly DISPATCH_MAX_REQUEST_MS: z.ZodDefault<PositiveMillisecondsSchema>;
   readonly DISPATCH_LEASE_MS: z.ZodDefault<PositiveMillisecondsSchema>;

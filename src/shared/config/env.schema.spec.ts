@@ -29,6 +29,7 @@ describe('환경변수 스키마', () => {
       LOG_LEVEL: 'log',
       LOG_FORMAT: 'pretty',
       DATABASE_URL,
+      DATABASE_POOL_MAX: 20,
       MOCK_API_URL: 'http://localhost:4000',
       DISPATCH_MAX_REQUEST_MS: 5000,
       DISPATCH_LEASE_MS: 30000,
@@ -65,6 +66,7 @@ describe('환경변수 스키마', () => {
       SHUTDOWN_TIMEOUT_MS: '1000',
       LOG_LEVEL: 'debug',
       LOG_FORMAT: 'json',
+      DATABASE_POOL_MAX: '30',
       MOCK_API_URL: 'http://mock:4000',
       DISPATCH_MAX_REQUEST_MS: '3000',
       DISPATCH_LEASE_MS: '20000',
@@ -90,6 +92,7 @@ describe('환경변수 스키마', () => {
       LOG_LEVEL: 'debug',
       LOG_FORMAT: 'json',
       DATABASE_URL,
+      DATABASE_POOL_MAX: 30,
       MOCK_API_URL: 'http://mock:4000',
       DISPATCH_MAX_REQUEST_MS: 3000,
       DISPATCH_LEASE_MS: 20000,
@@ -171,6 +174,21 @@ describe('환경변수 스키마', () => {
     expect(DISPATCH_LEASE_MS).toBe(2_147_483_648);
     expect(UNCONFIRMED_AFTER_MS).toBe(2_147_483_648);
   });
+
+  it('CFG-04 DATABASE_POOL_MAX를 지정하지 않으면 워커 루프와 헬스 검사를 함께 감당하도록 Pool 최대 연결 수를 20으로 둔다', (): void => {
+    const { DATABASE_POOL_MAX }: Env = validate(REQUIRED);
+
+    expect(DATABASE_POOL_MAX).toBe(20);
+  });
+
+  it.each(['', '0', '-1', '1.5', 'abc'])(
+    'CFG-05 양의 정수가 아닌 DATABASE_POOL_MAX="%s"는 거부한다',
+    (rawPoolMax: string): void => {
+      expect((): Env => validate({ ...REQUIRED, DATABASE_POOL_MAX: rawPoolMax })).toThrow(
+        /DATABASE_POOL_MAX/,
+      );
+    },
+  );
 
   it('알 수 없는 LOG_LEVEL은 거부한다', () => {
     expect(() => validate({ LOG_LEVEL: 'trace' })).toThrow(/LOG_LEVEL/);

@@ -60,6 +60,27 @@ describe('DatabaseModule', () => {
     expect(result.rows).toEqual([{ answer: 1 }]);
   });
 
+  it('DATABASE_POOL_MAX만큼만 연결을 열고 그 이상의 요청은 연결이 반환될 때까지 기다리게 한다', async (): Promise<void> => {
+    await moduleRef.close();
+    await pool.end();
+    vi.stubEnv('DATABASE_POOL_MAX', '2');
+    moduleRef = await Test.createTestingModule({
+      imports: [TypedConfigModule.forRoot(createEnvSchema(portSchema.parse(3000))), DatabaseModule],
+    }).compile();
+    pool = moduleRef.get(Pool);
+    const heldClients: ReadonlyArray<PoolClient> = await Promise.all([
+      pool.connect(),
+      pool.connect(),
+    ]);
+
+    const waitingClient: Promise<PoolClient> = pool.connect();
+
+    expect(pool.totalCount).toBe(2);
+    expect(pool.waitingCount).toBe(1);
+    heldClients.forEach((heldClient: PoolClient): void => heldClient.release());
+    (await waitingClient).release();
+  });
+
   it('유휴 연결이 DB 쪽에서 끊겨도 프로세스를 죽이지 않고 오류를 로그로 남긴다', async (): Promise<void> => {
     const logged: MockInstance<Logger['error']> = vi
       .spyOn(Logger.prototype, 'error')

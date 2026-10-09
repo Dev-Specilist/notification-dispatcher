@@ -21,6 +21,7 @@ export class DatabaseModule {
   private static createPool(config: TypedConfigService): Pool {
     const pool: Pool = new Pool({
       connectionString: config.get('DATABASE_URL'),
+      max: config.get('DATABASE_POOL_MAX'),
       connectionTimeoutMillis: DatabaseModule.CONNECTION_TIMEOUT_MS,
     });
     pool.on('error', (error: Error): void => {

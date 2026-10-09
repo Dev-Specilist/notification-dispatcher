@@ -19,6 +19,7 @@ import { logFormatSchema, logLevelSchema } from '@/shared/logging/logging.schema
 const DEFAULT_HOST: Host = hostSchema.parse('0.0.0.0');
 const DEFAULT_DRAIN: Milliseconds = timerDelayOrZeroMsSchema.parse(5000);
 const DEFAULT_TIMEOUT: TimerDelayMs = timerDelayMsSchema.parse(25000);
+const DEFAULT_DATABASE_POOL_MAX: PositiveInteger = positiveIntegerSchema.parse(20);
 const DEFAULT_MOCK_API_URL: HttpUrl = httpUrlSchema.parse('http://localhost:4000');
 const DEFAULT_MAX_REQUEST: Milliseconds = positiveMillisecondsSchema.parse(5000);
 const DEFAULT_LEASE: Milliseconds = positiveMillisecondsSchema.parse(30000);
@@ -46,6 +47,7 @@ export const createEnvSchema = (defaultPort: Port): EnvSchema =>
       LOG_LEVEL: logLevelSchema.default('log'),
       LOG_FORMAT: logFormatSchema.default('pretty'),
       DATABASE_URL: databaseUrlSchema,
+      DATABASE_POOL_MAX: positiveIntegerSchema.default(DEFAULT_DATABASE_POOL_MAX),
       MOCK_API_URL: httpUrlSchema.default(DEFAULT_MOCK_API_URL),
       DISPATCH_MAX_REQUEST_MS: positiveMillisecondsSchema.default(DEFAULT_MAX_REQUEST),
       DISPATCH_LEASE_MS: positiveMillisecondsSchema.default(DEFAULT_LEASE),
