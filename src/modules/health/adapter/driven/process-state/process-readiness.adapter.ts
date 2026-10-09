@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ReadinessPort } from '@/modules/health/application/port/driven/for-tracking-readiness/readiness.port';
 
 @Injectable()
-export class InMemoryReadinessAdapter implements ReadinessPort {
+export class ProcessReadinessAdapter implements ReadinessPort {
   private acceptingTraffic: boolean = true;
 
   isAcceptingTraffic(): boolean {

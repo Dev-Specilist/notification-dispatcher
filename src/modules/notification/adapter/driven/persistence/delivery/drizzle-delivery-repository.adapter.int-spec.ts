@@ -5,7 +5,7 @@ import { DrizzleAlarmRepositoryAdapter } from '@/modules/notification/adapter/dr
 import { DrizzleDeliveryRepositoryAdapter } from '@/modules/notification/adapter/driven/persistence/delivery/drizzle-delivery-repository.adapter';
 import { NotificationDatabaseFactory } from '@/modules/notification/adapter/driven/persistence/notification-database.factory';
 import { NotificationDatabase } from '@/modules/notification/adapter/driven/persistence/notification-database.type';
-import { TestDatabase } from '@/shared/database/testing/test-database';
+import { TestDatabase } from '@/shared/database/testing/test-database.helper';
 
 interface DrizzleRepositories {
   readonly alarmRepository: DrizzleAlarmRepositoryAdapter;

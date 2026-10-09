@@ -15,7 +15,7 @@ import {
 } from 'vitest';
 import { ApiModule } from '@/bootstrap/api.module';
 import { ShutdownService } from '@/bootstrap/lifecycle/shutdown.service';
-import { TestDatabase } from '@/shared/database/testing/test-database';
+import { TestDatabase } from '@/shared/database/testing/test-database.helper';
 
 interface ProbeRow {
   readonly answer: number;

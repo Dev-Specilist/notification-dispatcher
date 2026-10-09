@@ -28,7 +28,7 @@ import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/testing/i
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-expansion-job-repository.adapter';
 import { InMemoryTransactionAdapter } from '@/modules/notification/testing/in-memory/in-memory-transaction.adapter';
-import { UnusedTransaction } from '@/modules/notification/testing/unused-transaction';
+import { UnusedTransaction } from '@/modules/notification/testing/unused-transaction.stub';
 import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 
 type DeliveryBuilder = (index: number) => Delivery;

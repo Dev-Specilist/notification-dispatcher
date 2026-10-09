@@ -10,7 +10,7 @@ import {
   MockApiContainer,
   MockApiEnvironment,
 } from '@/modules/notification/testing/mock-api.container';
-import { TestDatabase } from '@/shared/database/testing/test-database';
+import { TestDatabase } from '@/shared/database/testing/test-database.helper';
 
 interface DeliveryRow {
   readonly id: string;

@@ -20,7 +20,7 @@ import { NotificationDatabaseFactory } from '@/modules/notification/adapter/driv
 import { MockApiContainer } from '@/modules/notification/testing/mock-api.container';
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
-import { TestDatabase } from '@/shared/database/testing/test-database';
+import { TestDatabase } from '@/shared/database/testing/test-database.helper';
 
 const PERMITS_PER_SECOND: number = 50;
 

@@ -13,7 +13,7 @@ import { NotificationDatabaseFactory } from '@/modules/notification/adapter/driv
 import { NotificationDatabase } from '@/modules/notification/adapter/driven/persistence/notification-database.type';
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
-import { TestDatabase } from '@/shared/database/testing/test-database';
+import { TestDatabase } from '@/shared/database/testing/test-database.helper';
 
 type PermitKind = SendPermit['kind'];
 

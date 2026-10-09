@@ -4,7 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Pool } from 'pg';
 import { ShutdownService } from '@/bootstrap/lifecycle/shutdown.service';
 import { ReadinessPort } from '@/modules/health/application/port/driven/for-tracking-readiness/readiness.port';
-import { InMemoryReadinessAdapter } from '@/modules/health/adapter/driven/process-state/in-memory-readiness.adapter';
+import { ProcessReadinessAdapter } from '@/modules/health/adapter/driven/process-state/process-readiness.adapter';
 import { createEnvSchema } from '@/shared/config/env.schema';
 import { portSchema } from '@/shared/config/primitive.schema';
 import { TypedConfigModule } from '@/shared/config/typed-config.module';
@@ -38,7 +38,7 @@ describe('ShutdownService', () => {
     vi.stubEnv('DATABASE_URL', 'postgres://app:secret@localhost:5432/notification');
     moduleRef = await Test.createTestingModule({
       imports: [TypedConfigModule.forRoot(createEnvSchema(portSchema.parse(3000))), DatabaseModule],
-      providers: [{ provide: ReadinessPort, useClass: InMemoryReadinessAdapter }, ShutdownService],
+      providers: [{ provide: ReadinessPort, useClass: ProcessReadinessAdapter }, ShutdownService],
     }).compile();
     readiness = moduleRef.get(ReadinessPort);
     pool = moduleRef.get(Pool);

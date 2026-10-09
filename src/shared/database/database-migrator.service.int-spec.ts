@@ -6,7 +6,7 @@ import { portSchema } from '@/shared/config/primitive.schema';
 import { TypedConfigModule } from '@/shared/config/typed-config.module';
 import { DatabaseMigrator } from '@/shared/database/database-migrator.service';
 import { DatabaseModule } from '@/shared/database/database.module';
-import { TestDatabase } from '@/shared/database/testing/test-database';
+import { TestDatabase } from '@/shared/database/testing/test-database.helper';
 
 interface TableRow {
   readonly table_name: string;

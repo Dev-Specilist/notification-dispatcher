@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { ApiModule } from '@/bootstrap/api.module';
 import { WorkerProcess } from '@/bootstrap/testing/worker.process';
-import { TestDatabase } from '@/shared/database/testing/test-database';
+import { TestDatabase } from '@/shared/database/testing/test-database.helper';
 import { createGate, Gate } from '@/shared/testing/gate.factory';
 
 interface StatusCountRow {

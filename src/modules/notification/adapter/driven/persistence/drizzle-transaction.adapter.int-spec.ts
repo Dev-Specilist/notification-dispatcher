@@ -63,7 +63,7 @@ import { NotificationDatabaseFactory } from '@/modules/notification/adapter/driv
 import { QueryResult } from 'pg';
 import { createGate, Gate } from '@/shared/testing/gate.factory';
 import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
-import { TestDatabase } from '@/shared/database/testing/test-database';
+import { TestDatabase } from '@/shared/database/testing/test-database.helper';
 
 type OutcomePair = Readonly<[string, string]>;
 

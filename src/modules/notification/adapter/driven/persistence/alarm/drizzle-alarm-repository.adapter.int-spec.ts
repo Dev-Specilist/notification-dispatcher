@@ -7,7 +7,7 @@ import { AlarmCreation, AlarmTransition } from '@/modules/notification/domain/al
 import { AlarmRepositoryContract } from '@/modules/notification/testing/contract/alarm-repository.contract';
 import { DrizzleAlarmRepositoryAdapter } from '@/modules/notification/adapter/driven/persistence/alarm/drizzle-alarm-repository.adapter';
 import { NotificationDatabaseFactory } from '@/modules/notification/adapter/driven/persistence/notification-database.factory';
-import { TestDatabase } from '@/shared/database/testing/test-database';
+import { TestDatabase } from '@/shared/database/testing/test-database.helper';
 import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 
 interface TimestampRow {

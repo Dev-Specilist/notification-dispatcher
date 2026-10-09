@@ -8,7 +8,7 @@ import { DrizzleTransactionAdapter } from '@/modules/notification/adapter/driven
 import { TransactionRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import { NotificationDatabaseFactory } from '@/modules/notification/adapter/driven/persistence/notification-database.factory';
 import { NotificationDatabase } from '@/modules/notification/adapter/driven/persistence/notification-database.type';
-import { TestDatabase } from '@/shared/database/testing/test-database';
+import { TestDatabase } from '@/shared/database/testing/test-database.helper';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { ExpansionJob } from '@/modules/notification/domain/expansion/expansion-job.entity';
 import { ExpansionClaim } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';

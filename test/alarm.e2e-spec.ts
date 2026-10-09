@@ -7,7 +7,7 @@ import { Pool, QueryResult } from 'pg';
 import { z } from 'zod';
 import { ApiModule } from '@/bootstrap/api.module';
 import { ApiDocumentationBootstrap } from '@/bootstrap/server/api-documentation.bootstrap';
-import { TestDatabase } from '@/shared/database/testing/test-database';
+import { TestDatabase } from '@/shared/database/testing/test-database.helper';
 
 type InvalidListQueryCase = Readonly<
   [label: string, query: Readonly<Record<string, string>>, field: string]

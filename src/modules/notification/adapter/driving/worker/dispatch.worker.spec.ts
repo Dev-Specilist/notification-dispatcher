@@ -10,7 +10,7 @@ import { Pool } from 'pg';
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
 import { ShutdownService } from '@/bootstrap/lifecycle/shutdown.service';
 import { ReadinessPort } from '@/modules/health/application/port/driven/for-tracking-readiness/readiness.port';
-import { InMemoryReadinessAdapter } from '@/modules/health/adapter/driven/process-state/in-memory-readiness.adapter';
+import { ProcessReadinessAdapter } from '@/modules/health/adapter/driven/process-state/process-readiness.adapter';
 import { CompleteSettledAlarmsUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-settled-alarms.use-case';
 import {
   AlarmCompletionFailure,
@@ -225,7 +225,7 @@ describe('DispatchWorker', () => {
         useFactory: (_shutdownHookedAfterProbe: ShutdownService): ShutdownPhaseProbe => probe,
         inject: [ShutdownService],
       },
-      { provide: ReadinessPort, useClass: InMemoryReadinessAdapter },
+      { provide: ReadinessPort, useClass: ProcessReadinessAdapter },
       { provide: Pool, useValue: new Pool({ connectionString: UNCONNECTED_DATABASE_URL }) },
       DatabaseShutdown,
       ShutdownService,

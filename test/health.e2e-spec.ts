@@ -18,7 +18,7 @@ import { ApiModule } from '@/bootstrap/api.module';
 import { WorkerModule } from '@/bootstrap/worker.module';
 import { ReadinessPort } from '@/modules/health/application/port/driven/for-tracking-readiness/readiness.port';
 import { ProcessRole } from '@/shared/config/primitive.type';
-import { TestDatabase } from '@/shared/database/testing/test-database';
+import { TestDatabase } from '@/shared/database/testing/test-database.helper';
 
 type RootModuleFactory = () => DynamicModule;
 

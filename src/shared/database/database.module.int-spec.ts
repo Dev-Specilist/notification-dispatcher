@@ -16,7 +16,7 @@ import { createEnvSchema } from '@/shared/config/env.schema';
 import { portSchema } from '@/shared/config/primitive.schema';
 import { TypedConfigModule } from '@/shared/config/typed-config.module';
 import { DatabaseModule } from '@/shared/database/database.module';
-import { TestDatabase } from '@/shared/database/testing/test-database';
+import { TestDatabase } from '@/shared/database/testing/test-database.helper';
 
 interface ProbeRow {
   readonly answer: number;
