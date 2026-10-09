@@ -16,12 +16,10 @@ import { CompleteSettledAlarmsUseCase } from '@/modules/notification/application
 import {
   AlarmCompletionFailure,
   CompleteSettledAlarmsCommand,
+  CompletionScanPosition,
+  CompletionScanStart,
   SettledAlarmsPageChecked,
 } from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-settled-alarms.type';
-import {
-  ListPosition,
-  ListStart,
-} from '@/modules/notification/application/port/driving/for-managing-alarms/list-alarms.type';
 import { ExpandNextPageUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/expand-next-page.use-case';
 import { ExpansionPageAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/expand-next-page.type';
 import { ReconcileNextDeliveryUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/reconcile-next-delivery.use-case';
@@ -63,7 +61,7 @@ const SHUTDOWN_TIMEOUT_MS: number = 100;
 const POLL_INTERVAL_MS: number = 5;
 const COMPLETION_CHECK_INTERVAL_MS: number = 20;
 
-const FIRST_PAGE_END: ListPosition = {
+const FIRST_PAGE_END: CompletionScanPosition = {
   createdAt: new Date('2026-10-09T09:00:00.000Z'),
   alarmId: '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10',
 };
@@ -157,7 +155,7 @@ class IdleRecovery implements RecoverExpiredLeaseUseCase {
 
 class TwoPageCompletionCheck implements CompleteSettledAlarmsUseCase {
   executions: number = 0;
-  readonly starts: Array<ListStart> = [];
+  readonly starts: Array<CompletionScanStart> = [];
 
   constructor(private readonly failures: ReadonlyArray<AlarmCompletionFailure> = []) {}
 

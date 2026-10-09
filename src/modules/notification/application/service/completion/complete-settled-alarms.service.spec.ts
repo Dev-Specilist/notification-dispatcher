@@ -15,12 +15,12 @@ import { DeliveryId } from '@/modules/notification/domain/delivery/delivery.type
 import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
-import { AlarmCommand } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-command.type';
-import { CompleteAlarmResult } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
-import { CompleteAlarmIfSettledUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-alarm-if-settled.use-case';
-import { SettledAlarmsPageChecked } from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-settled-alarms.type';
-import { ListStart } from '@/modules/notification/application/port/driving/for-managing-alarms/list-alarms.type';
-import { CompleteAlarmIfSettledService } from '@/modules/notification/application/service/completion/complete-alarm-if-settled.service';
+import { AlarmCompletionCheck } from '@/modules/notification/application/service/completion/alarm-completion.type';
+import {
+  CompletionScanStart,
+  SettledAlarmsPageChecked,
+} from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-settled-alarms.type';
+import { AlarmCompletionChecker } from '@/modules/notification/application/service/completion/alarm-completion.checker';
 import { CompleteSettledAlarmsService } from '@/modules/notification/application/service/completion/complete-settled-alarms.service';
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-delivery-repository.adapter';
@@ -97,17 +97,20 @@ const pendingDelivery = (alarmId: AlarmId): Delivery =>
     at(DISPATCHED_ISO),
   );
 
-class FailingCompletionFor implements CompleteAlarmIfSettledUseCase {
+class FailingCompletionFor extends AlarmCompletionChecker {
   constructor(
-    private readonly completeAlarmIfSettled: CompleteAlarmIfSettledUseCase,
+    transaction: TransactionPort,
+    clock: ClockPort,
     private readonly failingAlarmIds: ReadonlyArray<string>,
-  ) {}
+  ) {
+    super(transaction, clock);
+  }
 
-  execute(command: Readonly<AlarmCommand>): Promise<CompleteAlarmResult> {
-    if (this.failingAlarmIds.includes(command.alarmId)) {
+  override completeIfSettled(alarmId: AlarmId): Promise<AlarmCompletionCheck> {
+    if (this.failingAlarmIds.includes(alarmId)) {
       return Promise.reject(new Error('database connection reset'));
     }
-    return this.completeAlarmIfSettled.execute(command);
+    return super.completeIfSettled(alarmId);
   }
 }
 
@@ -134,10 +137,7 @@ const fixture = (failingAlarmIds: ReadonlyArray<string> = []): Fixture => {
     expansionJobRepository,
     service: new CompleteSettledAlarmsService(
       transaction,
-      new FailingCompletionFor(
-        new CompleteAlarmIfSettledService(transaction, new FixedClock()),
-        failingAlarmIds,
-      ),
+      new FailingCompletionFor(transaction, new FixedClock(), failingAlarmIds),
     ),
   };
 };
@@ -157,7 +157,7 @@ const checkAllPages = async (
   service: CompleteSettledAlarmsService,
 ): Promise<ReadonlyArray<SettledAlarmsPageChecked>> => {
   const checkedPages: Array<SettledAlarmsPageChecked> = [];
-  let start: ListStart = { kind: 'newest' };
+  let start: CompletionScanStart = { kind: 'newest' };
   let checkedPage: SettledAlarmsPageChecked;
   do {
     checkedPage = await service.execute({ start });

@@ -1,10 +1,10 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import {
   AlarmCompletionFailure,
+  CompletionScanStart,
   SettledAlarmsPageChecked,
 } from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-settled-alarms.type';
 import { CompleteSettledAlarmsUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-settled-alarms.use-case';
-import { ListStart } from '@/modules/notification/application/port/driving/for-managing-alarms/list-alarms.type';
 import { ExpandNextPageUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/expand-next-page.use-case';
 import { ExpansionPageAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/expand-next-page.type';
 import { ReconcileNextDeliveryUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/reconcile-next-delivery.use-case';
@@ -24,7 +24,7 @@ import { TypedConfigService } from '@/shared/config/typed-config.service';
 export class DispatchWorker implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger: Logger = new Logger('DispatchWorker');
   private readonly loops: ReadonlyArray<PollingLoopRunner>;
-  private completionStart: ListStart = { kind: 'newest' };
+  private completionStart: CompletionScanStart = { kind: 'newest' };
 
   constructor(
     private readonly expandNextPage: ExpandNextPageUseCase,

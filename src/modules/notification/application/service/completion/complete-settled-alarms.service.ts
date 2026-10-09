@@ -11,23 +11,21 @@ import {
 } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
 import { SnapshotRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
-import { CompleteAlarmResult } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
-import { CompleteAlarmIfSettledUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-alarm-if-settled.use-case';
+import { AlarmCompletionChecker } from '@/modules/notification/application/service/completion/alarm-completion.checker';
+import { AlarmCompletionCheck } from '@/modules/notification/application/service/completion/alarm-completion.type';
 import {
   AlarmCompletionFailure,
   CompleteSettledAlarmsCommand,
+  CompletionScanNext,
+  CompletionScanPosition,
+  CompletionScanStart,
   SettledAlarmsPageChecked,
 } from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-settled-alarms.type';
 import { CompleteSettledAlarmsUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-settled-alarms.use-case';
-import {
-  ListNext,
-  ListPosition,
-  ListStart,
-} from '@/modules/notification/application/port/driving/for-managing-alarms/list-alarms.type';
 
 interface AlarmCompletionChecked {
   readonly kind: 'checked';
-  readonly result: CompleteAlarmResult;
+  readonly result: AlarmCompletionCheck;
 }
 
 interface AlarmCompletionFailed {
@@ -42,7 +40,7 @@ export class CompleteSettledAlarmsService implements CompleteSettledAlarmsUseCas
 
   constructor(
     private readonly transaction: TransactionPort,
-    private readonly completeAlarmIfSettled: CompleteAlarmIfSettledUseCase,
+    private readonly completionChecker: AlarmCompletionChecker,
   ) {}
 
   async execute({
@@ -66,7 +64,7 @@ export class CompleteSettledAlarmsService implements CompleteSettledAlarmsUseCas
       checkedAlarmCount: page.alarms.length,
       completedAlarmCount,
       failures,
-      next: CompleteSettledAlarmsService.toListNext(page.next),
+      next: CompleteSettledAlarmsService.toScanNext(page.next),
     };
   }
 
@@ -85,25 +83,25 @@ export class CompleteSettledAlarmsService implements CompleteSettledAlarmsUseCas
   private async complete(alarm: Alarm): Promise<AlarmCompletionAttempt> {
     const { id: alarmId }: AlarmSnapshot = alarm.snapshot();
     try {
-      return { kind: 'checked', result: await this.completeAlarmIfSettled.execute({ alarmId }) };
+      return { kind: 'checked', result: await this.completionChecker.completeIfSettled(alarmId) };
     } catch (thrown) {
       const reason: string = thrown instanceof Error ? thrown.message : String(thrown);
       return { kind: 'failed', failure: { alarmId, reason } };
     }
   }
 
-  private static toPageStart(start: Readonly<ListStart>): AlarmPageStart {
+  private static toPageStart(start: Readonly<CompletionScanStart>): AlarmPageStart {
     if (start.kind === 'newest') {
       return start;
     }
-    const { createdAt, alarmId }: ListPosition = start.position;
+    const { createdAt, alarmId }: CompletionScanPosition = start.position;
     if (!AlarmPredicates.isAlarmId(alarmId) || !Number.isFinite(createdAt.getTime())) {
       return { kind: 'newest' };
     }
     return { kind: 'after', position: { createdAt, id: alarmId } };
   }
 
-  private static toListNext(next: AlarmPageNext): ListNext {
+  private static toScanNext(next: AlarmPageNext): CompletionScanNext {
     if (next.kind === 'last') {
       return next;
     }

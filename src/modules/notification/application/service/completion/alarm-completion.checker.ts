@@ -1,7 +1,7 @@
-import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import {
   AlarmCompletion,
+  AlarmId,
   AlarmSnapshot,
   CompletionEvidence,
   DeliveryCount,
@@ -11,43 +11,38 @@ import { ClockPort } from '@/modules/notification/application/port/driven/for-te
 import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.port';
 import { ExpansionJobLookup } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
-import { AlarmCommand } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-command.type';
-import { CompleteAlarmResult } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
-import { CompleteAlarmIfSettledUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-alarm-if-settled.use-case';
+import { AlarmCompletionCheck } from '@/modules/notification/application/service/completion/alarm-completion.type';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
 import { DeliveryRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.port';
 
 type ExpansionJobReader = Pick<ExpansionJobRepositoryPort, 'findByAlarmId'>;
 
-interface CompleteAlarmIfSettledRepositories {
+interface AlarmCompletionRepositories {
   readonly alarmRepository: Pick<AlarmRepositoryPort, 'findByIdForUpdate' | 'save'>;
   readonly deliveryRepository: Pick<DeliveryRepositoryPort, 'countUnsettled'>;
   readonly expansionJobRepository: ExpansionJobReader;
 }
 
-export class CompleteAlarmIfSettledService implements CompleteAlarmIfSettledUseCase {
+export class AlarmCompletionChecker {
   constructor(
     private readonly transaction: TransactionPort,
     private readonly clock: ClockPort,
   ) {}
 
-  execute({ alarmId }: Readonly<AlarmCommand>): Promise<CompleteAlarmResult> {
-    if (!AlarmPredicates.isAlarmId(alarmId)) {
-      return Promise.resolve({ kind: 'not-found', error: { code: 'ALARM_NOT_FOUND', alarmId } });
-    }
+  completeIfSettled(alarmId: AlarmId): Promise<AlarmCompletionCheck> {
     return this.transaction.run(
       async ({
         alarmRepository,
         deliveryRepository,
         expansionJobRepository,
-      }: CompleteAlarmIfSettledRepositories): Promise<CompleteAlarmResult> => {
+      }: AlarmCompletionRepositories): Promise<AlarmCompletionCheck> => {
         const lookup: AlarmLookup = await alarmRepository.findByIdForUpdate(alarmId);
         if (lookup.kind === 'missing') {
-          return { kind: 'not-found', error: { code: 'ALARM_NOT_FOUND', alarmId } };
+          return { kind: 'skipped', reason: 'missing' };
         }
         const unsettledDeliveries: DeliveryCount = await deliveryRepository.countUnsettled(alarmId);
         const evidence: CompletionEvidence = {
-          expansionCompleted: await CompleteAlarmIfSettledService.isExpansionCompleted(
+          expansionCompleted: await AlarmCompletionChecker.isExpansionCompleted(
             lookup.alarm,
             expansionJobRepository,
           ),
@@ -56,7 +51,7 @@ export class CompleteAlarmIfSettledService implements CompleteAlarmIfSettledUseC
         const completion: AlarmCompletion = lookup.alarm.complete(evidence, this.clock.now());
         switch (completion.kind) {
           case 'conflict':
-            return completion;
+            return { kind: 'skipped', reason: 'not-dispatching' };
           case 'unchanged':
             return { kind: 'not-yet' };
           case 'transitioned':
