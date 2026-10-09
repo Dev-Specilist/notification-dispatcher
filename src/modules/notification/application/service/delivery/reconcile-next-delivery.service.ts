@@ -16,7 +16,7 @@ import {
 import { JitterSourcePort } from '@/modules/notification/application/port/driven/for-drawing-jitter/jitter-source.port';
 import { MessageLookupPort } from '@/modules/notification/application/port/driven/for-looking-up-messages/message-lookup.port';
 import { MessageLookupResult } from '@/modules/notification/application/port/driven/for-looking-up-messages/message-lookup.type';
-import { ReconcileSettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/reconcile-settings.port';
+import { ReconcileSettings } from '@/modules/notification/application/service/delivery/delivery-settings.type';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
 import { ReconcileAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/reconcile-next-delivery.type';
 import { ReconcileNextDeliveryUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/reconcile-next-delivery.use-case';
@@ -36,7 +36,7 @@ export class ReconcileNextDeliveryService implements ReconcileNextDeliveryUseCas
     private readonly transaction: TransactionPort,
     private readonly messageLookup: MessageLookupPort,
     private readonly clock: ClockPort,
-    private readonly settings: ReconcileSettingsPort,
+    private readonly settings: Readonly<ReconcileSettings>,
     private readonly jitterSource: JitterSourcePort,
   ) {}
 

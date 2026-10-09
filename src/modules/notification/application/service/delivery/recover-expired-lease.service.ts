@@ -9,7 +9,7 @@ import {
   DeliveryCandidate,
   LeasedSave,
 } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.type';
-import { LeaseRecoverySettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/lease-recovery-settings.port';
+import { LeaseRecoverySettings } from '@/modules/notification/application/service/delivery/delivery-settings.type';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
 import { RecoveryAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/recover-expired-lease.type';
 import { RecoverExpiredLeaseUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/recover-expired-lease.use-case';
@@ -23,7 +23,7 @@ export class RecoverExpiredLeaseService implements RecoverExpiredLeaseUseCase {
   constructor(
     private readonly transaction: TransactionPort,
     private readonly clock: ClockPort,
-    private readonly settings: LeaseRecoverySettingsPort,
+    private readonly settings: Readonly<LeaseRecoverySettings>,
   ) {}
 
   execute(): Promise<RecoveryAttempt> {

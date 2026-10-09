@@ -2,15 +2,11 @@ import { Module } from '@nestjs/common';
 import { Pool } from 'pg';
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
 import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/delivery-id-generator.port';
-import { DispatchSettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/dispatch-settings.port';
-import { ExpansionSettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/expansion-settings.port';
 import { JitterSourcePort } from '@/modules/notification/application/port/driven/for-drawing-jitter/jitter-source.port';
-import { LeaseRecoverySettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/lease-recovery-settings.port';
 import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/lease-token-generator.port';
 import { MessageLookupPort } from '@/modules/notification/application/port/driven/for-looking-up-messages/message-lookup.port';
 import { MessageSenderPort } from '@/modules/notification/application/port/driven/for-sending-messages/message-sender.port';
 import { RecipientDirectoryPort } from '@/modules/notification/application/port/driven/for-fetching-recipients/recipient-directory.port';
-import { ReconcileSettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/reconcile-settings.port';
 import { SendPermitPort } from '@/modules/notification/application/port/driven/for-permitting-sends/send-permit.port';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
 import { CompleteSettledAlarmsUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-settled-alarms.use-case';
@@ -35,7 +31,6 @@ import { RandomIdGeneratorAdapter } from '@/modules/notification/adapter/driven/
 import { RandomJitterSourceAdapter } from '@/modules/notification/adapter/driven/system/random-jitter-source.adapter';
 import { RandomLeaseTokenGeneratorAdapter } from '@/modules/notification/adapter/driven/system/random-lease-token-generator.adapter';
 import { SystemClockAdapter } from '@/modules/notification/adapter/driven/system/system-clock.adapter';
-import { WorkerSettingsAdapter } from '@/modules/notification/adapter/driven/config/worker-settings.adapter';
 import { WorkerSettingsFactory } from '@/modules/notification/adapter/driven/config/worker-settings.factory';
 import { WorkerSettings } from '@/modules/notification/adapter/driven/config/worker-settings.type';
 import { TypedConfigService } from '@/shared/config/typed-config.service';
@@ -50,15 +45,6 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
       useFactory: (config: TypedConfigService): WorkerSettings =>
         WorkerSettingsFactory.fromConfig(config),
     },
-    {
-      provide: WorkerSettingsAdapter,
-      inject: [WORKER_SETTINGS],
-      useFactory: ({ deliverySettings }: WorkerSettings): WorkerSettingsAdapter => deliverySettings,
-    },
-    { provide: DispatchSettingsPort, useExisting: WorkerSettingsAdapter },
-    { provide: ReconcileSettingsPort, useExisting: WorkerSettingsAdapter },
-    { provide: LeaseRecoverySettingsPort, useExisting: WorkerSettingsAdapter },
-    { provide: ExpansionSettingsPort, useExisting: WorkerSettingsAdapter },
     { provide: ClockPort, useClass: SystemClockAdapter },
     { provide: DeliveryIdGeneratorPort, useClass: RandomIdGeneratorAdapter },
     { provide: LeaseTokenGeneratorPort, useClass: RandomLeaseTokenGeneratorAdapter },
@@ -103,21 +89,21 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
         TransactionPort,
         RecipientDirectoryPort,
         DeliveryIdGeneratorPort,
-        ExpansionSettingsPort,
+        WORKER_SETTINGS,
         ClockPort,
       ],
       useFactory: (
         transaction: TransactionPort,
         recipientDirectory: RecipientDirectoryPort,
         deliveryIdGenerator: DeliveryIdGeneratorPort,
-        expansionSettings: ExpansionSettingsPort,
+        { deliverySettings }: WorkerSettings,
         clock: ClockPort,
       ): ExpandNextPageUseCase =>
         new ExpandNextPageService(
           transaction,
           recipientDirectory,
           deliveryIdGenerator,
-          expansionSettings,
+          deliverySettings,
           clock,
         ),
     },
@@ -129,7 +115,7 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
         MessageSenderPort,
         LeaseTokenGeneratorPort,
         ClockPort,
-        DispatchSettingsPort,
+        WORKER_SETTINGS,
         JitterSourcePort,
       ],
       useFactory: (
@@ -138,7 +124,7 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
         messageSender: MessageSenderPort,
         leaseTokenGenerator: LeaseTokenGeneratorPort,
         clock: ClockPort,
-        dispatchSettings: DispatchSettingsPort,
+        { deliverySettings }: WorkerSettings,
         jitterSource: JitterSourcePort,
       ): SendNextDeliveryUseCase =>
         new SendNextDeliveryService(
@@ -147,43 +133,37 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
           messageSender,
           leaseTokenGenerator,
           clock,
-          dispatchSettings,
+          deliverySettings,
           jitterSource,
         ),
     },
     {
       provide: ReconcileNextDeliveryUseCase,
-      inject: [
-        TransactionPort,
-        MessageLookupPort,
-        ClockPort,
-        ReconcileSettingsPort,
-        JitterSourcePort,
-      ],
+      inject: [TransactionPort, MessageLookupPort, ClockPort, WORKER_SETTINGS, JitterSourcePort],
       useFactory: (
         transaction: TransactionPort,
         messageLookup: MessageLookupPort,
         clock: ClockPort,
-        reconcileSettings: ReconcileSettingsPort,
+        { deliverySettings }: WorkerSettings,
         jitterSource: JitterSourcePort,
       ): ReconcileNextDeliveryUseCase =>
         new ReconcileNextDeliveryService(
           transaction,
           messageLookup,
           clock,
-          reconcileSettings,
+          deliverySettings,
           jitterSource,
         ),
     },
     {
       provide: RecoverExpiredLeaseUseCase,
-      inject: [TransactionPort, ClockPort, LeaseRecoverySettingsPort],
+      inject: [TransactionPort, ClockPort, WORKER_SETTINGS],
       useFactory: (
         transaction: TransactionPort,
         clock: ClockPort,
-        leaseRecoverySettings: LeaseRecoverySettingsPort,
+        { deliverySettings }: WorkerSettings,
       ): RecoverExpiredLeaseUseCase =>
-        new RecoverExpiredLeaseService(transaction, clock, leaseRecoverySettings),
+        new RecoverExpiredLeaseService(transaction, clock, deliverySettings),
     },
     {
       provide: CompleteSettledAlarmsUseCase,

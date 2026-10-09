@@ -26,7 +26,7 @@ import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
 import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
-import { DispatchSettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/dispatch-settings.port';
+import { DispatchSettings } from '@/modules/notification/application/service/delivery/delivery-settings.type';
 import { JitterSourcePort } from '@/modules/notification/application/port/driven/for-drawing-jitter/jitter-source.port';
 import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/lease-token-generator.port';
 import { MessageSenderPort } from '@/modules/notification/application/port/driven/for-sending-messages/message-sender.port';
@@ -247,7 +247,7 @@ const retryPolicy = (maxAttempts: number): RetryPolicy => {
   return creation.policy;
 };
 
-class FixedDispatchSettings implements DispatchSettingsPort {
+class FixedDispatchSettings implements DispatchSettings {
   readonly leaseMs: DurationMs;
 
   readonly maxRequestMs: DurationMs = durationMs(10_000);

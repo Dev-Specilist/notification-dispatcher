@@ -14,7 +14,7 @@ import {
   DeliveryCandidate,
   LeasedSave,
 } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.type';
-import { DispatchSettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/dispatch-settings.port';
+import { DispatchSettings } from '@/modules/notification/application/service/delivery/delivery-settings.type';
 import { JitterSourcePort } from '@/modules/notification/application/port/driven/for-drawing-jitter/jitter-source.port';
 import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/lease-token-generator.port';
 import { MessageSenderPort } from '@/modules/notification/application/port/driven/for-sending-messages/message-sender.port';
@@ -50,7 +50,7 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
     private readonly messageSender: MessageSenderPort,
     private readonly leaseTokenGenerator: LeaseTokenGeneratorPort,
     private readonly clock: ClockPort,
-    private readonly settings: DispatchSettingsPort,
+    private readonly settings: Readonly<DispatchSettings>,
     private readonly jitterSource: JitterSourcePort,
   ) {}
 

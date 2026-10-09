@@ -13,7 +13,7 @@ import { DeliveryId, DeliverySnapshot } from '@/modules/notification/domain/deli
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
 import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/delivery-id-generator.port';
 import { ExpansionProgress } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
-import { ExpansionSettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/expansion-settings.port';
+import { ExpansionSettings } from '@/modules/notification/application/service/expansion/expansion-settings.type';
 import { RecipientDirectoryPort } from '@/modules/notification/application/port/driven/for-fetching-recipients/recipient-directory.port';
 import {
   PageCursor,
@@ -242,7 +242,7 @@ class SequentialDeliveryIdGenerator implements DeliveryIdGeneratorPort {
   }
 }
 
-class FixedExpansionSettings implements ExpansionSettingsPort {
+class FixedExpansionSettings implements ExpansionSettings {
   readonly leaseMs: DurationMs = FixedExpansionSettings.durationMs(LEASE_MS);
 
   private static durationMs(rawDurationMs: number): DurationMs {

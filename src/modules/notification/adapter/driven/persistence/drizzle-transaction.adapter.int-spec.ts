@@ -25,8 +25,8 @@ import { DurationMs } from '@/shared/domain/duration.type';
 import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
 import { ExpansionJobLookup } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
-import { DispatchSettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/dispatch-settings.port';
-import { ExpansionSettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/expansion-settings.port';
+import { DispatchSettings } from '@/modules/notification/application/service/delivery/delivery-settings.type';
+import { ExpansionSettings } from '@/modules/notification/application/service/expansion/expansion-settings.type';
 import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/delivery-id-generator.port';
 import { JitterSourcePort } from '@/modules/notification/application/port/driven/for-drawing-jitter/jitter-source.port';
 import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/lease-token-generator.port';
@@ -146,7 +146,7 @@ const EXPANSION_LEASE_MS: number = 30_000;
 
 const AFTER_EXPANSION_LEASE_ISO: string = '2026-10-08T09:00:31.000Z';
 
-class FixedExpansionSettings implements ExpansionSettingsPort {
+class FixedExpansionSettings implements ExpansionSettings {
   readonly leaseMs: DurationMs = durationMs(EXPANSION_LEASE_MS);
 }
 
@@ -194,7 +194,7 @@ class RecordingMessageSender implements MessageSenderPort {
   }
 }
 
-class FixedDispatchSettings implements DispatchSettingsPort {
+class FixedDispatchSettings implements DispatchSettings {
   readonly leaseMs: DurationMs = durationMs(60_000);
 
   readonly maxRequestMs: DurationMs = durationMs(10_000);

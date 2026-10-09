@@ -1,5 +1,4 @@
 import type { RetryPolicy } from '@/modules/notification/domain/delivery/retry-policy';
-import type { WorkerSettingsAdapter } from '@/modules/notification/adapter/driven/config/worker-settings.adapter';
 import {
   MockApiSettings,
   RecipientDirectorySettings,
@@ -35,7 +34,7 @@ export interface DeliverySettingsValues {
 }
 
 export interface WorkerSettings {
-  readonly deliverySettings: WorkerSettingsAdapter;
+  readonly deliverySettings: DeliverySettingsValues;
   readonly mockApi: MockApiSettings;
   readonly recipientDirectory: RecipientDirectorySettings;
   readonly rateLimiter: RateLimiterSettings;

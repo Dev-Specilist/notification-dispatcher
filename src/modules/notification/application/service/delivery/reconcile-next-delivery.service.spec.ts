@@ -27,7 +27,7 @@ import { ClockPort } from '@/modules/notification/application/port/driven/for-te
 import { JitterSourcePort } from '@/modules/notification/application/port/driven/for-drawing-jitter/jitter-source.port';
 import { MessageLookupPort } from '@/modules/notification/application/port/driven/for-looking-up-messages/message-lookup.port';
 import { MessageLookupResult } from '@/modules/notification/application/port/driven/for-looking-up-messages/message-lookup.type';
-import { ReconcileSettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/reconcile-settings.port';
+import { ReconcileSettings } from '@/modules/notification/application/service/delivery/delivery-settings.type';
 import { CancelAlarmService } from '@/modules/notification/application/service/alarm/cancel-alarm.service';
 import { ReconcileAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/reconcile-next-delivery.type';
 import { ReconcileNextDeliveryService } from '@/modules/notification/application/service/delivery/reconcile-next-delivery.service';
@@ -206,7 +206,7 @@ class ZeroJitter implements JitterSourcePort {
   }
 }
 
-class FixedReconcileSettings implements ReconcileSettingsPort {
+class FixedReconcileSettings implements ReconcileSettings {
   readonly retryPolicy: RetryPolicy;
 
   readonly lookupRetryPolicy: RetryPolicy = retryPolicy(3);

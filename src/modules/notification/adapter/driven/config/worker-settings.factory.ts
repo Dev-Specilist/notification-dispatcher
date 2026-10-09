@@ -7,7 +7,6 @@ import {
   RequestTimeoutMs,
   UserPageLimit,
 } from '@/modules/notification/adapter/driven/mock-api/mock-api.type';
-import { WorkerSettingsAdapter } from '@/modules/notification/adapter/driven/config/worker-settings.adapter';
 import {
   WorkerEnv,
   WorkerSettings,
@@ -61,7 +60,7 @@ export class WorkerSettingsFactory {
     const baseUrl: URL = new URL(env.MOCK_API_URL);
     const requestTimeoutMs: RequestTimeoutMs = WorkerSettingsFactory.requestTimeoutOf(maxRequestMs);
     return {
-      deliverySettings: new WorkerSettingsAdapter({
+      deliverySettings: {
         leaseMs,
         maxRequestMs,
         reconcileDelayMs: WorkerSettingsFactory.durationOf(
@@ -84,7 +83,7 @@ export class WorkerSettingsFactory {
           'UNCONFIRMED_AFTER_MS',
           env.UNCONFIRMED_AFTER_MS,
         ),
-      }),
+      },
       mockApi: { baseUrl, requestTimeoutMs },
       recipientDirectory: {
         baseUrl,
