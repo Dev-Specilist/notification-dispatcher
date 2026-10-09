@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: notification
       POSTGRES_DB: notification
     ports:
-      - '5432:5432'
+      - '127.0.0.1:5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql
     healthcheck:
@@ -17,8 +17,6 @@ services:
 
   mock:
     image: ghcr.io/us-all/backend-assignment-api:1.2
-    ports:
-      - '4000:4000'
 
   migrate:
     build:
