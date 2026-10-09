@@ -95,7 +95,7 @@
 
 | 항목 | 설명 |
 | --- | --- |
-| 제한기 · claim · lease 복구의 시각을 DB 시계 기준으로 판정 | 여러 워커가 공유하는 상태라 서버마다 다른 시계로 판정하면 어긋납니다. 제한기는 persistence adapter의 SQL이 `clock_timestamp()`로 직접 판정하고, claim과 lease 복구는 application이 DB 시각을 받아 도메인 규칙과 조회 조건에 인자로 넘깁니다. 도메인 규칙은 여전히 시각을 인자로 받습니다. |
+| 처리량 제한기만 DB 시계로 판정 | 제한기는 20ms 간격으로 허가를 나누므로 워커 사이의 ms 단위 시계 차이도 한도 초과로 이어질 수 있습니다. 그래서 persistence adapter의 SQL이 `clock_timestamp()`로 직접 판정합니다. claim · lease 복구 · reconcile은 워커의 시스템 시계(`ClockPort`)로 판정하고, 워커 호스트가 NTP로 동기화되어 있다고 가정합니다. 이 판정의 단위는 lease 30초 · reconcile 지연 35초여서 수 ms의 차이는 결과를 바꾸지 않고, 시계가 크게 어긋나도 leaseToken fencing이 늦은 결과의 저장을 막습니다. 도메인 규칙은 시각을 인자로 받으므로 시각의 출처를 바꿔도 도메인은 그대로입니다. |
 | health의 DB 확인이 Pool에 직접 의존 | 비즈니스 규칙이 없는 기술 관심사라 driven adapter(`adapter/out/persistence`)가 직접 확인합니다. |
 | 종료 조율(bootstrap)이 Pool을 직접 닫음 | composition root의 일입니다. drain이 끝난 뒤, 감시 타이머가 살아 있는 동안 닫는 순서를 한 곳에서 보장합니다. |
 | in-memory fake가 `adapter/out/in-memory`에 있음 | 같은 계약 테스트를 fake와 실제 adapter 양쪽에 돌리기 위해서입니다. 운영 조립에는 쓰지 않습니다. |
