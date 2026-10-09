@@ -1,15 +1,12 @@
-import { ChildProcessWithoutNullStreams, execFileSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { rm } from 'node:fs/promises';
 import { createServer, IncomingMessage, Server, ServerResponse } from 'node:http';
-import net from 'node:net';
-import { join } from 'node:path';
 import { INestApplication, Type } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { request, spec } from 'pactum';
 import { Pool, QueryResult } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { WorkerProcess } from '@/bootstrap/testing/worker.process';
 import { TestDatabase } from '@/shared/database/testing/test-database';
 
 interface Gate {
@@ -33,9 +30,6 @@ const createdAlarmSchema = z.object({ id: z.string() });
 
 type CreatedAlarm = z.infer<typeof createdAlarmSchema>;
 
-const BUILD_ROOT: string = join(process.cwd(), 'node_modules', '.cache', 'worker-process-e2e');
-const BUILD_DIR: string = join(BUILD_ROOT, randomUUID());
-const SWC_BIN: string = join(process.cwd(), 'node_modules', '.bin', 'swc');
 const ACCEPTED_STATUS: number = 202;
 const NOT_FOUND_STATUS: number = 404;
 const QUIET_PERIOD_MS: number = 300;
@@ -55,18 +49,6 @@ const portOf = (address: ReturnType<Server['address']>): number => {
     return address.port;
   }
   throw new Error(`server is not listening on a TCP port: ${String(address)}`);
-};
-
-const freePort = async (): Promise<number> => {
-  const probe: net.Server = net.createServer();
-  await new Promise<void>((resolve: () => void): void => {
-    probe.listen(0, '127.0.0.1', resolve);
-  });
-  const port: number = portOf(probe.address());
-  await new Promise<void>((resolve: () => void): void => {
-    probe.close((): void => resolve());
-  });
-  return port;
 };
 
 const startStubMockApi = async (): Promise<StubMockApi> => {
@@ -98,18 +80,13 @@ const startStubMockApi = async (): Promise<StubMockApi> => {
   };
 };
 
-const readinessStatus = async (workerUrl: string): Promise<number> => {
-  const response: Response = await fetch(`${workerUrl}/readyz`);
-  await response.arrayBuffer();
-  return response.status;
-};
-
 describe('worker 프로세스', () => {
   let testDatabase: TestDatabase;
   let api: INestApplication;
+  let buildDir: string;
 
   beforeAll(async (): Promise<void> => {
-    execFileSync(SWC_BIN, ['src', '-d', BUILD_DIR, '--strip-leading-paths']);
+    buildDir = WorkerProcess.build();
     testDatabase = await TestDatabase.create();
     vi.stubEnv('DATABASE_URL', testDatabase.databaseUrl);
     const rootModule: Type = (await import('@/bootstrap/api.module.js')).ApiModule;
@@ -125,7 +102,7 @@ describe('worker 프로세스', () => {
     await api.close();
     vi.unstubAllEnvs();
     await testDatabase.drop();
-    await rm(BUILD_DIR, { recursive: true, force: true });
+    await WorkerProcess.removeBuild(buildDir);
   });
 
   const deliveryStatusCounts = async (): Promise<ReadonlyArray<StatusCountRow>> => {
@@ -152,41 +129,14 @@ describe('worker 프로세스', () => {
     );
     await spec().post(`/alarms/${createdAlarm.id}/dispatch`).expectStatus(202);
     const stubMockApi: StubMockApi = await startStubMockApi();
-    const workerPort: number = await freePort();
-    const workerUrl: string = `http://127.0.0.1:${workerPort}`;
-    const workerLogs: Array<string> = [];
-    const worker: ChildProcessWithoutNullStreams = spawn(
-      process.execPath,
-      ['--enable-source-maps', join(BUILD_DIR, 'worker.js')],
-      {
-        env: {
-          DATABASE_URL: testDatabase.databaseUrl,
-          MOCK_API_URL: stubMockApi.baseUrl,
-          HOST: '127.0.0.1',
-          PORT: String(workerPort),
-          DISPATCH_CONCURRENCY: '1',
-          SHUTDOWN_DRAIN_MS: '200',
-          LOG_FORMAT: 'json',
-        },
-      },
-    );
-    const exited: Promise<void> = new Promise<void>((resolve: () => void): void => {
-      worker.once('exit', (): void => resolve());
-    });
-    worker.stdout.on('data', (chunk: Buffer): void => {
-      workerLogs.push(chunk.toString());
-    });
-    worker.stderr.on('data', (chunk: Buffer): void => {
-      workerLogs.push(chunk.toString());
+    const worker: WorkerProcess = await WorkerProcess.start(buildDir, {
+      DATABASE_URL: testDatabase.databaseUrl,
+      MOCK_API_URL: stubMockApi.baseUrl,
+      DISPATCH_CONCURRENCY: '1',
+      SHUTDOWN_DRAIN_MS: '200',
     });
 
     try {
-      await vi.waitFor(
-        async (): Promise<void> => {
-          expect(await readinessStatus(workerUrl)).toBe(200);
-        },
-        { timeout: 15_000, interval: 100 },
-      );
       await vi.waitFor(
         (): void => {
           expect(stubMockApi.sendRequests).toHaveLength(1);
@@ -194,20 +144,20 @@ describe('worker 프로세스', () => {
         { timeout: 10_000, interval: 20 },
       );
 
-      worker.kill('SIGTERM');
+      worker.terminate();
       await vi.waitFor(
         async (): Promise<void> => {
-          expect(await readinessStatus(workerUrl)).toBe(503);
+          expect(await worker.readinessStatus()).toBe(503);
         },
         { timeout: 2_000, interval: 20 },
       );
       stubMockApi.releaseSends.open();
-      await exited;
+      await worker.exited;
       await new Promise<void>((resolve: () => void): void => {
         setTimeout(resolve, QUIET_PERIOD_MS);
       });
 
-      expect({ exitCode: worker.exitCode, logs: workerLogs }).toMatchObject({ exitCode: 0 });
+      expect(worker.exitCode).toBe(0);
       expect(stubMockApi.sendRequests).toHaveLength(1);
       expect(await deliveryStatusCounts()).toEqual([
         { status: 'PENDING', deliveries: 1 },
@@ -215,7 +165,7 @@ describe('worker 프로세스', () => {
       ]);
     } finally {
       stubMockApi.releaseSends.open();
-      worker.kill('SIGKILL');
+      await worker.kill();
       await new Promise<void>((resolve: () => void): void => {
         stubMockApi.server.close((): void => resolve());
       });
