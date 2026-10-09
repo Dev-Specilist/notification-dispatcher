@@ -9,6 +9,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
+import type { Request } from 'express';
 import { ProblemDetails } from '@/shared/http/problem-details.type';
 import { ProblemException } from '@/shared/http/problem.exception';
 import { RequestValidationException } from '@/shared/http/request-validation.exception';
@@ -30,7 +31,7 @@ export class ProblemDetailsFilter implements ExceptionFilter<ThrownValue> {
   catch(exception: ThrownValue, host: ArgumentsHost): void {
     const { httpAdapter }: HttpAdapterHost = this.adapterHost;
     const context: HttpContext = host.switchToHttp();
-    const instance: string = httpAdapter.getRequestUrl(context.getRequest());
+    const { originalUrl: instance }: Request = context.getRequest<Request>();
     const problem: ProblemDetails = ProblemDetailsFilter.toProblem(exception, instance);
 
     if (problem.status >= ProblemDetailsFilter.SERVER_ERROR_FLOOR) {
