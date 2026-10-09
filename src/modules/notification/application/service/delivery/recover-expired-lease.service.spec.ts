@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { WorkerShutdownSignalAdapter } from '@/modules/notification/adapter/driven/process-state/worker-shutdown-signal.adapter';
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import {
@@ -326,6 +327,7 @@ describe('RecoverExpiredLeaseService', () => {
       clock,
       new FixedDispatchSettings(),
       new ZeroJitter(),
+      new WorkerShutdownSignalAdapter(),
     );
     const reconcileWorker: ReconcileNextDeliveryService = new ReconcileNextDeliveryService(
       transaction,

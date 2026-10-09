@@ -15,6 +15,7 @@ import {
   LeasedSave,
 } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.type';
 import { DispatchSettings } from '@/modules/notification/application/service/delivery/delivery-settings.type';
+import { ShutdownSignalPort } from '@/modules/notification/application/port/driven/for-checking-shutdown/shutdown-signal.port';
 import { JitterSourcePort } from '@/modules/notification/application/port/driven/for-drawing-jitter/jitter-source.port';
 import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/lease-token-generator.port';
 import { MessageSenderPort } from '@/modules/notification/application/port/driven/for-sending-messages/message-sender.port';
@@ -52,12 +53,16 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
     private readonly clock: ClockPort,
     private readonly settings: Readonly<DispatchSettings>,
     private readonly jitterSource: JitterSourcePort,
+    private readonly shutdownSignal: ShutdownSignalPort,
   ) {}
 
   async execute(): Promise<SendAttempt> {
     const permit: SendPermit = await this.sendPermit.acquire();
     if (permit.kind === 'denied') {
       return { kind: 'no-permit' };
+    }
+    if (this.shutdownSignal.isRequested()) {
+      return { kind: 'stopped' };
     }
     const token: LeaseToken = this.leaseTokenGenerator.next();
     const step: ClaimStep = await this.claimNext(token);

@@ -18,6 +18,7 @@ import {
   PollingDelays,
   PollingOutcome,
 } from '@/modules/notification/adapter/driving/worker/polling-loop.type';
+import { WorkerShutdownSignalAdapter } from '@/modules/notification/adapter/driven/process-state/worker-shutdown-signal.adapter';
 import { TypedConfigService } from '@/shared/config/typed-config.service';
 
 @Injectable()
@@ -32,6 +33,7 @@ export class DispatchWorker implements OnApplicationBootstrap, OnModuleDestroy {
     private readonly reconcileNextDelivery: ReconcileNextDeliveryUseCase,
     private readonly recoverExpiredLease: RecoverExpiredLeaseUseCase,
     private readonly completeSettledAlarms: CompleteSettledAlarmsUseCase,
+    private readonly shutdownSignal: WorkerShutdownSignalAdapter,
     config: TypedConfigService,
   ) {
     const delays: PollingDelays = {
@@ -74,6 +76,7 @@ export class DispatchWorker implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
+    this.shutdownSignal.request();
     await Promise.all(this.loops.map((loop: PollingLoopRunner): Promise<void> => loop.stop()));
   }
 
@@ -84,7 +87,7 @@ export class DispatchWorker implements OnApplicationBootstrap, OnModuleDestroy {
 
   private async send(): Promise<PollingOutcome> {
     const { kind }: SendAttempt = await this.sendNextDelivery.execute();
-    return kind === 'idle' || kind === 'no-permit' ? 'idle' : 'worked';
+    return kind === 'idle' || kind === 'no-permit' || kind === 'stopped' ? 'idle' : 'worked';
   }
 
   private async reconcile(): Promise<PollingOutcome> {

@@ -31,6 +31,7 @@ import { SendAttempt } from '@/modules/notification/application/port/driving/for
 import { DispatchWorker } from '@/modules/notification/adapter/driving/worker/dispatch.worker';
 import { createEnvSchema } from '@/shared/config/env.schema';
 import { portSchema } from '@/shared/config/primitive.schema';
+import { WorkerShutdownSignalAdapter } from '@/modules/notification/adapter/driven/process-state/worker-shutdown-signal.adapter';
 import { TypedConfigModule } from '@/shared/config/typed-config.module';
 
 interface Gate {
@@ -185,6 +186,7 @@ describe('DispatchWorker', () => {
   let reconcile: IdleReconcile;
   let recovery: IdleRecovery;
   let completionCheck: TwoPageCompletionCheck;
+  let shutdownSignal: WorkerShutdownSignalAdapter;
   let probe: ShutdownPhaseProbe;
 
   const executionCounts = (): ExecutionCounts => ({
@@ -213,6 +215,7 @@ describe('DispatchWorker', () => {
       { provide: ReconcileNextDeliveryUseCase, useValue: reconcile },
       { provide: RecoverExpiredLeaseUseCase, useValue: recovery },
       { provide: CompleteSettledAlarmsUseCase, useValue: completionCheck },
+      { provide: WorkerShutdownSignalAdapter, useValue: shutdownSignal },
       DispatchWorker,
     ],
   });
@@ -238,6 +241,7 @@ describe('DispatchWorker', () => {
     reconcile = new IdleReconcile();
     recovery = new IdleRecovery();
     completionCheck = new TwoPageCompletionCheck();
+    shutdownSignal = new WorkerShutdownSignalAdapter();
     probe = new ShutdownPhaseProbe(sender);
     moduleRef = await compile(sender);
   });
@@ -277,6 +281,7 @@ describe('DispatchWorker', () => {
     await closing;
 
     expect(acceptingTrafficAfterSignal).toBe(false);
+    expect(shutdownSignal.isRequested()).toBe(true);
     expect(
       probe.observations.filter(
         ({ phase }: PhaseObservation): boolean => phase !== 'database-close',

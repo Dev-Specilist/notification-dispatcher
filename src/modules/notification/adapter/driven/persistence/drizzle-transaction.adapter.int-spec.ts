@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { WorkerShutdownSignalAdapter } from '@/modules/notification/adapter/driven/process-state/worker-shutdown-signal.adapter';
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import {
@@ -508,6 +509,7 @@ describe('DrizzleTransactionAdapter', () => {
         new FixedClock(),
         new FixedDispatchSettings(),
         new ZeroJitter(),
+        new WorkerShutdownSignalAdapter(),
       );
     await Promise.all([drainAll(worker()), drainAll(worker()), drainAll(worker())]);
 

@@ -4,6 +4,10 @@ export interface NoPermit {
   readonly kind: 'no-permit';
 }
 
+export interface StoppedBeforeClaim {
+  readonly kind: 'stopped';
+}
+
 export interface NothingToSend {
   readonly kind: 'idle';
 }
@@ -36,6 +40,7 @@ export interface LeaseTooShortToSend {
 
 export type SendAttempt =
   | NoPermit
+  | StoppedBeforeClaim
   | NothingToSend
   | DeliverySkipped
   | LeaseReleased

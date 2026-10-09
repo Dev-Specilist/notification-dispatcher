@@ -33,6 +33,8 @@ import { RandomLeaseTokenGeneratorAdapter } from '@/modules/notification/adapter
 import { SystemClockAdapter } from '@/modules/notification/adapter/driven/system/system-clock.adapter';
 import { WorkerSettingsFactory } from '@/modules/notification/adapter/driven/config/worker-settings.factory';
 import { WorkerSettings } from '@/modules/notification/adapter/driven/config/worker-settings.type';
+import { ShutdownSignalPort } from '@/modules/notification/application/port/driven/for-checking-shutdown/shutdown-signal.port';
+import { WorkerShutdownSignalAdapter } from '@/modules/notification/adapter/driven/process-state/worker-shutdown-signal.adapter';
 import { TypedConfigService } from '@/shared/config/typed-config.service';
 
 const WORKER_SETTINGS: string = 'WorkerSettings';
@@ -45,6 +47,11 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
       useFactory: (config: TypedConfigService): WorkerSettings =>
         WorkerSettingsFactory.fromConfig(config),
     },
+    {
+      provide: WorkerShutdownSignalAdapter,
+      useFactory: (): WorkerShutdownSignalAdapter => new WorkerShutdownSignalAdapter(),
+    },
+    { provide: ShutdownSignalPort, useExisting: WorkerShutdownSignalAdapter },
     { provide: ClockPort, useClass: SystemClockAdapter },
     { provide: DeliveryIdGeneratorPort, useClass: RandomIdGeneratorAdapter },
     { provide: LeaseTokenGeneratorPort, useClass: RandomLeaseTokenGeneratorAdapter },
@@ -117,6 +124,7 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
         ClockPort,
         WORKER_SETTINGS,
         JitterSourcePort,
+        ShutdownSignalPort,
       ],
       useFactory: (
         transaction: TransactionPort,
@@ -126,6 +134,7 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
         clock: ClockPort,
         { deliverySettings }: WorkerSettings,
         jitterSource: JitterSourcePort,
+        shutdownSignal: ShutdownSignalPort,
       ): SendNextDeliveryUseCase =>
         new SendNextDeliveryService(
           transaction,
@@ -135,6 +144,7 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
           clock,
           deliverySettings,
           jitterSource,
+          shutdownSignal,
         ),
     },
     {

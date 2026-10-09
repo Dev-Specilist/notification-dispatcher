@@ -39,6 +39,7 @@ import { SendPermit } from '@/modules/notification/application/port/driven/for-p
 import { CancelAlarmService } from '@/modules/notification/application/service/alarm/cancel-alarm.service';
 import { SendAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/send-next-delivery.type';
 import { SendNextDeliveryService } from '@/modules/notification/application/service/delivery/send-next-delivery.service';
+import { WorkerShutdownSignalAdapter } from '@/modules/notification/adapter/driven/process-state/worker-shutdown-signal.adapter';
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-expansion-job-repository.adapter';
@@ -70,6 +71,7 @@ interface FixtureOptions {
   readonly permit: SendPermitPort;
   readonly sender: RecordingMessageSender;
   readonly createTransaction: TransactionFactory;
+  readonly shutdownSignal: WorkerShutdownSignalAdapter;
 }
 
 interface Gate {
@@ -287,6 +289,19 @@ class StubSendPermit implements SendPermitPort {
   }
 }
 
+class ShutdownDuringAcquirePermit implements SendPermitPort {
+  constructor(private readonly shutdownSignal: WorkerShutdownSignalAdapter) {}
+
+  acquire(): Promise<SendPermit> {
+    this.shutdownSignal.request();
+    return Promise.resolve({ kind: 'granted' });
+  }
+
+  holdFor(_holdMs: RetryAfterMs): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
 class SharedSendPermit implements SendPermitPort {
   private heldUntil: number = 0;
 
@@ -409,6 +424,7 @@ const defaultOptions = (): FixtureOptions => ({
   sender: new RecordingMessageSender(),
   createTransaction: (repositories: InMemoryRepositories): InMemoryTransactionAdapter =>
     new InMemoryTransactionAdapter(repositories),
+  shutdownSignal: new WorkerShutdownSignalAdapter(),
 });
 
 const fixture = async (
@@ -423,6 +439,7 @@ const fixture = async (
     permit,
     sender,
     createTransaction,
+    shutdownSignal,
   }: FixtureOptions = {
     ...defaultOptions(),
     ...overrides,
@@ -451,6 +468,7 @@ const fixture = async (
         clock,
         settings,
         new ZeroJitter(),
+        shutdownSignal,
       ),
     service: new SendNextDeliveryService(
       transaction,
@@ -460,6 +478,7 @@ const fixture = async (
       clock,
       settings,
       new ZeroJitter(),
+      shutdownSignal,
     ),
   };
 };
@@ -565,6 +584,18 @@ describe('SendNextDeliveryService', () => {
     );
 
     expect(await service.execute()).toEqual({ kind: 'no-permit' });
+    expect(sender.sent).toEqual([]);
+    expect(await statuses(deliveryRepository, BULK_ALARM_ID)).toEqual([['u_000001', 'PENDING']]);
+  });
+
+  it('UC-21 발송 허가를 기다리는 사이 워커 종료가 요청됐다 / 발송 유스케이스 → 허가를 얻어도 새 Delivery를 claim하지 않고 멈춘다', async (): Promise<void> => {
+    const shutdownSignal: WorkerShutdownSignalAdapter = new WorkerShutdownSignalAdapter();
+    const { deliveryRepository, sender, service }: Fixture = await fixture(
+      [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
+      { permit: new ShutdownDuringAcquirePermit(shutdownSignal), shutdownSignal },
+    );
+
+    expect(await service.execute()).toEqual({ kind: 'stopped' });
     expect(sender.sent).toEqual([]);
     expect(await statuses(deliveryRepository, BULK_ALARM_ID)).toEqual([['u_000001', 'PENDING']]);
   });
