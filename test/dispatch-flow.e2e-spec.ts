@@ -201,7 +201,7 @@ describe('발송 전체 흐름', () => {
   const runWorkers = async <TResult>(
     workerCount: number,
     mockApi: MockApiContainer,
-    run: () => Promise<TResult>,
+    run: (workers: ReadonlyArray<WorkerProcess>) => Promise<TResult>,
     workerEnvironment: WorkerEnvironment = {},
   ): Promise<TResult> => {
     const workers: Array<WorkerProcess> = [];
@@ -216,7 +216,7 @@ describe('발송 전체 흐름', () => {
           }),
         );
       }
-      return await run();
+      return await run(workers);
     } finally {
       await Promise.all(workers.map((worker: WorkerProcess): Promise<void> => worker.kill()));
     }
@@ -388,8 +388,52 @@ describe('발송 전체 흐름', () => {
     },
     120_000,
   );
-  it.todo(
-    'E2E-05 워커 3개로 발송 중 / 워커 하나를 강제로 멈춘다 → 남은 워커가 lease 만료분까지 이어받아 중복·누락 없이 끝난다',
+  it.each([2, 3])(
+    'E2E-05 워커 여러 개(%i개)로 발송 중 / 워커 하나를 강제로 멈춘다 → 남은 워커가 lease 만료분까지 이어받아 중복·누락 없이 끝난다',
+    async (workerCount: number): Promise<void> => {
+      await withMockApi(
+        { USER_COUNT: '200', RATE_LIMIT: '50', SLOW_RATE: '1', SLOW_MS: '500' },
+        async (mockApi: MockApiContainer): Promise<void> => {
+          await resetRateLimiter();
+          const { id: alarmId }: CreatedAlarm = await dispatchedBulkAlarm();
+
+          await runWorkers(
+            workerCount,
+            mockApi,
+            async ([killedWorker]: ReadonlyArray<WorkerProcess>): Promise<void> => {
+              await vi.waitFor(
+                async (): Promise<void> => {
+                  expect(await sentDeliveryCount(alarmId)).toBeGreaterThanOrEqual(40);
+                },
+                { timeout: COMPLETION_TIMEOUT_MS, interval: 50 },
+              );
+              await killedWorker.kill();
+              await vi.waitFor(
+                async (): Promise<void> => {
+                  expect(await alarmStatus(alarmId)).toBe('COMPLETED');
+                },
+                { timeout: COMPLETION_TIMEOUT_MS, interval: 500 },
+              );
+            },
+            {
+              DISPATCH_MAX_REQUEST_MS: '1000',
+              DISPATCH_LEASE_MS: '3000',
+              RECONCILE_DELAY_MS: '4000',
+            },
+          );
+
+          const deliveries: ReadonlyArray<DeliveryDelivered> = await deliveriesOf(alarmId, mockApi);
+          expect(deliveries).toHaveLength(200);
+          expect(
+            deliveries.filter(
+              ({ status, mockMessages }: DeliveryDelivered): boolean =>
+                status !== 'SENT' || mockMessages !== 1,
+            ),
+          ).toEqual([]);
+        },
+      );
+    },
+    120_000,
   );
   it.todo(
     'E2E-06 대량 알림 발송 중 / 알림을 취소한다 → 새 발송이 멈추고, 이미 나간 건은 SENT로 남으며 나머지는 CANCELLED가 된다',

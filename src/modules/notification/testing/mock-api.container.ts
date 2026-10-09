@@ -6,6 +6,7 @@ export interface MockApiEnvironment {
   readonly TIMEOUT_RATE: string;
   readonly TIMEOUT_MS: string;
   readonly SLOW_RATE: string;
+  readonly SLOW_MS: string;
   readonly BLOCKED_PERCENT: string;
   readonly USER_COUNT: string;
 }
@@ -21,6 +22,7 @@ export class MockApiContainer {
     TIMEOUT_RATE: '0',
     TIMEOUT_MS: '30000',
     SLOW_RATE: '0',
+    SLOW_MS: '3000',
     BLOCKED_PERCENT: '0',
     USER_COUNT: '100',
   };
