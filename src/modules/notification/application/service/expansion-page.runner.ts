@@ -18,8 +18,8 @@ import { TransactionRepositories } from '@/modules/notification/application/port
 import {
   ExpansionCancelled,
   ExpansionResult,
-} from '@/modules/notification/application/port/in/expand-recipients.type';
-import { ExpansionStep } from '@/modules/notification/application/service/expansion-page.type';
+  ExpansionStep,
+} from '@/modules/notification/application/service/expansion-page.type';
 
 interface PageToFetch {
   readonly kind: 'fetch';

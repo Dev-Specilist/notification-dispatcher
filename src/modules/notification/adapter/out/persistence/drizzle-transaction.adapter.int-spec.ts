@@ -26,6 +26,7 @@ import { AlarmLookup } from '@/modules/notification/application/port/out/alarm-r
 import { ExpansionJobLookup } from '@/modules/notification/application/port/out/expansion-job-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
 import { DispatchSettingsPort } from '@/modules/notification/application/port/out/dispatch-settings.port';
+import { ExpansionSettingsPort } from '@/modules/notification/application/port/out/expansion-settings.port';
 import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/out/delivery-id-generator.port';
 import { JitterSourcePort } from '@/modules/notification/application/port/out/jitter-source.port';
 import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/out/lease-token-generator.port';
@@ -50,8 +51,8 @@ import {
   StartDispatchResult,
 } from '@/modules/notification/application/port/in/alarm-result.type';
 import { CancelAlarmService } from '@/modules/notification/application/service/cancel-alarm.service';
-import { ExpansionResult } from '@/modules/notification/application/port/in/expand-recipients.type';
-import { ExpandRecipientsService } from '@/modules/notification/application/service/expand-recipients.service';
+import { ExpansionPageAttempt } from '@/modules/notification/application/port/in/expand-next-page.type';
+import { ExpandNextPageService } from '@/modules/notification/application/service/expand-next-page.service';
 import { SendAttempt } from '@/modules/notification/application/port/in/send-next-delivery.type';
 import { SendNextDeliveryService } from '@/modules/notification/application/service/send-next-delivery.service';
 import { StartDispatchService } from '@/modules/notification/application/service/start-dispatch.service';
@@ -134,9 +135,19 @@ const bulkDraft = (): Alarm =>
   draftAlarm({ title: '추석 이벤트', body: '쿠폰 도착', kind: 'BULK', recipientIds: [] });
 
 class FixedClock implements ClockPort {
+  constructor(private readonly fixedIso: string = NOW_ISO) {}
+
   now(): Date {
-    return new Date(NOW_ISO);
+    return new Date(this.fixedIso);
   }
+}
+
+const EXPANSION_LEASE_MS: number = 30_000;
+
+const AFTER_EXPANSION_LEASE_ISO: string = '2026-10-08T09:00:31.000Z';
+
+class FixedExpansionSettings implements ExpansionSettingsPort {
+  readonly leaseMs: DurationMs = durationMs(EXPANSION_LEASE_MS);
 }
 
 class RandomDeliveryIdGenerator implements DeliveryIdGeneratorPort {
@@ -220,6 +231,8 @@ class ZeroJitter implements JitterSourcePort {
 }
 
 class BothWorkersFetchFirstDirectory implements RecipientDirectoryPort {
+  readonly firstFetchStarted: Gate = createGate();
+
   private fetched: number = 0;
 
   private readonly bothFetched: Gate = createGate();
@@ -227,6 +240,7 @@ class BothWorkersFetchFirstDirectory implements RecipientDirectoryPort {
   async fetchPage(cursor: PageCursor): Promise<RecipientPage> {
     if (cursor.kind === 'first') {
       this.fetched += 1;
+      this.firstFetchStarted.open();
       if (this.fetched === 2) {
         this.bothFetched.open();
       }
@@ -506,29 +520,37 @@ describe('DrizzleTransactionAdapter', () => {
     ).toBe(true);
   });
 
-  it('UC-07 두 워커가 같은 확장 페이지를 받아 동시에 저장하면 한 워커만 진행하고 다른 워커는 superseded가 된다', async (): Promise<void> => {
+  it('UC-07 lease가 만료돼 두 워커가 같은 확장 페이지를 받아 동시에 저장하면 한 워커만 진행하고 다른 워커는 superseded가 된다', async (): Promise<void> => {
     const alarm: Alarm = bulkDraft();
     await save(alarm);
     const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
     await startDispatch().execute({ alarmId });
     const directory: BothWorkersFetchFirstDirectory = new BothWorkersFetchFirstDirectory();
-    const expander = (): ExpandRecipientsService =>
-      new ExpandRecipientsService(
+    const expanderAt = (clockIso: string): ExpandNextPageService =>
+      new ExpandNextPageService(
         transaction,
         directory,
         new RandomDeliveryIdGenerator(),
-        new FixedClock(),
+        new FixedExpansionSettings(),
+        new FixedClock(clockIso),
       );
 
-    const results: ReadonlyArray<ExpansionResult> = await Promise.all([
-      expander().execute({ alarmId }),
-      expander().execute({ alarmId }),
+    const leaseHolderAttempt: Promise<ExpansionPageAttempt> = expanderAt(NOW_ISO).execute();
+    await directory.firstFetchStarted.opened;
+    const takeoverAttempt: Promise<ExpansionPageAttempt> =
+      expanderAt(AFTER_EXPANSION_LEASE_ISO).execute();
+    const attempts: ReadonlyArray<ExpansionPageAttempt> = await Promise.all([
+      leaseHolderAttempt,
+      takeoverAttempt,
     ]);
 
-    expect(results.map((result: ExpansionResult): string => result.kind).toSorted()).toEqual([
-      'completed',
-      'superseded',
-    ]);
+    expect(
+      attempts
+        .map((attempt: ExpansionPageAttempt): string =>
+          attempt.kind === 'expanded' ? attempt.step : attempt.kind,
+        )
+        .toSorted(),
+    ).toEqual(['continued', 'superseded']);
     expect(await deliveriesOf(alarmId)).toHaveLength(2);
   });
 
