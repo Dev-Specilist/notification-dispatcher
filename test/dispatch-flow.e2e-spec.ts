@@ -4,7 +4,7 @@ import { request, spec } from 'pactum';
 import { Pool, QueryResult } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { WorkerProcess } from '@/bootstrap/testing/worker.process';
+import { WorkerEnvironment, WorkerProcess } from '@/bootstrap/testing/worker.process';
 import {
   MockApiContainer,
   MockApiEnvironment,
@@ -15,12 +15,14 @@ interface DeliveryRow {
   readonly id: string;
   readonly status: string;
   readonly failure_reason: string;
+  readonly attempts: number;
 }
 
 interface DeliveryDelivered {
   readonly status: string;
   readonly failureReason: string;
   readonly mockMessages: number;
+  readonly attempts: number;
 }
 
 const createdAlarmSchema = z.object({ id: z.string() });
@@ -108,14 +110,20 @@ describe('발송 전체 흐름', () => {
     const result: QueryResult<DeliveryRow> = await api
       .get(Pool)
       .query<DeliveryRow>(
-        "SELECT id, status, coalesce(failure_reason, 'none') AS failure_reason FROM deliveries WHERE alarm_id = $1",
+        "SELECT id, status, coalesce(failure_reason, 'none') AS failure_reason, attempts FROM deliveries WHERE alarm_id = $1",
         [alarmId],
       );
     return Promise.all(
       result.rows.map(
-        async ({ id, status, failure_reason }: DeliveryRow): Promise<DeliveryDelivered> => ({
+        async ({
+          id,
+          status,
+          failure_reason,
+          attempts,
+        }: DeliveryRow): Promise<DeliveryDelivered> => ({
           status,
           failureReason: failure_reason,
+          attempts,
           mockMessages: await mockMessageCount(mockApi, id),
         }),
       ),
@@ -126,6 +134,7 @@ describe('발송 전체 흐름', () => {
     workerCount: number,
     mockApi: MockApiContainer,
     run: () => Promise<void>,
+    workerEnvironment: WorkerEnvironment = {},
   ): Promise<void> => {
     const workers: Array<WorkerProcess> = [];
     try {
@@ -135,6 +144,7 @@ describe('발송 전체 흐름', () => {
             DATABASE_URL: testDatabase.databaseUrl,
             MOCK_API_URL: mockApi.baseUrl.toString(),
             SHUTDOWN_DRAIN_MS: '0',
+            ...workerEnvironment,
           }),
         );
       }
@@ -182,9 +192,58 @@ describe('발송 전체 흐름', () => {
     );
   }, 120_000);
 
-  it.todo(
-    'E2E-02 오류·타임아웃 비율을 높인 mock / 대량 알림 발송 → 일시 오류는 재시도되고, 타임아웃 건은 reconcile로 확정되어 같은 clientRef 내역이 2건 이상인 Delivery가 없다',
-  );
+  it('E2E-02 오류·타임아웃 비율을 높인 mock / 대량 알림 발송 → 일시 오류는 재시도되고, 타임아웃 건은 reconcile로 확정되어 같은 clientRef 내역이 2건 이상인 Delivery가 없다', async (): Promise<void> => {
+    await withMockApi(
+      {
+        USER_COUNT: '100',
+        RATE_LIMIT: '50',
+        ERROR_RATE: '0.2',
+        TIMEOUT_RATE: '0.1',
+        TIMEOUT_MS: '3000',
+      },
+      async (mockApi: MockApiContainer): Promise<void> => {
+        const { id: alarmId }: CreatedAlarm = await dispatchedBulkAlarm();
+
+        await runWorkers(
+          1,
+          mockApi,
+          async (): Promise<void> => {
+            await vi.waitFor(
+              async (): Promise<void> => {
+                expect(await alarmStatus(alarmId)).toBe('COMPLETED');
+              },
+              { timeout: COMPLETION_TIMEOUT_MS, interval: 500 },
+            );
+          },
+          {
+            DISPATCH_MAX_REQUEST_MS: '1000',
+            DISPATCH_LEASE_MS: '3000',
+            RECONCILE_DELAY_MS: '4000',
+            RETRY_MAX_ATTEMPTS: '10',
+            RETRY_BASE_DELAY_MS: '200',
+            RETRY_MAX_DELAY_MS: '1000',
+            LOOKUP_RETRY_BASE_DELAY_MS: '500',
+            LOOKUP_RETRY_MAX_DELAY_MS: '2000',
+          },
+        );
+
+        const deliveries: ReadonlyArray<DeliveryDelivered> = await deliveriesOf(alarmId, mockApi);
+        expect(deliveries).toHaveLength(100);
+        expect(
+          deliveries.filter(({ mockMessages }: DeliveryDelivered): boolean => mockMessages >= 2),
+        ).toEqual([]);
+        expect(
+          deliveries.filter(
+            ({ status, mockMessages }: DeliveryDelivered): boolean =>
+              status !== 'SENT' || mockMessages !== 1,
+          ),
+        ).toEqual([]);
+        expect(
+          deliveries.filter(({ attempts }: DeliveryDelivered): boolean => attempts > 1).length,
+        ).toBeGreaterThan(0);
+      },
+    );
+  }, 120_000);
   it.todo(
     'E2E-03 대량 알림 발송 중 / 긴급 알림이 발송 가능해진다 → 발송 가능한 긴급 Delivery가 남아 있는 동안 발송 허가를 얻은 요청은 모두 긴급 Delivery를 보낸다 (이미 시작된 대량 요청은 제외)',
   );
