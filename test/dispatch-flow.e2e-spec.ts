@@ -36,6 +36,10 @@ interface UnsettledCountRow {
   readonly unsettled: number;
 }
 
+interface StatusCountRow {
+  readonly deliveries: number;
+}
+
 interface SentCountRow {
   readonly sent: number;
 }
@@ -192,6 +196,17 @@ describe('발송 전체 흐름', () => {
       );
     const [{ sent }]: ReadonlyArray<SentCountRow> = result.rows;
     return sent;
+  };
+
+  const deliveryCountByStatus = async (alarmId: string, status: string): Promise<number> => {
+    const result: QueryResult<StatusCountRow> = await api
+      .get(Pool)
+      .query<StatusCountRow>(
+        'SELECT count(*)::int AS deliveries FROM deliveries WHERE alarm_id = $1 AND status = $2',
+        [alarmId, status],
+      );
+    const [{ deliveries }]: ReadonlyArray<StatusCountRow> = result.rows;
+    return deliveries;
   };
 
   const claimedOrSettledDeliveryCount = async (alarmId: string): Promise<number> => {
@@ -426,7 +441,7 @@ describe('발송 전체 흐름', () => {
     120_000,
   );
   it.each([2, 3])(
-    'E2E-05 워커 여러 개(%i개)로 발송 중 / 워커 하나를 강제로 멈춘다 → 남은 워커가 lease 만료분까지 이어받아 중복·누락 없이 끝난다',
+    'E2E-05 워커 여러 개(%i개)로 발송 중이고 IN_FLIGHT 수가 남을 워커들의 동시 발송 수를 넘는다 / 워커 하나를 강제로 멈춘다 → 멈춘 워커의 lease가 만료되어 UNKNOWN을 거친 건까지 남은 워커가 이어받아 중복·누락 없이 끝난다',
     async (workerCount: number): Promise<void> => {
       await withMockApi(
         { USER_COUNT: '200', RATE_LIMIT: '50', SLOW_RATE: '1', SLOW_MS: '500' },
@@ -444,7 +459,22 @@ describe('발송 전체 흐름', () => {
                 },
                 { timeout: COMPLETION_TIMEOUT_MS, interval: 50 },
               );
+              await vi.waitFor(
+                async (): Promise<void> => {
+                  expect(await deliveryCountByStatus(alarmId, 'IN_FLIGHT')).toBeGreaterThan(
+                    (workerCount - 1) * DISPATCH_CONCURRENCY,
+                  );
+                },
+                { timeout: COMPLETION_TIMEOUT_MS, interval: 20 },
+              );
+              expect(await deliveryCountByStatus(alarmId, 'UNKNOWN')).toBe(0);
               await killedWorker.kill();
+              await vi.waitFor(
+                async (): Promise<void> => {
+                  expect(await deliveryCountByStatus(alarmId, 'UNKNOWN')).toBeGreaterThan(0);
+                },
+                { timeout: COMPLETION_TIMEOUT_MS, interval: 50 },
+              );
               await vi.waitFor(
                 async (): Promise<void> => {
                   expect(await alarmStatus(alarmId)).toBe('COMPLETED');
@@ -453,6 +483,7 @@ describe('발송 전체 흐름', () => {
               );
             },
             {
+              DISPATCH_CONCURRENCY: String(DISPATCH_CONCURRENCY),
               DISPATCH_MAX_REQUEST_MS: '1000',
               DISPATCH_LEASE_MS: '3000',
               RECONCILE_DELAY_MS: '4000',
