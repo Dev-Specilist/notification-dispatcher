@@ -17,7 +17,4 @@ describe('발송 전체 흐름', () => {
   it.todo(
     'E2E-06 대량 알림 발송 중 / 알림을 취소한다 → 새 발송이 멈추고, 이미 나간 건은 SENT로 남으며 나머지는 CANCELLED가 된다',
   );
-  it.todo(
-    'E2E-07 실제 worker 자식 프로세스 / SIGTERM을 보낸다 → readiness가 내려가고 새 claim이 멈추며, 진행 중 요청을 마무리하고 exit 0으로 끝난다 (enableShutdownHooks의 useProcessExit: true)',
-  );
 });
