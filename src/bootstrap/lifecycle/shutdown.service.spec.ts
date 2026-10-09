@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
+import { ConsoleLogger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Pool } from 'pg';
 import { ShutdownService } from '@/bootstrap/lifecycle/shutdown.service';
@@ -9,6 +10,10 @@ import { portSchema } from '@/shared/config/primitive.schema';
 import { TypedConfigModule } from '@/shared/config/typed-config.module';
 
 type ExitSpy = MockInstance<typeof process.exit>;
+
+type ErrorLogSpy = MockInstance<ConsoleLogger['error']>;
+
+type ErrorLogCall = Parameters<ConsoleLogger['error']>;
 
 class ExitCalled extends Error {}
 
@@ -83,6 +88,9 @@ describe('ShutdownService', () => {
   });
 
   it('종료 신호 후 drain과 timeout을 합한 시간 안에 끝나지 않으면 exit(1)로 강제 종료한다', () => {
+    const errorLog: ErrorLogSpy = vi
+      .spyOn(ConsoleLogger.prototype, 'error')
+      .mockImplementation((): void => {});
     shutdown.handleSignal('SIGTERM');
 
     vi.advanceTimersByTime(DRAIN_MS + TIMEOUT_MS - 1);
@@ -90,6 +98,9 @@ describe('ShutdownService', () => {
 
     expect(() => vi.advanceTimersByTime(1)).toThrow(ExitCalled);
     expect(exit).toHaveBeenCalledWith(1);
+    expect(errorLog.mock.calls.map(([message]: ErrorLogCall): string => String(message))).toEqual([
+      `shutdown did not finish within ${DRAIN_MS + TIMEOUT_MS}ms, forcing exit`,
+    ]);
   });
 
   it('종료 신호를 여러 번 받아도 강제 종료 타이머는 한 번만 시작한다', () => {
@@ -135,6 +146,9 @@ describe('ShutdownService', () => {
   });
 
   it('DB Pool 종료가 끝나지 않으면 워치독을 유지해 기한이 지나면 exit(1)로 강제 종료한다', async (): Promise<void> => {
+    const errorLog: ErrorLogSpy = vi
+      .spyOn(ConsoleLogger.prototype, 'error')
+      .mockImplementation((): void => {});
     const endNeverFinishes: MockInstance<Pool['end']> = vi
       .spyOn(pool, 'end')
       .mockImplementation((): Promise<void> => new Promise<void>(NEVER));
@@ -146,6 +160,9 @@ describe('ShutdownService', () => {
 
     await expect(vi.advanceTimersByTimeAsync(1)).rejects.toThrow(ExitCalled);
     expect(exit).toHaveBeenCalledWith(1);
+    expect(errorLog.mock.calls.map(([message]: ErrorLogCall): string => String(message))).toEqual([
+      `shutdown did not finish within ${DRAIN_MS + TIMEOUT_MS}ms, forcing exit`,
+    ]);
     endNeverFinishes.mockRestore();
   });
 

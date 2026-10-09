@@ -1,5 +1,11 @@
 import { scheduler } from 'node:timers/promises';
-import { BeforeApplicationShutdown, DynamicModule, Injectable, Type } from '@nestjs/common';
+import {
+  BeforeApplicationShutdown,
+  ConsoleLogger,
+  DynamicModule,
+  Injectable,
+  Type,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Pool, PoolClient, QueryResult } from 'pg';
 import {
@@ -25,6 +31,10 @@ interface ApiModuleExport {
 }
 
 type ExitSpy = MockInstance<typeof process.exit>;
+
+type ErrorLogSpy = MockInstance<ConsoleLogger['error']>;
+
+type ErrorLogCall = Parameters<ConsoleLogger['error']>;
 
 class ExitCalled extends Error {}
 
@@ -98,6 +108,9 @@ describe('ShutdownService', () => {
   });
 
   it('실제 api 루트 모듈에서 반납되지 않은 연결 때문에 Pool 종료가 끝나지 않으면 기한이 지나 exit(1)로 강제 종료한다', async (): Promise<void> => {
+    const errorLog: ErrorLogSpy = vi
+      .spyOn(ConsoleLogger.prototype, 'error')
+      .mockImplementation((): void => {});
     const pool: Pool = moduleRef.get(Pool);
     const held: PoolClient = await pool.connect();
     const exit: ExitSpy = vi.spyOn(process, 'exit').mockImplementation((): never => {
@@ -121,6 +134,9 @@ describe('ShutdownService', () => {
 
     await expect(vi.advanceTimersByTimeAsync(1)).rejects.toThrow(ExitCalled);
     expect(exit).toHaveBeenCalledWith(1);
+    expect(errorLog.mock.calls.map(([message]: ErrorLogCall): string => String(message))).toEqual([
+      `shutdown did not finish within ${DRAIN_MS + TIMEOUT_MS}ms, forcing exit`,
+    ]);
 
     vi.useRealTimers();
     held.release();
