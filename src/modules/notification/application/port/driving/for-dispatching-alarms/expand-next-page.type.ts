@@ -1,5 +1,4 @@
-export type ExpansionPageStepName =
-  'continued' | 'completed' | 'cancelled' | 'superseded' | 'not-found';
+export type ExpansionPageStepName = 'continued' | 'completed' | 'cancelled' | 'superseded';
 
 export interface NothingToExpand {
   readonly kind: 'idle';

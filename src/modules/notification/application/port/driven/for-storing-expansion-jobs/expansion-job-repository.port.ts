@@ -1,8 +1,8 @@
 import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
+import { ExpansionJob } from '@/modules/notification/domain/expansion/expansion-job.entity';
 import {
   ExpansionClaim,
   ExpansionJobLookup,
-  ExpansionProgress,
 } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
 
 export abstract class ExpansionJobRepositoryPort {
@@ -14,5 +14,5 @@ export abstract class ExpansionJobRepositoryPort {
 
   abstract findByAlarmIdForUpdate(alarmId: AlarmId): Promise<ExpansionJobLookup>;
 
-  abstract recordProgress(alarmId: AlarmId, progress: ExpansionProgress): Promise<void>;
+  abstract save(job: ExpansionJob): Promise<void>;
 }

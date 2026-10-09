@@ -21,6 +21,7 @@ import {
   MessageId,
 } from '@/modules/notification/domain/delivery/delivery.type';
 import { RetryPolicy } from '@/modules/notification/domain/delivery/retry-policy';
+import { ExpansionJob } from '@/modules/notification/domain/expansion/expansion-job.entity';
 import { RetryPolicyCreation } from '@/modules/notification/domain/delivery/retry-policy.type';
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
@@ -656,10 +657,13 @@ describe('DrizzleTransactionAdapter', () => {
         await expansionJobRepository.findByAlarmIdForUpdate(alarmId);
         locked.open();
         await release.opened;
-        await expansionJobRepository.recordProgress(alarmId, {
-          kind: 'completed',
-          completedAt: new Date(NOW_ISO),
-        });
+        await expansionJobRepository.save(
+          ExpansionJob.reconstitute({
+            alarmId,
+            enqueuedAt: new Date(NOW_ISO),
+            progress: { kind: 'completed', completedAt: new Date(NOW_ISO) },
+          }),
+        );
       },
     );
     await locked.opened;
@@ -675,6 +679,9 @@ describe('DrizzleTransactionAdapter', () => {
       await Promise.allSettled([holder, waiter]);
     }
 
-    expect(await waiter).toMatchObject({ kind: 'found', job: { progress: { kind: 'completed' } } });
+    const waitedLookup: ExpansionJobLookup = await waiter;
+    KindAssertion.assertKind(waitedLookup, 'found');
+    const { job: waitedJob }: KindMember<ExpansionJobLookup, 'found'> = waitedLookup;
+    expect(waitedJob.isCompleted()).toBe(true);
   });
 });

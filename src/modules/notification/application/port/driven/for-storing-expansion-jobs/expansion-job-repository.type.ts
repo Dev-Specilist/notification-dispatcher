@@ -1,28 +1,5 @@
 import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
-import { PageCursor } from '@/modules/notification/application/port/driven/for-fetching-recipients/recipient-directory.type';
-
-export interface ExpansionInProgress {
-  readonly kind: 'in-progress';
-  readonly cursor: PageCursor;
-}
-
-export interface ExpansionCompleted {
-  readonly kind: 'completed';
-  readonly completedAt: Date;
-}
-
-export interface ExpansionStopped {
-  readonly kind: 'stopped';
-  readonly stoppedAt: Date;
-}
-
-export type ExpansionProgress = ExpansionInProgress | ExpansionCompleted | ExpansionStopped;
-
-export interface ExpansionJob {
-  readonly alarmId: AlarmId;
-  readonly enqueuedAt: Date;
-  readonly progress: ExpansionProgress;
-}
+import { ExpansionJob } from '@/modules/notification/domain/expansion/expansion-job.entity';
 
 export interface ExpansionJobFound {
   readonly kind: 'found';

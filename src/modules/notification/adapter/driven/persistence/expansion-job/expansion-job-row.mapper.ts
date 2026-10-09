@@ -1,10 +1,8 @@
 import { SQL, sql } from 'drizzle-orm';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
-import {
-  ExpansionJob,
-  ExpansionProgress,
-} from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
+import { ExpansionJob } from '@/modules/notification/domain/expansion/expansion-job.entity';
+import { ExpansionProgress } from '@/modules/notification/domain/expansion/expansion-job.type';
 import { ExpansionJobRow } from '@/modules/notification/adapter/driven/persistence/notification-database.type';
 
 interface ProgressColumns {
@@ -45,11 +43,11 @@ export class ExpansionJobRowMapper {
 
   static toJob(row: ExpansionJobRow): ExpansionJob {
     const { enqueuedAt }: ExpansionJobRow = row;
-    return {
+    return ExpansionJob.reconstitute({
       alarmId: ExpansionJobRowMapper.alarmIdOf(row),
       enqueuedAt,
       progress: ExpansionJobRowMapper.progressOf(row),
-    };
+    });
   }
 
   private static alarmIdOf({ alarmId }: ExpansionJobRow): AlarmId {

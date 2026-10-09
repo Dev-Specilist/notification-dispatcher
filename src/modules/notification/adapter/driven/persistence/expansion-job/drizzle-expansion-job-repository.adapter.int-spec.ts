@@ -10,6 +10,7 @@ import { NotificationDatabaseFactory } from '@/modules/notification/adapter/driv
 import { NotificationDatabase } from '@/modules/notification/adapter/driven/persistence/notification-database.type';
 import { TestDatabase } from '@/shared/database/testing/test-database';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
+import { ExpansionJob } from '@/modules/notification/domain/expansion/expansion-job.entity';
 import { ExpansionClaim } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
 import { createGate, Gate } from '@/shared/testing/gate.factory';
 
@@ -164,10 +165,13 @@ describe('DrizzleExpansionJobRepositoryAdapter', () => {
       throw new Error('generated alarm id is invalid');
     }
 
-    await new DrizzleExpansionJobRepositoryAdapter(database).recordProgress(owner, {
-      kind: 'completed',
-      completedAt: new Date('2026-10-08T09:10:00.000Z'),
-    });
+    await new DrizzleExpansionJobRepositoryAdapter(database).save(
+      ExpansionJob.reconstitute({
+        alarmId: owner,
+        enqueuedAt: new Date('2026-10-08T09:00:00.000Z'),
+        progress: { kind: 'completed', completedAt: new Date('2026-10-08T09:10:00.000Z') },
+      }),
+    );
 
     const result: QueryResult<CursorColumns> = await testDatabase.pool.query<CursorColumns>(
       `SELECT coalesce(cursor_kind, 'cleared') AS cursor_kind, coalesce(cursor_token, 'cleared') AS cursor_token FROM expansion_jobs WHERE alarm_id = $1`,

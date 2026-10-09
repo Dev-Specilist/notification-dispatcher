@@ -18,6 +18,7 @@ import {
   LeaseToken,
   MessageId,
 } from '@/modules/notification/domain/delivery/delivery.type';
+import { ExpansionJob } from '@/modules/notification/domain/expansion/expansion-job.entity';
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
 import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
@@ -202,10 +203,13 @@ const completeExpansion = async (
   expansionJobRepository: InMemoryExpansionJobRepositoryAdapter,
 ): Promise<void> => {
   await expansionJobRepository.enqueue(alarmId(ALARM_ID), at(DISPATCHED_ISO));
-  await expansionJobRepository.recordProgress(alarmId(ALARM_ID), {
-    kind: 'completed',
-    completedAt: at(SETTLED_ISO),
-  });
+  await expansionJobRepository.save(
+    ExpansionJob.reconstitute({
+      alarmId: alarmId(ALARM_ID),
+      enqueuedAt: at(DISPATCHED_ISO),
+      progress: { kind: 'completed', completedAt: at(SETTLED_ISO) },
+    }),
+  );
 };
 
 const storedState = async (

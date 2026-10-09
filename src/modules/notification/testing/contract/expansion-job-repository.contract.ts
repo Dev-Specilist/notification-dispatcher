@@ -4,11 +4,15 @@ import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { AlarmCreation, AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
+import { ExpansionJob } from '@/modules/notification/domain/expansion/expansion-job.entity';
+import {
+  ExpansionJobSnapshot,
+  ExpansionProgress,
+} from '@/modules/notification/domain/expansion/expansion-job.type';
 import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.port';
 import {
   ExpansionClaim,
   ExpansionJobLookup,
-  ExpansionProgress,
 } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
 import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 
@@ -43,13 +47,14 @@ export class ExpansionJobRepositoryContract {
 
       await expansionJobRepository.enqueue(owner, new Date(ENQUEUED_ISO));
 
-      expect(await expansionJobRepository.findByAlarmId(owner)).toEqual({
-        kind: 'found',
-        job: {
-          alarmId: owner,
-          enqueuedAt: new Date(ENQUEUED_ISO),
-          progress: { kind: 'in-progress', cursor: { kind: 'first' } },
-        },
+      expect(
+        ExpansionJobRepositoryContract.snapshotOf(
+          await expansionJobRepository.findByAlarmId(owner),
+        ),
+      ).toEqual({
+        alarmId: owner,
+        enqueuedAt: new Date(ENQUEUED_ISO),
+        progress: { kind: 'in-progress', cursor: { kind: 'first' } },
       });
     });
 
@@ -64,12 +69,13 @@ export class ExpansionJobRepositoryContract {
           await ExpansionJobRepositoryContract.scenario(createRepositories);
         await expansionJobRepository.enqueue(owner, new Date(ENQUEUED_ISO));
 
-        await expansionJobRepository.recordProgress(owner, progress);
+        await expansionJobRepository.save(ExpansionJobRepositoryContract.jobWith(owner, progress));
 
-        expect(await expansionJobRepository.findByAlarmId(owner)).toEqual({
-          kind: 'found',
-          job: { alarmId: owner, enqueuedAt: new Date(ENQUEUED_ISO), progress },
-        });
+        expect(
+          ExpansionJobRepositoryContract.snapshotOf(
+            await expansionJobRepository.findByAlarmId(owner),
+          ),
+        ).toEqual({ alarmId: owner, enqueuedAt: new Date(ENQUEUED_ISO), progress });
       },
     );
 
@@ -114,7 +120,7 @@ export class ExpansionJobRepositoryContract {
         const { expansionJobRepository, owner }: Scenario =
           await ExpansionJobRepositoryContract.scenario(createRepositories);
         await expansionJobRepository.enqueue(owner, new Date(ENQUEUED_ISO));
-        await expansionJobRepository.recordProgress(owner, progress);
+        await expansionJobRepository.save(ExpansionJobRepositoryContract.jobWith(owner, progress));
 
         expect(
           await ExpansionJobRepositoryContract.claimAt(expansionJobRepository, CLAIMED_ISO),
@@ -128,10 +134,12 @@ export class ExpansionJobRepositoryContract {
       await expansionJobRepository.enqueue(owner, new Date(ENQUEUED_ISO));
       await ExpansionJobRepositoryContract.claimAt(expansionJobRepository, CLAIMED_ISO);
 
-      await expansionJobRepository.recordProgress(owner, {
-        kind: 'in-progress',
-        cursor: { kind: 'next', token: 'Mw' },
-      });
+      await expansionJobRepository.save(
+        ExpansionJobRepositoryContract.jobWith(owner, {
+          kind: 'in-progress',
+          cursor: { kind: 'next', token: 'Mw' },
+        }),
+      );
 
       expect(
         await ExpansionJobRepositoryContract.claimAt(expansionJobRepository, CLAIMED_ISO),
@@ -142,20 +150,23 @@ export class ExpansionJobRepositoryContract {
       const { expansionJobRepository, owner }: Scenario =
         await ExpansionJobRepositoryContract.scenario(createRepositories);
       await expansionJobRepository.enqueue(owner, new Date(ENQUEUED_ISO));
-      await expansionJobRepository.recordProgress(owner, {
-        kind: 'in-progress',
-        cursor: { kind: 'next', token: 'Mw' },
-      });
+      await expansionJobRepository.save(
+        ExpansionJobRepositoryContract.jobWith(owner, {
+          kind: 'in-progress',
+          cursor: { kind: 'next', token: 'Mw' },
+        }),
+      );
 
       await expansionJobRepository.enqueue(owner, new Date(FINISHED_ISO));
 
-      expect(await expansionJobRepository.findByAlarmId(owner)).toEqual({
-        kind: 'found',
-        job: {
-          alarmId: owner,
-          enqueuedAt: new Date(ENQUEUED_ISO),
-          progress: { kind: 'in-progress', cursor: { kind: 'next', token: 'Mw' } },
-        },
+      expect(
+        ExpansionJobRepositoryContract.snapshotOf(
+          await expansionJobRepository.findByAlarmId(owner),
+        ),
+      ).toEqual({
+        alarmId: owner,
+        enqueuedAt: new Date(ENQUEUED_ISO),
+        progress: { kind: 'in-progress', cursor: { kind: 'next', token: 'Mw' } },
       });
     });
 
@@ -168,17 +179,20 @@ export class ExpansionJobRepositoryContract {
         const { expansionJobRepository, owner }: Scenario =
           await ExpansionJobRepositoryContract.scenario(createRepositories);
         await expansionJobRepository.enqueue(owner, new Date(ENQUEUED_ISO));
-        await expansionJobRepository.recordProgress(owner, {
-          kind: 'in-progress',
-          cursor: { kind: 'next', token: 'Mw' },
-        });
+        await expansionJobRepository.save(
+          ExpansionJobRepositoryContract.jobWith(owner, {
+            kind: 'in-progress',
+            cursor: { kind: 'next', token: 'Mw' },
+          }),
+        );
 
-        await expansionJobRepository.recordProgress(owner, finished);
+        await expansionJobRepository.save(ExpansionJobRepositoryContract.jobWith(owner, finished));
 
-        expect(await expansionJobRepository.findByAlarmId(owner)).toEqual({
-          kind: 'found',
-          job: { alarmId: owner, enqueuedAt: new Date(ENQUEUED_ISO), progress: finished },
-        });
+        expect(
+          ExpansionJobRepositoryContract.snapshotOf(
+            await expansionJobRepository.findByAlarmId(owner),
+          ),
+        ).toEqual({ alarmId: owner, enqueuedAt: new Date(ENQUEUED_ISO), progress: finished });
       },
     );
 
@@ -191,13 +205,15 @@ export class ExpansionJobRepositoryContract {
         const { expansionJobRepository, owner }: Scenario =
           await ExpansionJobRepositoryContract.scenario(createRepositories);
         await expansionJobRepository.enqueue(owner, new Date(ENQUEUED_ISO));
-        await expansionJobRepository.recordProgress(owner, finished);
+        await expansionJobRepository.save(ExpansionJobRepositoryContract.jobWith(owner, finished));
 
         await expansionJobRepository.enqueue(owner, new Date(FINISHED_ISO));
 
-        expect(await expansionJobRepository.findByAlarmId(owner)).toMatchObject({
-          job: { progress: finished },
-        });
+        expect(
+          ExpansionJobRepositoryContract.snapshotOf(
+            await expansionJobRepository.findByAlarmId(owner),
+          ).progress,
+        ).toEqual(finished);
       },
     );
 
@@ -205,19 +221,24 @@ export class ExpansionJobRepositoryContract {
       const { expansionJobRepository, owner }: Scenario =
         await ExpansionJobRepositoryContract.scenario(createRepositories);
       await expansionJobRepository.enqueue(owner, new Date(ENQUEUED_ISO));
-      await expansionJobRepository.recordProgress(owner, {
-        kind: 'completed',
-        completedAt: new Date(FINISHED_ISO),
-      });
+      await expansionJobRepository.save(
+        ExpansionJobRepositoryContract.jobWith(owner, {
+          kind: 'completed',
+          completedAt: new Date(FINISHED_ISO),
+        }),
+      );
 
-      const lookup: ExpansionJobLookup = await expansionJobRepository.findByAlarmId(owner);
-      if (lookup.kind === 'found' && lookup.job.progress.kind === 'completed') {
-        lookup.job.progress.completedAt.setUTCFullYear(1990);
+      const { progress }: ExpansionJobSnapshot = ExpansionJobRepositoryContract.snapshotOf(
+        await expansionJobRepository.findByAlarmId(owner),
+      );
+      if (progress.kind === 'completed') {
+        progress.completedAt.setUTCFullYear(1990);
       }
 
-      expect(await expansionJobRepository.findByAlarmId(owner)).toMatchObject({
-        job: { progress: { kind: 'completed', completedAt: new Date(FINISHED_ISO) } },
-      });
+      expect(
+        ExpansionJobRepositoryContract.snapshotOf(await expansionJobRepository.findByAlarmId(owner))
+          .progress,
+      ).toEqual({ kind: 'completed', completedAt: new Date(FINISHED_ISO) });
     });
 
     it('UC-06 확장 작업이 없는 알림은 없음으로 돌려준다', async (): Promise<void> => {
@@ -231,18 +252,21 @@ export class ExpansionJobRepositoryContract {
       const { expansionJobRepository, owner }: Scenario =
         await ExpansionJobRepositoryContract.scenario(createRepositories);
       await expansionJobRepository.enqueue(owner, new Date(ENQUEUED_ISO));
-      await expansionJobRepository.recordProgress(owner, {
-        kind: 'in-progress',
-        cursor: { kind: 'next', token: 'Mw' },
-      });
+      await expansionJobRepository.save(
+        ExpansionJobRepositoryContract.jobWith(owner, {
+          kind: 'in-progress',
+          cursor: { kind: 'next', token: 'Mw' },
+        }),
+      );
 
-      expect(await expansionJobRepository.findByAlarmIdForUpdate(owner)).toEqual({
-        kind: 'found',
-        job: {
-          alarmId: owner,
-          enqueuedAt: new Date(ENQUEUED_ISO),
-          progress: { kind: 'in-progress', cursor: { kind: 'next', token: 'Mw' } },
-        },
+      expect(
+        ExpansionJobRepositoryContract.snapshotOf(
+          await expansionJobRepository.findByAlarmIdForUpdate(owner),
+        ),
+      ).toEqual({
+        alarmId: owner,
+        enqueuedAt: new Date(ENQUEUED_ISO),
+        progress: { kind: 'in-progress', cursor: { kind: 'next', token: 'Mw' } },
       });
     });
 
@@ -260,10 +284,12 @@ export class ExpansionJobRepositoryContract {
         await ExpansionJobRepositoryContract.scenario(createRepositories);
 
       await expect(
-        expansionJobRepository.recordProgress(owner, {
-          kind: 'completed',
-          completedAt: new Date(FINISHED_ISO),
-        }),
+        expansionJobRepository.save(
+          ExpansionJobRepositoryContract.jobWith(owner, {
+            kind: 'completed',
+            completedAt: new Date(FINISHED_ISO),
+          }),
+        ),
       ).rejects.toBeInstanceOf(Error);
       expect(await expansionJobRepository.findByAlarmId(owner)).toEqual({ kind: 'missing' });
     });
@@ -273,15 +299,30 @@ export class ExpansionJobRepositoryContract {
         await ExpansionJobRepositoryContract.scenario(createRepositories);
       await expansionJobRepository.enqueue(owner, new Date(ENQUEUED_ISO));
 
-      const lookup: ExpansionJobLookup = await expansionJobRepository.findByAlarmId(owner);
-      if (lookup.kind === 'found') {
-        lookup.job.enqueuedAt.setUTCFullYear(1990);
-      }
+      const { enqueuedAt }: ExpansionJobSnapshot = ExpansionJobRepositoryContract.snapshotOf(
+        await expansionJobRepository.findByAlarmId(owner),
+      );
+      enqueuedAt.setUTCFullYear(1990);
 
-      expect(await expansionJobRepository.findByAlarmId(owner)).toMatchObject({
-        job: { enqueuedAt: new Date(ENQUEUED_ISO) },
-      });
+      expect(
+        ExpansionJobRepositoryContract.snapshotOf(await expansionJobRepository.findByAlarmId(owner))
+          .enqueuedAt,
+      ).toEqual(new Date(ENQUEUED_ISO));
     });
+  }
+
+  private static jobWith(owner: AlarmId, progress: ExpansionProgress): ExpansionJob {
+    return ExpansionJob.reconstitute({
+      alarmId: owner,
+      enqueuedAt: new Date(ENQUEUED_ISO),
+      progress,
+    });
+  }
+
+  private static snapshotOf(lookup: ExpansionJobLookup): ExpansionJobSnapshot {
+    KindAssertion.assertKind(lookup, 'found');
+    const { job }: KindMember<ExpansionJobLookup, 'found'> = lookup;
+    return job.snapshot();
   }
 
   private static claimAt(

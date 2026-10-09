@@ -308,7 +308,8 @@ curl -X POST localhost:3000/alarms -H 'Content-Type: application/json' \
 src/modules/notification/
 ├─ domain/                              순수 TypeScript (Nest · DB · HTTP · zod 의존 없음)
 │  ├─ alarm/                            알림 Aggregate
-│  └─ delivery/                         발송 건 Aggregate, 재시도 정책
+│  ├─ delivery/                         발송 건 Aggregate, 재시도 정책
+│  └─ expansion/                        수신자 확장 작업 Aggregate
 ├─ application/
 │  ├─ port/
 │  │  ├─ driving/                       바깥이 앱의 기능을 호출하는 인터페이스 (유스케이스마다 하나)

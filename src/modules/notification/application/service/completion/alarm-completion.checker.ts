@@ -72,6 +72,6 @@ export class AlarmCompletionChecker {
       return true;
     }
     const lookup: ExpansionJobLookup = await expansionJobRepository.findByAlarmId(id);
-    return lookup.kind === 'found' && lookup.job.progress.kind === 'completed';
+    return lookup.kind === 'found' && lookup.job.isCompleted();
   }
 }

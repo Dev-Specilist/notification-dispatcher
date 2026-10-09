@@ -12,7 +12,9 @@ import { DeliveryPredicates } from '@/modules/notification/domain/delivery/deliv
 import { DeliveryId, DeliverySnapshot } from '@/modules/notification/domain/delivery/delivery.type';
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
 import { IdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/id-generator.port';
-import { ExpansionProgress } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
+import { ExpansionJob } from '@/modules/notification/domain/expansion/expansion-job.entity';
+import { ExpansionProgress } from '@/modules/notification/domain/expansion/expansion-job.type';
+import { ExpansionJobLookup } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
 import { ExpansionSettings } from '@/modules/notification/application/service/expansion/expansion-settings.type';
 import { RecipientDirectoryPort } from '@/modules/notification/application/port/driven/for-fetching-recipients/recipient-directory.port';
 import {
@@ -205,12 +207,12 @@ class PausingOnceDirectory extends PagedRecipientDirectory {
 class FailingOnSecondProgressRepository extends InMemoryExpansionJobRepositoryAdapter {
   private recorded: number = 0;
 
-  override recordProgress(owner: AlarmId, progress: ExpansionProgress): Promise<void> {
+  override save(job: ExpansionJob): Promise<void> {
     this.recorded += 1;
     if (this.recorded === 2) {
       return Promise.reject(new Error('expansion progress storage is unavailable'));
     }
-    return super.recordProgress(owner, progress);
+    return super.save(job);
   }
 }
 
@@ -286,8 +288,7 @@ const expandedStep = (step: string): ExpansionPageAttempt => {
     step !== 'continued' &&
     step !== 'completed' &&
     step !== 'cancelled' &&
-    step !== 'superseded' &&
-    step !== 'not-found'
+    step !== 'superseded'
   ) {
     throw new Error(`test fixture ${step} is not an expansion step`);
   }
@@ -303,6 +304,17 @@ const summaries = async (
       return { recipientId, priority, state, createdAt };
     },
   );
+
+const storedProgress = async (
+  expansionJobRepository: InMemoryExpansionJobRepositoryAdapter,
+): Promise<ExpansionProgress> => {
+  const lookup: ExpansionJobLookup = await expansionJobRepository.findByAlarmId(
+    alarmId(OLDER_ALARM_ID),
+  );
+  KindAssertion.assertKind(lookup, 'found');
+  const { job }: KindMember<ExpansionJobLookup, 'found'> = lookup;
+  return job.snapshot().progress;
+};
 
 const pendingBulk = (rawRecipientId: string): DeliverySummary => {
   const [recipientId]: ReadonlyArray<RecipientId> = recipientIds(rawRecipientId);
@@ -386,9 +398,9 @@ describe('ExpandNextPageService', () => {
       pendingBulk('u_000002'),
       pendingBulk('u_000003'),
     ]);
-    expect(await expansionJobRepository.findByAlarmId(alarmId(OLDER_ALARM_ID))).toMatchObject({
-      kind: 'found',
-      job: { progress: { kind: 'completed', completedAt: new Date(EXPANDED_ISO) } },
+    expect(await storedProgress(expansionJobRepository)).toEqual({
+      kind: 'completed',
+      completedAt: new Date(EXPANDED_ISO),
     });
   });
 
@@ -409,8 +421,9 @@ describe('ExpandNextPageService', () => {
       pendingBulk('u_000001'),
       pendingBulk('u_000002'),
     ]);
-    expect(await expansionJobRepository.findByAlarmId(alarmId(OLDER_ALARM_ID))).toMatchObject({
-      job: { progress: { kind: 'in-progress', cursor: { kind: 'next', token: 'Mw' } } },
+    expect(await storedProgress(expansionJobRepository)).toEqual({
+      kind: 'in-progress',
+      cursor: { kind: 'next', token: 'Mw' },
     });
   });
 
@@ -422,9 +435,7 @@ describe('ExpandNextPageService', () => {
 
     expect(await service.execute()).toEqual(expandedStep('completed'));
     expect(await summaries(deliveryRepository)).toEqual([]);
-    expect(await expansionJobRepository.findByAlarmId(alarmId(OLDER_ALARM_ID))).toMatchObject({
-      job: { progress: { kind: 'completed' } },
-    });
+    expect(await storedProgress(expansionJobRepository)).toMatchObject({ kind: 'completed' });
   });
 
   it('UC-06 완료된 확장은 다시 잡지 않아 사용자 API를 다시 읽지 않는다', async (): Promise<void> => {
@@ -512,8 +523,9 @@ describe('ExpandNextPageService', () => {
       pendingBulk('u_000001'),
       pendingBulk('u_000002'),
     ]);
-    expect(await expansionJobRepository.findByAlarmId(alarmId(OLDER_ALARM_ID))).toMatchObject({
-      job: { progress: { kind: 'stopped', stoppedAt: new Date(EXPANDED_ISO) } },
+    expect(await storedProgress(expansionJobRepository)).toEqual({
+      kind: 'stopped',
+      stoppedAt: new Date(EXPANDED_ISO),
     });
   });
 

@@ -1,11 +1,12 @@
 import { eq, sql } from 'drizzle-orm';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
+import { ExpansionJob } from '@/modules/notification/domain/expansion/expansion-job.entity';
+import { ExpansionJobSnapshot } from '@/modules/notification/domain/expansion/expansion-job.type';
 import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.port';
 import {
   ExpansionClaim,
   ExpansionJobLookup,
-  ExpansionProgress,
 } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
 import { expansionJobs } from '@/modules/notification/adapter/driven/persistence/expansion-job/expansion-job.table';
 import { ExpansionJobRowMapper } from '@/modules/notification/adapter/driven/persistence/expansion-job/expansion-job-row.mapper';
@@ -22,16 +23,13 @@ export class DrizzleExpansionJobRepositoryAdapter implements ExpansionJobReposit
   constructor(private readonly database: NotificationDatabase) {}
 
   async enqueue(alarmId: AlarmId, now: Readonly<Date>): Promise<void> {
+    const { enqueuedAt, progress }: ExpansionJobSnapshot = ExpansionJob.enqueue(
+      alarmId,
+      now,
+    ).snapshot();
     await this.database
       .insert(expansionJobs)
-      .values({
-        alarmId,
-        enqueuedAt: new Date(now.getTime()),
-        ...ExpansionJobRowMapper.toProgressColumns({
-          kind: 'in-progress',
-          cursor: { kind: 'first' },
-        }),
-      })
+      .values({ alarmId, enqueuedAt, ...ExpansionJobRowMapper.toProgressColumns(progress) })
       .onConflictDoNothing({ target: expansionJobs.alarmId });
   }
 
@@ -56,7 +54,8 @@ export class DrizzleExpansionJobRepositoryAdapter implements ExpansionJobReposit
     );
   }
 
-  async recordProgress(alarmId: AlarmId, progress: ExpansionProgress): Promise<void> {
+  async save(job: ExpansionJob): Promise<void> {
+    const { alarmId, progress }: ExpansionJobSnapshot = job.snapshot();
     const updated: ReadonlyArray<UpdatedAlarmId> = await this.database
       .update(expansionJobs)
       .set({
