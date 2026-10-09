@@ -42,7 +42,7 @@ interface ExecutionCounts {
   readonly completionChecks: number;
 }
 
-type ShutdownPhase = 'drain-start' | 'drain-end' | 'database-close';
+type ShutdownPhase = 'drain-start' | 'database-close';
 
 interface PhaseObservation {
   readonly phase: ShutdownPhase;
@@ -66,11 +66,6 @@ const FIRST_PAGE_END: CompletionScanPosition = {
 class ExitCalled extends Error {}
 
 const UNCONNECTED_DATABASE_URL: string = 'postgres://app:secret@localhost:5432/notification';
-
-const delay = (delayMs: number): Promise<void> =>
-  new Promise<void>((resolve: () => void): void => {
-    setTimeout(resolve, delayMs);
-  });
 
 const advanceUntilSettled = async (pending: Promise<void>): Promise<void> => {
   let settled: boolean = false;
@@ -118,10 +113,8 @@ class ShutdownPhaseProbe implements BeforeApplicationShutdown, OnApplicationShut
 
   constructor(private readonly sender: HeldSender) {}
 
-  async beforeApplicationShutdown(): Promise<void> {
+  beforeApplicationShutdown(): void {
     this.observe('drain-start');
-    await delay(POLL_INTERVAL_MS * 4);
-    this.observe('drain-end');
   }
 
   onApplicationShutdown(): void {
@@ -207,7 +200,11 @@ describe('DispatchWorker', () => {
   const shutdownModule = (): DynamicModule => ({
     module: ShutdownUnderTestModule,
     providers: [
-      { provide: ShutdownPhaseProbe, useFactory: (): ShutdownPhaseProbe => probe },
+      {
+        provide: ShutdownPhaseProbe,
+        useFactory: (_shutdownHookedAfterProbe: ShutdownService): ShutdownPhaseProbe => probe,
+        inject: [ShutdownService],
+      },
       { provide: ReadinessPort, useClass: InMemoryReadinessAdapter },
       { provide: Pool, useValue: new Pool({ connectionString: UNCONNECTED_DATABASE_URL }) },
       ShutdownService,
@@ -290,11 +287,7 @@ describe('DispatchWorker', () => {
 
     expect(acceptingTrafficAfterSignal).toBe(false);
     expect(shutdownSignal.isRequested()).toBe(true);
-    expect(
-      probe.observations.filter(
-        ({ phase }: PhaseObservation): boolean => phase !== 'database-close',
-      ),
-    ).toEqual([
+    expect(probe.observations).toEqual([
       {
         phase: 'drain-start',
         sends: DISPATCH_CONCURRENCY,
@@ -302,7 +295,7 @@ describe('DispatchWorker', () => {
         completedSends: DISPATCH_CONCURRENCY,
       },
       {
-        phase: 'drain-end',
+        phase: 'database-close',
         sends: DISPATCH_CONCURRENCY,
         inFlight: 0,
         completedSends: DISPATCH_CONCURRENCY,
@@ -351,6 +344,7 @@ describe('DispatchWorker', () => {
     expect(sender.inFlight).toBe(DISPATCH_CONCURRENCY);
 
     const closing: Promise<void> = moduleRef.close();
+    await vi.advanceTimersByTimeAsync(SHUTDOWN_DRAIN_MS + POLL_INTERVAL_MS);
     sender.release.open();
     await advanceUntilSettled(closing);
     const countsAtClose: ExecutionCounts = executionCounts();
