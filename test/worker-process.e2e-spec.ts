@@ -129,43 +129,45 @@ describe('worker 프로세스', () => {
     );
     await spec().post(`/alarms/${createdAlarm.id}/dispatch`).expectStatus(202);
     const stubMockApi: StubMockApi = await startStubMockApi();
-    const worker: WorkerProcess = await WorkerProcess.start(buildDir, {
-      DATABASE_URL: testDatabase.databaseUrl,
-      MOCK_API_URL: stubMockApi.baseUrl,
-      DISPATCH_CONCURRENCY: '1',
-      SHUTDOWN_DRAIN_MS: '200',
-    });
-
     try {
-      await vi.waitFor(
-        (): void => {
-          expect(stubMockApi.sendRequests).toHaveLength(1);
-        },
-        { timeout: 10_000, interval: 20 },
-      );
-
-      worker.terminate();
-      await vi.waitFor(
-        async (): Promise<void> => {
-          expect(await worker.readinessStatus()).toBe(503);
-        },
-        { timeout: 2_000, interval: 20 },
-      );
-      stubMockApi.releaseSends.open();
-      await worker.exited;
-      await new Promise<void>((resolve: () => void): void => {
-        setTimeout(resolve, QUIET_PERIOD_MS);
+      const worker: WorkerProcess = await WorkerProcess.start(buildDir, {
+        DATABASE_URL: testDatabase.databaseUrl,
+        MOCK_API_URL: stubMockApi.baseUrl,
+        DISPATCH_CONCURRENCY: '1',
+        SHUTDOWN_DRAIN_MS: '200',
       });
+      try {
+        await vi.waitFor(
+          (): void => {
+            expect(stubMockApi.sendRequests).toHaveLength(1);
+          },
+          { timeout: 10_000, interval: 20 },
+        );
 
-      expect(worker.exitCode).toBe(0);
-      expect(stubMockApi.sendRequests).toHaveLength(1);
-      expect(await deliveryStatusCounts()).toEqual([
-        { status: 'PENDING', deliveries: 1 },
-        { status: 'SENT', deliveries: 1 },
-      ]);
+        worker.terminate();
+        await vi.waitFor(
+          async (): Promise<void> => {
+            expect(await worker.readinessStatus()).toBe(503);
+          },
+          { timeout: 2_000, interval: 20 },
+        );
+        stubMockApi.releaseSends.open();
+        await worker.exited;
+        await new Promise<void>((resolve: () => void): void => {
+          setTimeout(resolve, QUIET_PERIOD_MS);
+        });
+
+        expect(worker.exitCode).toBe(0);
+        expect(stubMockApi.sendRequests).toHaveLength(1);
+        expect(await deliveryStatusCounts()).toEqual([
+          { status: 'PENDING', deliveries: 1 },
+          { status: 'SENT', deliveries: 1 },
+        ]);
+      } finally {
+        await worker.kill();
+      }
     } finally {
       stubMockApi.releaseSends.open();
-      await worker.kill();
       await new Promise<void>((resolve: () => void): void => {
         stubMockApi.server.close((): void => resolve());
       });
