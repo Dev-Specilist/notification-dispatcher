@@ -46,6 +46,8 @@ import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/te
 import { InMemoryTransactionAdapter } from '@/modules/notification/testing/in-memory/in-memory-transaction.adapter';
 import { InMemoryRepositories } from '@/modules/notification/testing/in-memory/in-memory-transaction.type';
 import { TransactionWork } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
+import { createGate, Gate } from '@/shared/testing/gate.factory';
 
 type RecipientStatus = Readonly<[string, string]>;
 
@@ -72,11 +74,6 @@ interface FixtureOptions {
   readonly sender: RecordingMessageSender;
   readonly createTransaction: TransactionFactory;
   readonly shutdownSignal: WorkerShutdownSignalAdapter;
-}
-
-interface Gate {
-  readonly opened: Promise<void>;
-  readonly open: () => void;
 }
 
 const CREATED_ISO: string = '2026-10-08T09:00:00.000Z';
@@ -140,25 +137,22 @@ const durationMs = (value: number): DurationMs => {
 };
 
 const transitionedAlarm = (transition: AlarmTransition): Alarm => {
-  if (transition.kind !== 'transitioned') {
-    throw new Error(`test fixture alarm transition failed: ${transition.error.code}`);
-  }
-  return transition.alarm;
+  KindAssertion.assertKind(transition, 'transitioned');
+  const { alarm }: KindMember<AlarmTransition, 'transitioned'> = transition;
+  return alarm;
 };
 
 const transitionedDelivery = (transition: DeliveryTransition): Delivery => {
-  if (transition.kind !== 'transitioned') {
-    throw new Error(`test fixture delivery transition failed: ${transition.kind}`);
-  }
-  return transition.delivery;
+  KindAssertion.assertKind(transition, 'transitioned');
+  const { delivery }: KindMember<DeliveryTransition, 'transitioned'> = transition;
+  return delivery;
 };
 
 const dispatchedAlarm = (id: string, draft: Readonly<AlarmDraft>): Alarm => {
   const creation: AlarmCreation = Alarm.create(alarmId(id), draft, at(CREATED_ISO));
-  if (creation.kind !== 'created') {
-    throw new Error(`test fixture alarm is invalid: ${creation.error.code}`);
-  }
-  return transitionedAlarm(creation.alarm.startDispatch(at(DISPATCHED_ISO)));
+  KindAssertion.assertKind(creation, 'created');
+  const { alarm }: KindMember<AlarmCreation, 'created'> = creation;
+  return transitionedAlarm(alarm.startDispatch(at(DISPATCHED_ISO)));
 };
 
 const bulkAlarm = (): Alarm =>
@@ -206,16 +200,6 @@ const retryWaitingUntil = (delivery: Delivery, waitMs: number): Delivery => {
   );
 };
 
-const NOT_YET_OPENED: () => void = (): void => {};
-
-const createGate = (): Gate => {
-  let release: () => void = NOT_YET_OPENED;
-  const opened: Promise<void> = new Promise<void>((resolve: () => void): void => {
-    release = resolve;
-  });
-  return { opened, open: (): void => release() };
-};
-
 class AdjustableClock implements ClockPort {
   private current: Date = at(NOW_ISO);
 
@@ -243,10 +227,9 @@ const retryPolicy = (maxAttempts: number): RetryPolicy => {
     baseDelayMs: durationMs(1_000),
     maxDelayMs: durationMs(8_000),
   });
-  if (creation.kind !== 'created') {
-    throw new Error(`test fixture retry policy is invalid: ${creation.error.code}`);
-  }
-  return creation.policy;
+  KindAssertion.assertKind(creation, 'created');
+  const { policy }: KindMember<RetryPolicyCreation, 'created'> = creation;
+  return policy;
 };
 
 class FixedDispatchSettings implements DispatchSettings {

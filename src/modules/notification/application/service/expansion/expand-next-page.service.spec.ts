@@ -28,17 +28,14 @@ import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/te
 import { InMemoryTransactionAdapter } from '@/modules/notification/testing/in-memory/in-memory-transaction.adapter';
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
+import { createGate, Gate } from '@/shared/testing/gate.factory';
 
 type PageEntry = Readonly<[cursorKey: string, page: RecipientPage]>;
 
 type RecipientStatus = Readonly<[recipientId: string, status: string]>;
 
 type DeliverySummary = Pick<DeliverySnapshot, 'recipientId' | 'priority' | 'state' | 'createdAt'>;
-
-interface Gate {
-  readonly opened: Promise<void>;
-  readonly open: () => void;
-}
 
 interface Repositories {
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
@@ -89,21 +86,10 @@ const TWO_PAGES: ReadonlyArray<PageEntry> = [
   ['next:Mw', { recipientIds: recipientIds('u_000003'), next: { kind: 'end' } }],
 ];
 
-const NOT_YET_OPENED: () => void = (): void => {};
-
-const createGate = (): Gate => {
-  let release: () => void = NOT_YET_OPENED;
-  const opened: Promise<void> = new Promise<void>((resolve: () => void): void => {
-    release = resolve;
-  });
-  return { opened, open: (): void => release() };
-};
-
 const transitionedAlarm = (transition: AlarmTransition): Alarm => {
-  if (transition.kind !== 'transitioned') {
-    throw new Error(`test fixture alarm transition failed: ${transition.error.code}`);
-  }
-  return transition.alarm;
+  KindAssertion.assertKind(transition, 'transitioned');
+  const { alarm }: KindMember<AlarmTransition, 'transitioned'> = transition;
+  return alarm;
 };
 
 const dispatchedBulkAlarm = (rawAlarmId: string): Alarm => {
@@ -112,10 +98,9 @@ const dispatchedBulkAlarm = (rawAlarmId: string): Alarm => {
     { title: '추석 이벤트', body: '쿠폰 도착', kind: 'BULK', recipientIds: [] },
     new Date('2026-10-07T09:00:00.000Z'),
   );
-  if (creation.kind !== 'created') {
-    throw new Error(`test fixture alarm is invalid: ${creation.error.code}`);
-  }
-  return transitionedAlarm(creation.alarm.startDispatch(new Date(OLDER_ENQUEUED_ISO)));
+  KindAssertion.assertKind(creation, 'created');
+  const { alarm }: KindMember<AlarmCreation, 'created'> = creation;
+  return transitionedAlarm(alarm.startDispatch(new Date(OLDER_ENQUEUED_ISO)));
 };
 
 const cancelStoredAlarm = async (alarmRepository: InMemoryAlarmRepositoryAdapter): Promise<void> =>

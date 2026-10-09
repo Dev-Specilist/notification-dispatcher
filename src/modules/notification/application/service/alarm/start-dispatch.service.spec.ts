@@ -15,6 +15,7 @@ import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/testin
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-expansion-job-repository.adapter';
 import { InMemoryTransactionAdapter } from '@/modules/notification/testing/in-memory/in-memory-transaction.adapter';
 import { UnusedTransaction } from '@/modules/notification/testing/unused-transaction';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 
 type DeliverySummary = Pick<DeliverySnapshot, 'recipientId' | 'priority' | 'state' | 'createdAt'>;
 
@@ -32,10 +33,9 @@ const alarmId = (value: string): AlarmId => {
 
 const draftAlarm = (draft: Readonly<AlarmDraft>): Alarm => {
   const creation: AlarmCreation = Alarm.create(alarmId(ALARM_ID), draft, new Date(CREATED_ISO));
-  if (creation.kind !== 'created') {
-    throw new Error(`test fixture alarm is invalid: ${creation.error.code}`);
-  }
-  return creation.alarm;
+  KindAssertion.assertKind(creation, 'created');
+  const { alarm }: KindMember<AlarmCreation, 'created'> = creation;
+  return alarm;
 };
 
 const urgentDraft = (): Alarm =>
@@ -50,10 +50,9 @@ const bulkDraft = (): Alarm =>
   draftAlarm({ title: '추석 이벤트', body: '쿠폰 도착', kind: 'BULK', recipientIds: [] });
 
 const found = (lookup: AlarmLookup): Alarm => {
-  if (lookup.kind !== 'found') {
-    throw new Error('expected the alarm to be stored');
-  }
-  return lookup.alarm;
+  KindAssertion.assertKind(lookup, 'found');
+  const { alarm }: KindMember<AlarmLookup, 'found'> = lookup;
+  return alarm;
 };
 
 class FixedClock implements ClockPort {

@@ -17,6 +17,7 @@ import { Env } from '@/shared/config/env.type';
 import { portSchema } from '@/shared/config/primitive.schema';
 import { TypedConfigModule } from '@/shared/config/typed-config.module';
 import { TypedConfigService } from '@/shared/config/typed-config.service';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 
 type EnvEntry = Readonly<[key: string, rawValue: string]>;
 
@@ -67,10 +68,9 @@ const retryPolicy = (maxAttempts: number, baseDelayMs: number, maxDelayMs: numbe
     baseDelayMs: durationMs(baseDelayMs),
     maxDelayMs: durationMs(maxDelayMs),
   });
-  if (creation.kind !== 'created') {
-    throw new Error(`test fixture retry policy is invalid: ${creation.error.code}`);
-  }
-  return creation.policy;
+  KindAssertion.assertKind(creation, 'created');
+  const { policy }: KindMember<RetryPolicyCreation, 'created'> = creation;
+  return policy;
 };
 
 const unboundedLookupRetryPolicy = (baseDelayMs: number, maxDelayMs: number): RetryPolicy =>

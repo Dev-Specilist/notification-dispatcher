@@ -9,11 +9,7 @@ import { z } from 'zod';
 import { ApiModule } from '@/bootstrap/api.module';
 import { WorkerProcess } from '@/bootstrap/testing/worker.process';
 import { TestDatabase } from '@/shared/database/testing/test-database';
-
-interface Gate {
-  readonly opened: Promise<void>;
-  readonly open: () => void;
-}
+import { createGate, Gate } from '@/shared/testing/gate.factory';
 
 interface StatusCountRow {
   readonly status: string;
@@ -34,16 +30,6 @@ type CreatedAlarm = z.infer<typeof createdAlarmSchema>;
 const ACCEPTED_STATUS: number = 202;
 const NOT_FOUND_STATUS: number = 404;
 const QUIET_PERIOD_MS: number = 300;
-
-const NOT_YET_OPENED: () => void = (): void => {};
-
-const createGate = (): Gate => {
-  let release: () => void = NOT_YET_OPENED;
-  const opened: Promise<void> = new Promise<void>((resolve: () => void): void => {
-    release = resolve;
-  });
-  return { opened, open: (): void => release() };
-};
 
 const portOf = (address: ReturnType<Server['address']>): number => {
   if (address && typeof address === 'object') {

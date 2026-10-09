@@ -19,6 +19,7 @@ import {
   PermanentFailureCode,
   RetryAfterMs,
 } from '@/modules/notification/domain/delivery/delivery.type';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 
 type StatusBuildCase = Readonly<[string, () => Delivery]>;
 
@@ -76,10 +77,9 @@ const retryPolicy = (maxAttempts: number): RetryPolicy => {
     baseDelayMs: durationMs(1_000),
     maxDelayMs: durationMs(8_000),
   });
-  if (creation.kind !== 'created') {
-    throw new Error(`test fixture policy is invalid: ${creation.error.code}`);
-  }
-  return creation.policy;
+  KindAssertion.assertKind(creation, 'created');
+  const { policy }: KindMember<RetryPolicyCreation, 'created'> = creation;
+  return policy;
 };
 
 const at = (iso: string): Date => new Date(iso);
@@ -135,17 +135,15 @@ const TOKEN_A: () => LeaseToken = (): LeaseToken => leaseToken('aa');
 const TOKEN_B: () => LeaseToken = (): LeaseToken => leaseToken('bb');
 
 const released = (result: DeliveryTransition): Delivery => {
-  if (result.kind !== 'released') {
-    throw new Error(`expected released but got ${result.kind}`);
-  }
-  return result.delivery;
+  KindAssertion.assertKind(result, 'released');
+  const { delivery }: KindMember<DeliveryTransition, 'released'> = result;
+  return delivery;
 };
 
 const transitioned = (result: DeliveryTransition): Delivery => {
-  if (result.kind !== 'transitioned') {
-    throw new Error(`expected transitioned but got ${result.kind}`);
-  }
-  return result.delivery;
+  KindAssertion.assertKind(result, 'transitioned');
+  const { delivery }: KindMember<DeliveryTransition, 'transitioned'> = result;
+  return delivery;
 };
 
 const pending = (): Delivery =>

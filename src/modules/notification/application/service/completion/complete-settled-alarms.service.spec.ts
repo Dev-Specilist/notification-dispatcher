@@ -26,6 +26,7 @@ import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/testing/i
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-expansion-job-repository.adapter';
 import { InMemoryTransactionAdapter } from '@/modules/notification/testing/in-memory/in-memory-transaction.adapter';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 
 interface Fixture {
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
@@ -77,18 +78,16 @@ const draftAlarm = (alarmId: AlarmId, kind: AlarmKind): Alarm => {
     },
     at(CREATED_ISO),
   );
-  if (creation.kind !== 'created') {
-    throw new Error(`test fixture alarm is invalid: ${creation.error.code}`);
-  }
-  return creation.alarm;
+  KindAssertion.assertKind(creation, 'created');
+  const { alarm }: KindMember<AlarmCreation, 'created'> = creation;
+  return alarm;
 };
 
 const dispatched = (alarm: Alarm): Alarm => {
   const transition: AlarmTransition = alarm.startDispatch(at(DISPATCHED_ISO));
-  if (transition.kind !== 'transitioned') {
-    throw new Error(`test fixture alarm cannot be dispatched: ${transition.error.code}`);
-  }
-  return transition.alarm;
+  KindAssertion.assertKind(transition, 'transitioned');
+  const { alarm: dispatchedAlarm }: KindMember<AlarmTransition, 'transitioned'> = transition;
+  return dispatchedAlarm;
 };
 
 const pendingDelivery = (alarmId: AlarmId): Delivery =>
@@ -147,10 +146,9 @@ const storedStatus = async (
   alarmId: AlarmId,
 ): Promise<AlarmStatus> => {
   const lookup: AlarmLookup = await alarmRepository.findById(alarmId);
-  if (lookup.kind !== 'found') {
-    throw new Error(`expected alarm ${alarmId} to be stored`);
-  }
-  return lookup.alarm.snapshot().state.status;
+  KindAssertion.assertKind(lookup, 'found');
+  const { alarm }: KindMember<AlarmLookup, 'found'> = lookup;
+  return alarm.snapshot().state.status;
 };
 
 const checkAllPages = async (

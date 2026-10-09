@@ -11,6 +11,7 @@ import { NotificationDatabase } from '@/modules/notification/adapter/driven/pers
 import { TestDatabase } from '@/shared/database/testing/test-database';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { ExpansionClaim } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
+import { createGate, Gate } from '@/shared/testing/gate.factory';
 
 interface DrizzleRepositories {
   readonly alarmRepository: DrizzleAlarmRepositoryAdapter;
@@ -23,21 +24,6 @@ interface CursorColumns {
 }
 
 type InvalidStateCase = Readonly<[string, string]>;
-
-interface Gate {
-  readonly opened: Promise<void>;
-  readonly open: () => void;
-}
-
-const NOT_YET_OPENED: () => void = (): void => {};
-
-const createGate = (): Gate => {
-  let release: () => void = NOT_YET_OPENED;
-  const opened: Promise<void> = new Promise<void>((resolve: () => void): void => {
-    release = resolve;
-  });
-  return { opened, open: (): void => release() };
-};
 
 describe('DrizzleExpansionJobRepositoryAdapter', () => {
   let testDatabase: TestDatabase;

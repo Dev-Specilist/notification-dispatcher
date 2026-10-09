@@ -29,6 +29,7 @@ import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/testin
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-expansion-job-repository.adapter';
 import { InMemoryTransactionAdapter } from '@/modules/notification/testing/in-memory/in-memory-transaction.adapter';
 import { UnusedTransaction } from '@/modules/notification/testing/unused-transaction';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 
 type DeliveryBuilder = (index: number) => Delivery;
 
@@ -101,10 +102,9 @@ const durationMs = (value: number): DurationMs => {
 };
 
 const transitioned = (result: DeliveryTransition): Delivery => {
-  if (result.kind !== 'transitioned') {
-    throw new Error(`expected transitioned but got ${result.kind}`);
-  }
-  return result.delivery;
+  KindAssertion.assertKind(result, 'transitioned');
+  const { delivery }: KindMember<DeliveryTransition, 'transitioned'> = result;
+  return delivery;
 };
 
 const at = (iso: string): Date => new Date(iso);
@@ -144,25 +144,22 @@ const urgentAlarm = (ownerId: string): Alarm => {
     { title: '서버 점검', body: '10분 뒤 점검', kind: 'URGENT', recipientIds: ['u_000001'] },
     at(CREATED_ISO),
   );
-  if (creation.kind !== 'created') {
-    throw new Error(`test fixture alarm is invalid: ${creation.error.code}`);
-  }
-  return creation.alarm;
+  KindAssertion.assertKind(creation, 'created');
+  const { alarm }: KindMember<AlarmCreation, 'created'> = creation;
+  return alarm;
 };
 
 const dispatched = (alarm: Alarm): Alarm => {
   const transition: AlarmTransition = alarm.startDispatch(at(DISPATCHED_ISO));
-  if (transition.kind !== 'transitioned') {
-    throw new Error(`test fixture alarm cannot be dispatched: ${transition.error.code}`);
-  }
-  return transition.alarm;
+  KindAssertion.assertKind(transition, 'transitioned');
+  const { alarm: dispatchedAlarm }: KindMember<AlarmTransition, 'transitioned'> = transition;
+  return dispatchedAlarm;
 };
 
 const found = (lookup: AlarmLookup): Alarm => {
-  if (lookup.kind !== 'found') {
-    throw new Error('expected the alarm to be stored');
-  }
-  return lookup.alarm;
+  KindAssertion.assertKind(lookup, 'found');
+  const { alarm }: KindMember<AlarmLookup, 'found'> = lookup;
+  return alarm;
 };
 
 class FixedClock implements ClockPort {

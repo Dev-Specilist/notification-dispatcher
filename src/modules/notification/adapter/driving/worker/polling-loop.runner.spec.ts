@@ -6,13 +6,9 @@ import {
   PollingOutcome,
 } from '@/modules/notification/adapter/driving/worker/polling-loop.type';
 import { timerDelayMsSchema } from '@/shared/config/primitive.schema';
+import { createGate, Gate } from '@/shared/testing/gate.factory';
 
 type ErrorLogSpy = MockInstance<Logger['error']>;
-
-interface Gate {
-  readonly opened: Promise<void>;
-  readonly open: () => void;
-}
 
 const IDLE_DELAY_MS: number = 1_000;
 const ERROR_DELAY_MS: number = 5_000;
@@ -20,16 +16,6 @@ const ERROR_DELAY_MS: number = 5_000;
 const DELAYS: PollingDelays = {
   idleDelayMs: timerDelayMsSchema.parse(IDLE_DELAY_MS),
   errorDelayMs: timerDelayMsSchema.parse(ERROR_DELAY_MS),
-};
-
-const NOT_YET_OPENED: () => void = (): void => {};
-
-const createGate = (): Gate => {
-  let release: () => void = NOT_YET_OPENED;
-  const opened: Promise<void> = new Promise<void>((resolve: () => void): void => {
-    release = resolve;
-  });
-  return { opened, open: (): void => release() };
 };
 
 class ScriptedWork {

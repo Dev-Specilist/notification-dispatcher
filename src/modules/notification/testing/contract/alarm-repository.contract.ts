@@ -20,6 +20,7 @@ import {
   AlarmPageStart,
   PageSize,
 } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 
 type ContractAlarmRepository = AlarmRepositoryPort;
 
@@ -371,10 +372,9 @@ export class AlarmRepositoryContract {
   }
 
   private static startAfter({ next }: Readonly<AlarmPage>): AlarmPageStart {
-    if (next.kind !== 'more') {
-      throw new Error('expected another page');
-    }
-    return { kind: 'after', position: next.after };
+    KindAssertion.assertKind(next, 'more');
+    const { after }: KindMember<AlarmPageNext, 'more'> = next;
+    return { kind: 'after', position: after };
   }
 
   private static summarize({ alarms, next }: Readonly<AlarmPage>): PageSummary {
@@ -397,10 +397,9 @@ export class AlarmRepositoryContract {
       draft,
       new Date(Date.UTC(2026, 9, 8, 8, minute, 0, 123)),
     );
-    if (creation.kind !== 'created') {
-      throw new Error(`contract fixture alarm is invalid: ${creation.error.code}`);
-    }
-    return creation.alarm;
+    KindAssertion.assertKind(creation, 'created');
+    const { alarm }: KindMember<AlarmCreation, 'created'> = creation;
+    return alarm;
   }
 
   private static newAlarmId(): AlarmId {
@@ -417,10 +416,9 @@ export class AlarmRepositoryContract {
       draft,
       new Date(CREATED_ISO),
     );
-    if (creation.kind !== 'created') {
-      throw new Error(`contract fixture alarm is invalid: ${creation.error.code}`);
-    }
-    return creation.alarm;
+    KindAssertion.assertKind(creation, 'created');
+    const { alarm }: KindMember<AlarmCreation, 'created'> = creation;
+    return alarm;
   }
 
   private static dispatched(alarm: Alarm): Alarm {
@@ -436,23 +434,20 @@ export class AlarmRepositoryContract {
       { expansionCompleted: true, unsettledDeliveries: deliveryCount },
       new Date(COMPLETED_ISO),
     );
-    if (completion.kind !== 'transitioned') {
-      throw new Error(`contract fixture completion failed: ${completion.kind}`);
-    }
-    return completion.alarm;
+    KindAssertion.assertKind(completion, 'transitioned');
+    const { alarm: completedAlarm }: KindMember<AlarmCompletion, 'transitioned'> = completion;
+    return completedAlarm;
   }
 
   private static transitioned(transition: AlarmTransition): Alarm {
-    if (transition.kind !== 'transitioned') {
-      throw new Error(`contract fixture transition failed: ${transition.error.code}`);
-    }
-    return transition.alarm;
+    KindAssertion.assertKind(transition, 'transitioned');
+    const { alarm }: KindMember<AlarmTransition, 'transitioned'> = transition;
+    return alarm;
   }
 
   private static found(lookup: AlarmLookup): Alarm {
-    if (lookup.kind !== 'found') {
-      throw new Error('expected the alarm to be stored');
-    }
-    return lookup.alarm;
+    KindAssertion.assertKind(lookup, 'found');
+    const { alarm }: KindMember<AlarmLookup, 'found'> = lookup;
+    return alarm;
   }
 }

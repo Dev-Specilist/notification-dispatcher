@@ -15,6 +15,7 @@ import {
   AllUsersTarget,
   ExplicitTarget,
 } from '@/modules/notification/domain/alarm/alarm.type';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 
 type RecipientCountCase = Readonly<[string, number]>;
 
@@ -76,17 +77,15 @@ const SETTLED: CompletionEvidence = {
 };
 
 const created = (creation: AlarmCreation): Alarm => {
-  if (creation.kind !== 'created') {
-    throw new Error(`expected created but got ${creation.error.code}`);
-  }
-  return creation.alarm;
+  KindAssertion.assertKind(creation, 'created');
+  const { alarm }: KindMember<AlarmCreation, 'created'> = creation;
+  return alarm;
 };
 
 const transitioned = (result: AlarmTransition | AlarmCompletion): Alarm => {
-  if (result.kind !== 'transitioned') {
-    throw new Error(`expected transitioned but got ${result.kind}`);
-  }
-  return result.alarm;
+  KindAssertion.assertKind(result, 'transitioned');
+  const { alarm }: KindMember<AlarmTransition | AlarmCompletion, 'transitioned'> = result;
+  return alarm;
 };
 
 const bulkDraft = (): Alarm =>

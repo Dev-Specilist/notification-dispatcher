@@ -10,6 +10,7 @@ import {
   ExpansionJobLookup,
   ExpansionProgress,
 } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 
 type ContractExpansionJobRepository = ExpansionJobRepositoryPort;
 
@@ -309,10 +310,9 @@ export class ExpansionJobRepositoryContract {
       { title: '추석 이벤트', body: '쿠폰 도착', kind: 'BULK', recipientIds: [] },
       new Date(ENQUEUED_ISO),
     );
-    if (creation.kind !== 'created') {
-      throw new Error(`contract fixture alarm is invalid: ${creation.error.code}`);
-    }
-    await alarmRepository.save(creation.alarm);
+    KindAssertion.assertKind(creation, 'created');
+    const { alarm }: KindMember<AlarmCreation, 'created'> = creation;
+    await alarmRepository.save(alarm);
     return rawAlarmId;
   }
 }

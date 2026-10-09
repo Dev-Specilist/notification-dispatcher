@@ -21,6 +21,7 @@ import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/te
 import { InMemoryTransactionAdapter } from '@/modules/notification/testing/in-memory/in-memory-transaction.adapter';
 import { SnapshotOnlyTransaction } from '@/modules/notification/testing/snapshot-only-transaction';
 import { UnusedTransaction } from '@/modules/notification/testing/unused-transaction';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 
 interface Fixture {
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
@@ -40,19 +41,16 @@ const alarmId = (rawAlarmId: string): AlarmId => {
 
 const draftAlarm = (rawAlarmId: string, draft: Readonly<AlarmDraft>, createdIso: string): Alarm => {
   const creation: AlarmCreation = Alarm.create(alarmId(rawAlarmId), draft, new Date(createdIso));
-  if (creation.kind !== 'created') {
-    throw new Error(`test fixture alarm is invalid: ${creation.error.code}`);
-  }
+  KindAssertion.assertKind(creation, 'created');
   const { alarm }: AlarmCreated = creation;
   return alarm;
 };
 
 const dispatched = (alarm: Alarm): Alarm => {
   const transition: AlarmTransition = alarm.startDispatch(new Date('2026-10-08T09:05:00.000Z'));
-  if (transition.kind !== 'transitioned') {
-    throw new Error(`test fixture alarm cannot be dispatched: ${transition.error.code}`);
-  }
-  return transition.alarm;
+  KindAssertion.assertKind(transition, 'transitioned');
+  const { alarm: dispatchedAlarm }: KindMember<AlarmTransition, 'transitioned'> = transition;
+  return dispatchedAlarm;
 };
 
 const oldestBulkDraft: Alarm = draftAlarm(
@@ -90,9 +88,7 @@ const fixture = async (): Promise<Fixture> => {
 };
 
 const listed = (result: ListAlarmsResult): AlarmListPage => {
-  if (result.kind !== 'page') {
-    throw new Error(`expected page but got ${result.kind}`);
-  }
+  KindAssertion.assertKind(result, 'page');
   return result;
 };
 

@@ -27,24 +27,11 @@ import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/te
 import { InMemoryTransactionAdapter } from '@/modules/notification/testing/in-memory/in-memory-transaction.adapter';
 import { SnapshotOnlyTransaction } from '@/modules/notification/testing/snapshot-only-transaction';
 import { UnusedTransaction } from '@/modules/notification/testing/unused-transaction';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
+import { createGate, Gate } from '@/shared/testing/gate.factory';
 
 const STORED_ID: string = '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10';
 const MISSING_ID: string = '7d3f1e2a-4b5c-4d6e-8f70-1a2b3c4d5e6f';
-
-interface Gate {
-  readonly opened: Promise<void>;
-  readonly open: () => void;
-}
-
-const NOT_YET_OPENED: () => void = (): void => {};
-
-const createGate = (): Gate => {
-  let release: () => void = NOT_YET_OPENED;
-  const opened: Promise<void> = new Promise<void>((resolve: () => void): void => {
-    release = resolve;
-  });
-  return { opened, open: (): void => release() };
-};
 
 interface Fixture {
   readonly alarmRepository: InMemoryAlarmRepositoryAdapter;
@@ -66,17 +53,13 @@ const storedAlarm = (): Alarm => {
     { title: '추석 이벤트', body: '연휴 쿠폰이 도착했어요', kind: 'BULK', recipientIds: [] },
     new Date('2026-10-07T09:00:00.000Z'),
   );
-  if (creation.kind !== 'created') {
-    throw new Error(`test fixture alarm is invalid: ${creation.error.code}`);
-  }
+  KindAssertion.assertKind(creation, 'created');
   const { alarm }: AlarmCreated = creation;
   return alarm;
 };
 
 const found = (result: AlarmResult): AlarmFoundResult => {
-  if (result.kind !== 'found') {
-    throw new Error(`expected found but got ${result.kind}`);
-  }
+  KindAssertion.assertKind(result, 'found');
   return result;
 };
 
@@ -98,10 +81,10 @@ const pendingDelivery = (deliveryNumber: number, recipient: string): Delivery =>
 
 const cancelled = (delivery: Delivery): Delivery => {
   const transition: DeliveryTransition = delivery.cancel(new Date('2026-10-07T09:10:00.000Z'));
-  if (transition.kind !== 'transitioned') {
-    throw new Error(`test fixture delivery cannot be cancelled: ${transition.kind}`);
-  }
-  return transition.delivery;
+  KindAssertion.assertKind(transition, 'transitioned');
+  const { delivery: cancelledDelivery }: KindMember<DeliveryTransition, 'transitioned'> =
+    transition;
+  return cancelledDelivery;
 };
 
 const fixture = (): Fixture => {

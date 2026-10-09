@@ -28,6 +28,7 @@ import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/testing/i
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-expansion-job-repository.adapter';
 import { InMemoryTransactionAdapter } from '@/modules/notification/testing/in-memory/in-memory-transaction.adapter';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 
 type DeliveryBuilder = (index: number) => Delivery;
 
@@ -93,25 +94,22 @@ const durationMs = (value: number): DurationMs => {
 };
 
 const transitionedAlarm = (transition: AlarmTransition): Alarm => {
-  if (transition.kind !== 'transitioned') {
-    throw new Error(`test fixture alarm transition failed: ${transition.error.code}`);
-  }
-  return transition.alarm;
+  KindAssertion.assertKind(transition, 'transitioned');
+  const { alarm }: KindMember<AlarmTransition, 'transitioned'> = transition;
+  return alarm;
 };
 
 const transitioned = (transition: DeliveryTransition): Delivery => {
-  if (transition.kind !== 'transitioned') {
-    throw new Error(`test fixture delivery transition failed: ${transition.kind}`);
-  }
-  return transition.delivery;
+  KindAssertion.assertKind(transition, 'transitioned');
+  const { delivery }: KindMember<DeliveryTransition, 'transitioned'> = transition;
+  return delivery;
 };
 
 const draftAlarm = (draft: Readonly<AlarmDraft>): Alarm => {
   const creation: AlarmCreation = Alarm.create(alarmId(ALARM_ID), draft, at(CREATED_ISO));
-  if (creation.kind !== 'created') {
-    throw new Error(`test fixture alarm is invalid: ${creation.error.code}`);
-  }
-  return creation.alarm;
+  KindAssertion.assertKind(creation, 'created');
+  const { alarm }: KindMember<AlarmCreation, 'created'> = creation;
+  return alarm;
 };
 
 const dispatchedUrgent = (): Alarm =>
@@ -214,10 +212,9 @@ const storedState = async (
   alarmRepository: InMemoryAlarmRepositoryAdapter,
 ): Promise<AlarmState> => {
   const lookup: AlarmLookup = await alarmRepository.findById(alarmId(ALARM_ID));
-  if (lookup.kind !== 'found') {
-    throw new Error('expected the alarm to be stored');
-  }
-  return lookup.alarm.snapshot().state;
+  KindAssertion.assertKind(lookup, 'found');
+  const { alarm }: KindMember<AlarmLookup, 'found'> = lookup;
+  return alarm.snapshot().state;
 };
 
 describe('AlarmCompletionChecker', () => {

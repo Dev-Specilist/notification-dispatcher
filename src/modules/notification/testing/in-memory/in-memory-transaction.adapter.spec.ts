@@ -18,6 +18,7 @@ import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/testing/i
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-expansion-job-repository.adapter';
 import { InMemoryTransactionAdapter } from '@/modules/notification/testing/in-memory/in-memory-transaction.adapter';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 
 type SnapshotReading = Readonly<[alarmLookupKind: string, pendingCount: number]>;
 
@@ -44,10 +45,9 @@ const bulkAlarm = (rawAlarmId: string): Alarm => {
     { title: '추석 이벤트', body: '쿠폰 도착', kind: 'BULK', recipientIds: [] },
     new Date('2026-10-07T09:00:00.000Z'),
   );
-  if (creation.kind !== 'created') {
-    throw new Error(`test fixture alarm is invalid: ${creation.error.code}`);
-  }
-  return creation.alarm;
+  KindAssertion.assertKind(creation, 'created');
+  const { alarm }: KindMember<AlarmCreation, 'created'> = creation;
+  return alarm;
 };
 
 const pendingDelivery = (id: number, recipient: string): Delivery => {

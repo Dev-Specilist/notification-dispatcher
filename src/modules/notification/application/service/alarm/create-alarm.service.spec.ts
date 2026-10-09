@@ -19,6 +19,8 @@ import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/testing/i
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-expansion-job-repository.adapter';
 import { InMemoryTransactionAdapter } from '@/modules/notification/testing/in-memory/in-memory-transaction.adapter';
+import { KindAssertion } from '@/shared/testing/kind.assertion';
+import { createGate, Gate } from '@/shared/testing/gate.factory';
 
 const NOW_ISO: string = '2026-10-07T09:00:00.000Z';
 
@@ -56,34 +58,15 @@ class FailingAlarmRepository extends InMemoryAlarmRepositoryAdapter {
 }
 
 const created = (result: CreateAlarmResult): AlarmView => {
-  if (result.kind !== 'created') {
-    throw new Error(`expected created but got ${result.error.code}`);
-  }
+  KindAssertion.assertKind(result, 'created');
   const { alarm }: AlarmCreatedResult = result;
   return alarm;
 };
 
 const found = (lookup: AlarmLookup): Alarm => {
-  if (lookup.kind !== 'found') {
-    throw new Error('expected the alarm to be stored');
-  }
+  KindAssertion.assertKind(lookup, 'found');
   const { alarm }: AlarmFound = lookup;
   return alarm;
-};
-
-interface Gate {
-  readonly opened: Promise<void>;
-  readonly open: () => void;
-}
-
-const NOT_YET_OPENED: () => void = (): void => {};
-
-const createGate = (): Gate => {
-  let release: () => void = NOT_YET_OPENED;
-  const opened: Promise<void> = new Promise<void>((resolve: () => void): void => {
-    release = resolve;
-  });
-  return { opened, open: (): void => release() };
 };
 
 interface Fixture {

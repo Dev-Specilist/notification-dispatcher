@@ -14,6 +14,7 @@ import { MockMessageLookupAdapter } from '@/modules/notification/adapter/driven/
 import { MockMessageSenderAdapter } from '@/modules/notification/adapter/driven/mock-api/message/mock-message-sender.adapter';
 import { MockApiContainer } from '@/modules/notification/testing/mock-api.container';
 import { StubHttpServer } from '@/modules/notification/testing/stub-http.server';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 
 type MalformedResponseCase = Readonly<[string, number, string]>;
 
@@ -52,20 +53,18 @@ const messageWith = (clientRef: DeliveryId): OutgoingMessage => {
 };
 
 const acceptedMessageId = (outcome: SendOutcome): string => {
-  if (outcome.kind !== 'accepted') {
-    throw new Error(`expected the mock to accept the message but got ${outcome.kind}`);
-  }
-  return outcome.messageId;
+  KindAssertion.assertKind(outcome, 'accepted');
+  const { messageId }: KindMember<SendOutcome, 'accepted'> = outcome;
+  return messageId;
 };
 
 const summarize = (result: MessageLookupResult): FoundSummary => {
-  if (result.kind !== 'found') {
-    throw new Error(`expected found but got ${result.kind}`);
-  }
+  KindAssertion.assertKind(result, 'found');
+  const { messages }: KindMember<MessageLookupResult, 'found'> = result;
   return {
     kind: 'found',
-    messageIds: result.messages.map(({ messageId }: RecordedMessage): string => messageId),
-    sentAtValid: result.messages.every(
+    messageIds: messages.map(({ messageId }: RecordedMessage): string => messageId),
+    sentAtValid: messages.every(
       ({ sentAt }: RecordedMessage): boolean => !Number.isNaN(sentAt.getTime()),
     ),
   };

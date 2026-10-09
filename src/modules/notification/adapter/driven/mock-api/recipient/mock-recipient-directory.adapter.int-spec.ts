@@ -15,6 +15,7 @@ import {
 import { MockRecipientDirectoryAdapter } from '@/modules/notification/adapter/driven/mock-api/recipient/mock-recipient-directory.adapter';
 import { MockApiContainer } from '@/modules/notification/testing/mock-api.container';
 import { StubHttpServer } from '@/modules/notification/testing/stub-http.server';
+import { KindAssertion } from '@/shared/testing/kind.assertion';
 
 type FailingResponseCase = Readonly<[string, number, string]>;
 
@@ -69,9 +70,7 @@ const readToEnd = async (
 };
 
 const nextCursorOf = ({ next }: Readonly<RecipientPage>): NextPage => {
-  if (next.kind !== 'next') {
-    throw new Error('expected another page');
-  }
+  KindAssertion.assertKind(next, 'next');
   return next;
 };
 

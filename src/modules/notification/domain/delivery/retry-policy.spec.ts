@@ -8,6 +8,7 @@ import {
 } from '@/modules/notification/domain/delivery/retry-policy.type';
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 
 type DelayCase = Readonly<[number, number, number]>;
 
@@ -41,10 +42,9 @@ const options = (baseMs: number, maxMs: number): RetryPolicyOptions => ({
 });
 
 const created = (creation: RetryPolicyCreation): RetryPolicy => {
-  if (creation.kind !== 'created') {
-    throw new Error(`expected created but got ${creation.error.code}`);
-  }
-  return creation.policy;
+  KindAssertion.assertKind(creation, 'created');
+  const { policy }: KindMember<RetryPolicyCreation, 'created'> = creation;
+  return policy;
 };
 
 const policy = (): RetryPolicy => created(RetryPolicy.create(options(1_000, 8_000)));

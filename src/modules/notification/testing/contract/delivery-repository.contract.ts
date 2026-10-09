@@ -27,6 +27,7 @@ import { DurationMs } from '@/shared/domain/duration.type';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
 import { DeliveryRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.port';
 import { DeliveryCandidate } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.type';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 
 interface DeliveryInspection {
   findByAlarmId(alarmId: AlarmId): Promise<ReadonlyArray<Delivery>>;
@@ -634,14 +635,12 @@ export class DeliveryRepositoryContract {
       { title: '추석 이벤트', body: '쿠폰 도착', kind: 'BULK', recipientIds: [] },
       new Date(CREATED_ISO),
     );
-    if (creation.kind !== 'created') {
-      throw new Error(`contract fixture alarm is invalid: ${creation.error.code}`);
-    }
-    const dispatched: AlarmTransition = creation.alarm.startDispatch(new Date(CREATED_ISO));
-    if (dispatched.kind !== 'transitioned') {
-      throw new Error(`contract fixture alarm cannot be dispatched: ${dispatched.error.code}`);
-    }
-    await alarmRepository.save(dispatched.alarm);
+    KindAssertion.assertKind(creation, 'created');
+    const { alarm: draftAlarm }: KindMember<AlarmCreation, 'created'> = creation;
+    const dispatched: AlarmTransition = draftAlarm.startDispatch(new Date(CREATED_ISO));
+    KindAssertion.assertKind(dispatched, 'transitioned');
+    const { alarm: dispatchedAlarm }: KindMember<AlarmTransition, 'transitioned'> = dispatched;
+    await alarmRepository.save(dispatchedAlarm);
     return rawAlarmId;
   }
 
@@ -748,10 +747,9 @@ export class DeliveryRepositoryContract {
   }
 
   private static transitioned(transition: DeliveryTransition): Delivery {
-    if (transition.kind !== 'transitioned') {
-      throw new Error(`contract fixture delivery transition failed: ${transition.kind}`);
-    }
-    return transition.delivery;
+    KindAssertion.assertKind(transition, 'transitioned');
+    const { delivery }: KindMember<DeliveryTransition, 'transitioned'> = transition;
+    return delivery;
   }
 
   private static async snapshots(
@@ -819,10 +817,9 @@ export class DeliveryRepositoryContract {
       baseDelayMs: DeliveryRepositoryContract.duration(1_000),
       maxDelayMs: DeliveryRepositoryContract.duration(8_000),
     });
-    if (creation.kind !== 'created') {
-      throw new Error(`contract fixture retry policy is invalid: ${creation.error.code}`);
-    }
-    return creation.policy;
+    KindAssertion.assertKind(creation, 'created');
+    const { policy }: KindMember<RetryPolicyCreation, 'created'> = creation;
+    return policy;
   }
 
   private static zeroJitter(): JitterRatio {

@@ -12,6 +12,7 @@ import {
 } from '@/modules/notification/domain/alarm/alarm.type';
 import { AlarmView } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-view.type';
 import { AlarmViewMapper } from '@/modules/notification/application/service/alarm/view/alarm-view.mapper';
+import { KindAssertion } from '@/shared/testing/kind.assertion';
 
 const ALARM_ID: string = '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10';
 const CREATED_ISO: string = '2026-10-08T09:00:00.000Z';
@@ -22,25 +23,19 @@ const created = (draft: Readonly<AlarmDraft>): Alarm => {
     throw new Error('test fixture id is invalid');
   }
   const creation: AlarmCreation = Alarm.create(ALARM_ID, draft, new Date(CREATED_ISO));
-  if (creation.kind !== 'created') {
-    throw new Error(`test fixture alarm is invalid: ${creation.error.code}`);
-  }
+  KindAssertion.assertKind(creation, 'created');
   const { alarm }: AlarmCreated = creation;
   return alarm;
 };
 
 const transitioned = (transition: AlarmTransition): Alarm => {
-  if (transition.kind !== 'transitioned') {
-    throw new Error(`test fixture transition failed: ${transition.error.code}`);
-  }
+  KindAssertion.assertKind(transition, 'transitioned');
   const { alarm }: AlarmTransitioned = transition;
   return alarm;
 };
 
 const completed = (completion: AlarmCompletion): Alarm => {
-  if (completion.kind !== 'transitioned') {
-    throw new Error(`test fixture completion failed: ${completion.kind}`);
-  }
+  KindAssertion.assertKind(completion, 'transitioned');
   const { alarm }: AlarmTransitioned = completion;
   return alarm;
 };

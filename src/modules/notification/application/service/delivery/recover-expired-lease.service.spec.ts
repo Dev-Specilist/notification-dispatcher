@@ -44,6 +44,7 @@ import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/testing/i
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-delivery-repository.adapter';
 import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-expansion-job-repository.adapter';
 import { InMemoryTransactionAdapter } from '@/modules/notification/testing/in-memory/in-memory-transaction.adapter';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 
 interface Fixture {
   readonly deliveryRepository: InMemoryDeliveryRepositoryAdapter;
@@ -118,24 +119,21 @@ const retryPolicy = (): RetryPolicy => {
     baseDelayMs: durationMs(1_000),
     maxDelayMs: durationMs(8_000),
   });
-  if (creation.kind !== 'created') {
-    throw new Error(`test fixture retry policy is invalid: ${creation.error.code}`);
-  }
-  return creation.policy;
+  KindAssertion.assertKind(creation, 'created');
+  const { policy }: KindMember<RetryPolicyCreation, 'created'> = creation;
+  return policy;
 };
 
 const transitioned = (transition: DeliveryTransition): Delivery => {
-  if (transition.kind !== 'transitioned') {
-    throw new Error(`test fixture delivery transition failed: ${transition.kind}`);
-  }
-  return transition.delivery;
+  KindAssertion.assertKind(transition, 'transitioned');
+  const { delivery }: KindMember<DeliveryTransition, 'transitioned'> = transition;
+  return delivery;
 };
 
 const transitionedAlarm = (transition: AlarmTransition): Alarm => {
-  if (transition.kind !== 'transitioned') {
-    throw new Error(`test fixture alarm transition failed: ${transition.error.code}`);
-  }
-  return transition.alarm;
+  KindAssertion.assertKind(transition, 'transitioned');
+  const { alarm }: KindMember<AlarmTransition, 'transitioned'> = transition;
+  return alarm;
 };
 
 const dispatchedAlarm = (): Alarm => {
@@ -144,10 +142,9 @@ const dispatchedAlarm = (): Alarm => {
     { title: '추석 이벤트', body: '쿠폰 도착', kind: 'BULK', recipientIds: [] },
     at(CREATED_ISO),
   );
-  if (creation.kind !== 'created') {
-    throw new Error(`test fixture alarm is invalid: ${creation.error.code}`);
-  }
-  return transitionedAlarm(creation.alarm.startDispatch(at(STARTED_ISO)));
+  KindAssertion.assertKind(creation, 'created');
+  const { alarm }: KindMember<AlarmCreation, 'created'> = creation;
+  return transitionedAlarm(alarm.startDispatch(at(STARTED_ISO)));
 };
 
 const requestStarted = (index: number = 1, startedIso: string = STARTED_ISO): Delivery => {

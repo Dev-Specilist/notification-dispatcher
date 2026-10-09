@@ -8,6 +8,7 @@ import { AlarmRepositoryContract } from '@/modules/notification/testing/contract
 import { DrizzleAlarmRepositoryAdapter } from '@/modules/notification/adapter/driven/persistence/alarm/drizzle-alarm-repository.adapter';
 import { NotificationDatabaseFactory } from '@/modules/notification/adapter/driven/persistence/notification-database.factory';
 import { TestDatabase } from '@/shared/database/testing/test-database';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 
 interface TimestampRow {
   readonly created_at: Date;
@@ -25,18 +26,16 @@ const draftAlarm = (): Alarm => {
     { title: '추석 이벤트', body: '쿠폰 도착', kind: 'BULK', recipientIds: [] },
     new Date('2020-01-01T00:00:00.000Z'),
   );
-  if (creation.kind !== 'created') {
-    throw new Error(`test fixture alarm is invalid: ${creation.error.code}`);
-  }
-  return creation.alarm;
+  KindAssertion.assertKind(creation, 'created');
+  const { alarm }: KindMember<AlarmCreation, 'created'> = creation;
+  return alarm;
 };
 
 const dispatched = (alarm: Alarm): Alarm => {
   const transition: AlarmTransition = alarm.startDispatch(new Date('2020-01-01T00:01:00.000Z'));
-  if (transition.kind !== 'transitioned') {
-    throw new Error(`test fixture transition failed: ${transition.error.code}`);
-  }
-  return transition.alarm;
+  KindAssertion.assertKind(transition, 'transitioned');
+  const { alarm: dispatchedAlarm }: KindMember<AlarmTransition, 'transitioned'> = transition;
+  return dispatchedAlarm;
 };
 
 describe('DrizzleAlarmRepositoryAdapter', () => {
