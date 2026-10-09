@@ -8,7 +8,7 @@ import {
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
 import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
-import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/delivery-id-generator.port';
+import { IdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/id-generator.port';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
 import {
   StartDispatchCommand,
@@ -29,7 +29,7 @@ interface StartDispatchRepositories {
 export class StartDispatchService implements StartDispatchUseCase {
   constructor(
     private readonly transaction: TransactionPort,
-    private readonly deliveryIdGenerator: DeliveryIdGeneratorPort,
+    private readonly deliveryIdGenerator: Pick<IdGeneratorPort, 'deliveryId'>,
     private readonly clock: ClockPort,
   ) {}
 

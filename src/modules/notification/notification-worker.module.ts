@@ -1,9 +1,8 @@
 import { Module } from '@nestjs/common';
 import { Pool } from 'pg';
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
-import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/delivery-id-generator.port';
+import { IdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/id-generator.port';
 import { JitterSourcePort } from '@/modules/notification/application/port/driven/for-drawing-jitter/jitter-source.port';
-import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/lease-token-generator.port';
 import { MessageLookupPort } from '@/modules/notification/application/port/driven/for-looking-up-messages/message-lookup.port';
 import { MessageSenderPort } from '@/modules/notification/application/port/driven/for-sending-messages/message-sender.port';
 import { RecipientDirectoryPort } from '@/modules/notification/application/port/driven/for-fetching-recipients/recipient-directory.port';
@@ -29,7 +28,6 @@ import { NotificationDatabaseFactory } from '@/modules/notification/adapter/driv
 import { PostgresRateLimiterAdapter } from '@/modules/notification/adapter/driven/persistence/rate-limiter/postgres-rate-limiter.adapter';
 import { RandomIdGeneratorAdapter } from '@/modules/notification/adapter/driven/system/random-id-generator.adapter';
 import { RandomJitterSourceAdapter } from '@/modules/notification/adapter/driven/system/random-jitter-source.adapter';
-import { RandomLeaseTokenGeneratorAdapter } from '@/modules/notification/adapter/driven/system/random-lease-token-generator.adapter';
 import { SystemClockAdapter } from '@/modules/notification/adapter/driven/system/system-clock.adapter';
 import { WorkerSettingsFactory } from '@/modules/notification/adapter/driven/config/worker-settings.factory';
 import { WorkerSettings } from '@/modules/notification/adapter/driven/config/worker-settings.type';
@@ -53,8 +51,7 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
     },
     { provide: ShutdownSignalPort, useExisting: WorkerShutdownSignalAdapter },
     { provide: ClockPort, useClass: SystemClockAdapter },
-    { provide: DeliveryIdGeneratorPort, useClass: RandomIdGeneratorAdapter },
-    { provide: LeaseTokenGeneratorPort, useClass: RandomLeaseTokenGeneratorAdapter },
+    { provide: IdGeneratorPort, useClass: RandomIdGeneratorAdapter },
     { provide: JitterSourcePort, useClass: RandomJitterSourceAdapter },
     {
       provide: TransactionPort,
@@ -102,21 +99,21 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
       inject: [
         TransactionPort,
         RecipientDirectoryPort,
-        DeliveryIdGeneratorPort,
+        IdGeneratorPort,
         WORKER_SETTINGS,
         ClockPort,
       ],
       useFactory: (
         transaction: TransactionPort,
         recipientDirectory: RecipientDirectoryPort,
-        deliveryIdGenerator: DeliveryIdGeneratorPort,
+        idGenerator: IdGeneratorPort,
         { deliverySettings }: WorkerSettings,
         clock: ClockPort,
       ): ExpandNextPageUseCase =>
         new ExpandNextPageService(
           transaction,
           recipientDirectory,
-          deliveryIdGenerator,
+          idGenerator,
           deliverySettings,
           clock,
         ),
@@ -127,7 +124,7 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
         TransactionPort,
         SendPermitPort,
         MessageSenderPort,
-        LeaseTokenGeneratorPort,
+        IdGeneratorPort,
         ClockPort,
         WORKER_SETTINGS,
         JitterSourcePort,
@@ -137,7 +134,7 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
         transaction: TransactionPort,
         sendPermit: SendPermitPort,
         messageSender: MessageSenderPort,
-        leaseTokenGenerator: LeaseTokenGeneratorPort,
+        idGenerator: IdGeneratorPort,
         clock: ClockPort,
         { deliverySettings }: WorkerSettings,
         jitterSource: JitterSourcePort,
@@ -147,7 +144,7 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
           transaction,
           sendPermit,
           messageSender,
-          leaseTokenGenerator,
+          idGenerator,
           clock,
           deliverySettings,
           jitterSource,

@@ -28,7 +28,7 @@ import { AlarmLookup } from '@/modules/notification/application/port/driven/for-
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
 import { DispatchSettings } from '@/modules/notification/application/service/delivery/delivery-settings.type';
 import { JitterSourcePort } from '@/modules/notification/application/port/driven/for-drawing-jitter/jitter-source.port';
-import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/lease-token-generator.port';
+import { IdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/id-generator.port';
 import { MessageSenderPort } from '@/modules/notification/application/port/driven/for-sending-messages/message-sender.port';
 import {
   OutgoingMessage,
@@ -216,8 +216,8 @@ class AdjustableClock implements ClockPort {
   }
 }
 
-class FixedLeaseTokenGenerator implements LeaseTokenGeneratorPort {
-  next(): LeaseToken {
+class FixedLeaseTokenGenerator implements Pick<IdGeneratorPort, 'leaseToken'> {
+  leaseToken(): LeaseToken {
     return leaseToken(LEASE_TOKEN);
   }
 }

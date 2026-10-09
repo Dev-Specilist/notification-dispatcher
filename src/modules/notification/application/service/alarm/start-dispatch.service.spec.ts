@@ -7,7 +7,7 @@ import { DeliveryPredicates } from '@/modules/notification/domain/delivery/deliv
 import { DeliveryId, DeliverySnapshot } from '@/modules/notification/domain/delivery/delivery.type';
 import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
-import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/delivery-id-generator.port';
+import { IdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/id-generator.port';
 import { StartDispatchResult } from '@/modules/notification/application/port/driving/for-managing-alarms/start-dispatch.type';
 import { StartDispatchService } from '@/modules/notification/application/service/alarm/start-dispatch.service';
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-alarm-repository.adapter';
@@ -61,7 +61,7 @@ class FixedClock implements ClockPort {
   }
 }
 
-class SequentialDeliveryIdGenerator implements DeliveryIdGeneratorPort {
+class SequentialDeliveryIdGenerator implements Pick<IdGeneratorPort, 'deliveryId'> {
   private issued: number = 0;
 
   deliveryId(): DeliveryId {

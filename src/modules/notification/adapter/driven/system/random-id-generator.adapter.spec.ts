@@ -31,4 +31,17 @@ describe('RandomIdGeneratorAdapter', () => {
     ).toBe(true);
     expect(new Set(deliveryIds).size).toBe(SAMPLE_SIZE);
   });
+
+  it('lease token은 도메인 형식(UUID)을 지키고 claim마다 다르다', (): void => {
+    const leaseTokens: ReadonlyArray<string> = Array.from({ length: SAMPLE_SIZE }, (): string =>
+      generator.leaseToken(),
+    );
+
+    expect(
+      leaseTokens.every((leaseToken: string): boolean =>
+        DeliveryPredicates.isLeaseToken(leaseToken),
+      ),
+    ).toBe(true);
+    expect(new Set(leaseTokens).size).toBe(SAMPLE_SIZE);
+  });
 });

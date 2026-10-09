@@ -17,7 +17,7 @@ import {
 import { DispatchSettings } from '@/modules/notification/application/service/delivery/delivery-settings.type';
 import { ShutdownSignalPort } from '@/modules/notification/application/port/driven/for-checking-shutdown/shutdown-signal.port';
 import { JitterSourcePort } from '@/modules/notification/application/port/driven/for-drawing-jitter/jitter-source.port';
-import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/lease-token-generator.port';
+import { IdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/id-generator.port';
 import { MessageSenderPort } from '@/modules/notification/application/port/driven/for-sending-messages/message-sender.port';
 import { SendOutcome } from '@/modules/notification/application/port/driven/for-sending-messages/message-sender.type';
 import { SendPermitPort } from '@/modules/notification/application/port/driven/for-permitting-sends/send-permit.port';
@@ -49,7 +49,7 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
     private readonly transaction: TransactionPort,
     private readonly sendPermit: SendPermitPort,
     private readonly messageSender: MessageSenderPort,
-    private readonly leaseTokenGenerator: LeaseTokenGeneratorPort,
+    private readonly leaseTokenGenerator: Pick<IdGeneratorPort, 'leaseToken'>,
     private readonly clock: ClockPort,
     private readonly settings: Readonly<DispatchSettings>,
     private readonly jitterSource: JitterSourcePort,
@@ -64,7 +64,7 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
     if (this.shutdownSignal.isRequested()) {
       return { kind: 'stopped' };
     }
-    const token: LeaseToken = this.leaseTokenGenerator.next();
+    const token: LeaseToken = this.leaseTokenGenerator.leaseToken();
     const step: ClaimStep = await this.claimNext(token);
     if (step.kind !== 'ready') {
       return step;

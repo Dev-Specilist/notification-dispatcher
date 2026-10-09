@@ -26,7 +26,7 @@ import { ClockPort } from '@/modules/notification/application/port/driven/for-te
 import { DispatchSettings } from '@/modules/notification/application/service/delivery/delivery-settings.type';
 import { JitterSourcePort } from '@/modules/notification/application/port/driven/for-drawing-jitter/jitter-source.port';
 import { LeaseRecoverySettings } from '@/modules/notification/application/service/delivery/delivery-settings.type';
-import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/lease-token-generator.port';
+import { IdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/id-generator.port';
 import { MessageLookupPort } from '@/modules/notification/application/port/driven/for-looking-up-messages/message-lookup.port';
 import { MessageLookupResult } from '@/modules/notification/application/port/driven/for-looking-up-messages/message-lookup.type';
 import { MessageSenderPort } from '@/modules/notification/application/port/driven/for-sending-messages/message-sender.port';
@@ -243,8 +243,8 @@ class AlreadySentLookup implements MessageLookupPort {
   }
 }
 
-class FixedLeaseTokenGenerator implements LeaseTokenGeneratorPort {
-  next(): LeaseToken {
+class FixedLeaseTokenGenerator implements Pick<IdGeneratorPort, 'leaseToken'> {
+  leaseToken(): LeaseToken {
     return leaseToken(OTHER_TOKEN);
   }
 }

@@ -30,9 +30,8 @@ import { ExpansionJobLookup } from '@/modules/notification/application/port/driv
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
 import { DispatchSettings } from '@/modules/notification/application/service/delivery/delivery-settings.type';
 import { ExpansionSettings } from '@/modules/notification/application/service/expansion/expansion-settings.type';
-import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/delivery-id-generator.port';
+import { IdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/id-generator.port';
 import { JitterSourcePort } from '@/modules/notification/application/port/driven/for-drawing-jitter/jitter-source.port';
-import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/lease-token-generator.port';
 import { MessageSenderPort } from '@/modules/notification/application/port/driven/for-sending-messages/message-sender.port';
 import {
   OutgoingMessage,
@@ -137,7 +136,7 @@ class FixedExpansionSettings implements ExpansionSettings {
   readonly leaseMs: DurationMs = durationMs(EXPANSION_LEASE_MS);
 }
 
-class RandomDeliveryIdGenerator implements DeliveryIdGeneratorPort {
+class RandomDeliveryIdGenerator implements Pick<IdGeneratorPort, 'deliveryId'> {
   deliveryId(): DeliveryId {
     const rawDeliveryId: string = randomUUID();
     if (!DeliveryPredicates.isDeliveryId(rawDeliveryId)) {
@@ -147,8 +146,8 @@ class RandomDeliveryIdGenerator implements DeliveryIdGeneratorPort {
   }
 }
 
-class RandomLeaseTokenGenerator implements LeaseTokenGeneratorPort {
-  next(): LeaseToken {
+class RandomLeaseTokenGenerator implements Pick<IdGeneratorPort, 'leaseToken'> {
+  leaseToken(): LeaseToken {
     const rawLeaseToken: string = randomUUID();
     if (!DeliveryPredicates.isLeaseToken(rawLeaseToken)) {
       throw new Error(`generated ${rawLeaseToken} is not a valid LeaseToken`);

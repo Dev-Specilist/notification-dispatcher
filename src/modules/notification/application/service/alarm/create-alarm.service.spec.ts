@@ -13,7 +13,7 @@ import {
 import { AlarmView } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-view.type';
 import { AlarmViewMapper } from '@/modules/notification/application/service/alarm/view/alarm-view.mapper';
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
-import { AlarmIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/alarm-id-generator.port';
+import { IdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/id-generator.port';
 import { CreateAlarmService } from '@/modules/notification/application/service/alarm/create-alarm.service';
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-delivery-repository.adapter';
@@ -45,7 +45,7 @@ class FixedClock implements ClockPort {
   }
 }
 
-class FixedAlarmIdGenerator implements AlarmIdGeneratorPort {
+class FixedAlarmIdGenerator implements Pick<IdGeneratorPort, 'alarmId'> {
   alarmId(): AlarmId {
     return alarmId();
   }

@@ -3,12 +3,11 @@ import { Injectable } from '@nestjs/common';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
-import { DeliveryId } from '@/modules/notification/domain/delivery/delivery.type';
-import { AlarmIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/alarm-id-generator.port';
-import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/delivery-id-generator.port';
+import { DeliveryId, LeaseToken } from '@/modules/notification/domain/delivery/delivery.type';
+import { IdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/id-generator.port';
 
 @Injectable()
-export class RandomIdGeneratorAdapter implements AlarmIdGeneratorPort, DeliveryIdGeneratorPort {
+export class RandomIdGeneratorAdapter implements IdGeneratorPort {
   alarmId(): AlarmId {
     const rawAlarmId: string = randomUUID();
     if (!AlarmPredicates.isAlarmId(rawAlarmId)) {
@@ -23,5 +22,13 @@ export class RandomIdGeneratorAdapter implements AlarmIdGeneratorPort, DeliveryI
       throw new Error(`generated ${rawDeliveryId} is not a valid DeliveryId`);
     }
     return rawDeliveryId;
+  }
+
+  leaseToken(): LeaseToken {
+    const rawLeaseToken: string = randomUUID();
+    if (!DeliveryPredicates.isLeaseToken(rawLeaseToken)) {
+      throw new Error(`generated ${rawLeaseToken} is not a valid LeaseToken`);
+    }
+    return rawLeaseToken;
   }
 }

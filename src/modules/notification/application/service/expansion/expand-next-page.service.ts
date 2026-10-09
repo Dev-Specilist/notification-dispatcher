@@ -1,5 +1,5 @@
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
-import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/delivery-id-generator.port';
+import { IdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/id-generator.port';
 import { ExpansionClaim } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
 import { ExpansionSettings } from '@/modules/notification/application/service/expansion/expansion-settings.type';
 import { RecipientDirectoryPort } from '@/modules/notification/application/port/driven/for-fetching-recipients/recipient-directory.port';
@@ -20,7 +20,7 @@ export class ExpandNextPageService implements ExpandNextPageUseCase {
   constructor(
     private readonly transaction: TransactionPort,
     recipientDirectory: RecipientDirectoryPort,
-    deliveryIdGenerator: DeliveryIdGeneratorPort,
+    deliveryIdGenerator: Pick<IdGeneratorPort, 'deliveryId'>,
     private readonly expansionSettings: Readonly<ExpansionSettings>,
     private readonly clock: ClockPort,
   ) {

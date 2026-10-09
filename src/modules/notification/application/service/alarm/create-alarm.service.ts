@@ -1,7 +1,7 @@
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmCreation } from '@/modules/notification/domain/alarm/alarm.type';
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
-import { AlarmIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/alarm-id-generator.port';
+import { IdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/id-generator.port';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
 import {
   CreateAlarmCommand,
@@ -18,7 +18,7 @@ interface CreateAlarmRepositories {
 export class CreateAlarmService implements CreateAlarmUseCase {
   constructor(
     private readonly transaction: TransactionPort,
-    private readonly alarmIdGenerator: AlarmIdGeneratorPort,
+    private readonly alarmIdGenerator: Pick<IdGeneratorPort, 'alarmId'>,
     private readonly clock: ClockPort,
   ) {}
 

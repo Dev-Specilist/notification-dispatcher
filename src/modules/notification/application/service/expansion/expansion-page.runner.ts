@@ -7,7 +7,7 @@ import {
   ExpansionJob,
   ExpansionJobLookup,
 } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
-import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/delivery-id-generator.port';
+import { IdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/id-generator.port';
 import { RecipientDirectoryPort } from '@/modules/notification/application/port/driven/for-fetching-recipients/recipient-directory.port';
 import {
   PageCursor,
@@ -42,7 +42,7 @@ export class ExpansionPageRunner {
   constructor(
     private readonly transaction: TransactionPort,
     private readonly recipientDirectory: RecipientDirectoryPort,
-    private readonly deliveryIdGenerator: DeliveryIdGeneratorPort,
+    private readonly deliveryIdGenerator: Pick<IdGeneratorPort, 'deliveryId'>,
     private readonly clock: ClockPort,
   ) {}
 
