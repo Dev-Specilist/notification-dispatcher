@@ -178,6 +178,7 @@ Delivery
 | DB-17 | 발송 중인 알림 | 한 스냅샷 안에서 상태별 Delivery 수를 두 번 읽는 사이에 다른 트랜잭션이 Delivery를 바꿔 커밋한다 | 스냅샷 안의 두 조회는 같은 시점의 값을 본다 |
 | DB-18 | 진행 중인 확장 작업 여러 개 | 워커가 확장 작업을 claim한다 | lease가 없거나 만료된 작업 중 가장 먼저 만든 작업을 잡아 lease를 걸고, 잡힌 작업은 다른 워커가 가져가지 않는다 |
 | DB-19 | reconcile 대상으로 예약해 저장한 `UNKNOWN` Delivery | reconcile 후보를 고른다 | 예약 시각 전에는 후보에서 빠지고 이후 다시 후보가 된다 |
+| DB-20 | 응답을 기다리는 Delivery가 있는 알림을 취소 트랜잭션이 잠그고 대기 Delivery를 취소한 채 아직 커밋하지 않았다 | 워커가 재시도할 결과를 저장한다 | 결과 저장이 취소 커밋을 기다렸다가 취소된 알림을 보고 `RETRY_WAIT` 대신 `CANCELLED`로 저장한다 (발송 결과와 reconcile 결과 모두 알림을 공유 잠금(`FOR SHARE`)으로 읽는다) |
 
 ## EXT · 외부 API adapter (Testcontainers mock 서버)
 

@@ -27,7 +27,7 @@ import { AlarmRepositoryPort } from '@/modules/notification/application/port/dri
 import { AcceptedTransition } from '@/modules/notification/application/service/accepted-transition.util';
 
 interface SendNextDeliveryRepositories {
-  readonly alarmRepository: Pick<AlarmRepositoryPort, 'findById'>;
+  readonly alarmRepository: Pick<AlarmRepositoryPort, 'findById' | 'findByIdForShare'>;
   readonly deliveryRepository: Pick<
     DeliveryRepositoryPort,
     'findNextClaimable' | 'saveAll' | 'saveLeased'
@@ -151,7 +151,7 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
         alarmRepository,
         deliveryRepository,
       }: SendNextDeliveryRepositories): Promise<SendAttempt> => {
-        const alarm: AlarmLookup = await alarmRepository.findById(alarmId);
+        const alarm: AlarmLookup = await alarmRepository.findByIdForShare(alarmId);
         const recorded: Delivery =
           alarm.kind === 'found' && alarm.alarm.acceptsDeliveries()
             ? settled

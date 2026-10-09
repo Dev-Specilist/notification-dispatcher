@@ -26,7 +26,7 @@ import { AlarmRepositoryPort } from '@/modules/notification/application/port/dri
 import { AcceptedTransition } from '@/modules/notification/application/service/accepted-transition.util';
 
 interface ReconcileNextDeliveryRepositories {
-  readonly alarmRepository: Pick<AlarmRepositoryPort, 'findById'>;
+  readonly alarmRepository: Pick<AlarmRepositoryPort, 'findByIdForShare'>;
   readonly deliveryRepository: Pick<
     DeliveryRepositoryPort,
     'findNextReconcilable' | 'saveReconciled'
@@ -95,7 +95,7 @@ export class ReconcileNextDeliveryService implements ReconcileNextDeliveryUseCas
         alarmRepository,
         deliveryRepository,
       }: ReconcileNextDeliveryRepositories): Promise<ReconcileAttempt> => {
-        const alarm: AlarmLookup = await alarmRepository.findById(alarmId);
+        const alarm: AlarmLookup = await alarmRepository.findByIdForShare(alarmId);
         const reconciled: Delivery = AcceptedTransition.delivery(
           this.decide(candidate, lookup, alarm, this.clock.now()),
         );

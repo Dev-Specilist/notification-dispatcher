@@ -43,6 +43,12 @@ export class DrizzleAlarmRepositoryAdapter implements AlarmRepositoryPort {
     );
   }
 
+  async findByIdForShare(id: AlarmId): Promise<AlarmLookup> {
+    return DrizzleAlarmRepositoryAdapter.toLookup(
+      await this.database.select().from(alarms).where(eq(alarms.id, id)).limit(1).for('share'),
+    );
+  }
+
   async findPage({ status, alarmKind, start, size }: Readonly<AlarmPageQuery>): Promise<AlarmPage> {
     const conditions: ReadonlyArray<SQL> = [
       ...DrizzleAlarmRepositoryAdapter.filterOn(alarms.status, status),

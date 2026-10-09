@@ -13,5 +13,7 @@ export abstract class AlarmRepositoryPort {
 
   abstract findByIdForUpdate(id: AlarmId): Promise<AlarmLookup>;
 
+  abstract findByIdForShare(id: AlarmId): Promise<AlarmLookup>;
+
   abstract findPage(query: Readonly<AlarmPageQuery>): Promise<AlarmPage>;
 }

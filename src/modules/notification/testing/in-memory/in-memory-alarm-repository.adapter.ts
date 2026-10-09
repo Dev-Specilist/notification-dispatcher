@@ -28,6 +28,10 @@ export class InMemoryAlarmRepositoryAdapter implements AlarmRepositoryPort {
     return this.findById(id);
   }
 
+  findByIdForShare(id: AlarmId): Promise<AlarmLookup> {
+    return this.findById(id);
+  }
+
   findPage({ status, alarmKind, start, size }: Readonly<AlarmPageQuery>): Promise<AlarmPage> {
     const matching: ReadonlyArray<Alarm> = [...this.alarmsById.values()]
       .map(({ alarm }: AlarmFound): Alarm => alarm)

@@ -29,7 +29,10 @@ import { DeliveryCandidate } from '@/modules/notification/application/port/drive
 import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
 import { ExpansionJobLookup } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
-import { DispatchSettings } from '@/modules/notification/application/service/delivery/delivery-settings.type';
+import {
+  DispatchSettings,
+  ReconcileSettings,
+} from '@/modules/notification/application/service/delivery/delivery-settings.type';
 import { ExpansionSettings } from '@/modules/notification/application/service/expansion/expansion-settings.type';
 import { IdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/id-generator.port';
 import { JitterSourcePort } from '@/modules/notification/application/port/driven/for-drawing-jitter/jitter-source.port';
@@ -43,11 +46,16 @@ import {
   PageCursor,
   RecipientPage,
 } from '@/modules/notification/application/port/driven/for-fetching-recipients/recipient-directory.type';
+import { MessageLookupPort } from '@/modules/notification/application/port/driven/for-looking-up-messages/message-lookup.port';
+import { MessageLookupResult } from '@/modules/notification/application/port/driven/for-looking-up-messages/message-lookup.type';
 import { SendPermitPort } from '@/modules/notification/application/port/driven/for-permitting-sends/send-permit.port';
 import { SendPermit } from '@/modules/notification/application/port/driven/for-permitting-sends/send-permit.type';
+import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
 import {
   SnapshotRepositories,
+  SnapshotWork,
   TransactionRepositories,
+  TransactionWork,
 } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import { CancelAlarmResult } from '@/modules/notification/application/port/driving/for-managing-alarms/cancel-alarm.type';
 import { StartDispatchResult } from '@/modules/notification/application/port/driving/for-managing-alarms/start-dispatch.type';
@@ -56,6 +64,8 @@ import { ExpansionPageAttempt } from '@/modules/notification/application/port/dr
 import { ExpandNextPageService } from '@/modules/notification/application/service/expansion/expand-next-page.service';
 import { SendAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/send-next-delivery.type';
 import { SendNextDeliveryService } from '@/modules/notification/application/service/delivery/send-next-delivery.service';
+import { ReconcileAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/reconcile-next-delivery.type';
+import { ReconcileNextDeliveryService } from '@/modules/notification/application/service/delivery/reconcile-next-delivery.service';
 import { StartDispatchService } from '@/modules/notification/application/service/alarm/start-dispatch.service';
 import { DrizzleDeliveryRepositoryAdapter } from '@/modules/notification/adapter/driven/persistence/delivery/drizzle-delivery-repository.adapter';
 import { DrizzleTransactionAdapter } from '@/modules/notification/adapter/driven/persistence/drizzle-transaction.adapter';
@@ -78,6 +88,12 @@ interface LockWaitRow {
 }
 
 const NOW_ISO: string = '2026-10-08T09:00:00.000Z';
+
+const RECONCILE_DUE_ISO: string = '2026-10-08T09:00:36.000Z';
+
+const SAVED_WITHOUT_WAITING: string = 'saved-without-waiting';
+
+const WAITED_FOR_CANCEL_COMMIT: string = 'waited-for-cancel-commit';
 
 const newAlarmId = (): AlarmId => {
   const rawAlarmId: string = randomUUID();
@@ -183,6 +199,21 @@ class RecordingMessageSender implements MessageSenderPort {
   }
 }
 
+const threeAttemptRetryPolicy = (): RetryPolicy => {
+  const maxAttempts: number = 3;
+  if (!DeliveryPredicates.isAttemptLimit(maxAttempts)) {
+    throw new Error('test fixture attempt limit is invalid');
+  }
+  const creation: RetryPolicyCreation = RetryPolicy.create({
+    maxAttempts,
+    baseDelayMs: durationMs(1_000),
+    maxDelayMs: durationMs(8_000),
+  });
+  KindAssertion.assertKind(creation, 'created');
+  const { policy }: KindMember<RetryPolicyCreation, 'created'> = creation;
+  return policy;
+};
+
 class FixedDispatchSettings implements DispatchSettings {
   readonly leaseMs: DurationMs = durationMs(60_000);
 
@@ -190,22 +221,17 @@ class FixedDispatchSettings implements DispatchSettings {
 
   readonly reconcileDelayMs: DurationMs = durationMs(35_000);
 
-  readonly retryPolicy: RetryPolicy;
+  readonly retryPolicy: RetryPolicy = threeAttemptRetryPolicy();
+}
 
-  constructor() {
-    const maxAttempts: number = 3;
-    if (!DeliveryPredicates.isAttemptLimit(maxAttempts)) {
-      throw new Error('test fixture attempt limit is invalid');
-    }
-    const creation: RetryPolicyCreation = RetryPolicy.create({
-      maxAttempts,
-      baseDelayMs: durationMs(1_000),
-      maxDelayMs: durationMs(8_000),
-    });
-    KindAssertion.assertKind(creation, 'created');
-    const { policy }: KindMember<RetryPolicyCreation, 'created'> = creation;
-    this.retryPolicy = policy;
-  }
+class FixedReconcileSettings implements ReconcileSettings {
+  readonly retryPolicy: RetryPolicy = threeAttemptRetryPolicy();
+
+  readonly lookupRetryPolicy: RetryPolicy = threeAttemptRetryPolicy();
+
+  readonly unconfirmedAfterMs: DurationMs = durationMs(600_000);
+
+  readonly leaseMs: DurationMs = durationMs(60_000);
 }
 
 class ZeroJitter implements JitterSourcePort {
@@ -215,6 +241,55 @@ class ZeroJitter implements JitterSourcePort {
       throw new Error('test fixture jitter is invalid');
     }
     return ratio;
+  }
+}
+
+class PausingMessageSender implements MessageSenderPort {
+  readonly sending: Gate = createGate();
+
+  readonly responded: Gate = createGate();
+
+  constructor(private readonly outcome: SendOutcome) {}
+
+  async send(_message: OutgoingMessage): Promise<SendOutcome> {
+    this.sending.open();
+    await this.responded.opened;
+    return this.outcome;
+  }
+}
+
+class PausingMessageLookup implements MessageLookupPort {
+  readonly lookingUp: Gate = createGate();
+
+  readonly answered: Gate = createGate();
+
+  async findByClientRef(_clientRef: DeliveryId): Promise<MessageLookupResult> {
+    this.lookingUp.open();
+    await this.answered.opened;
+    return { kind: 'none' };
+  }
+}
+
+class CommitHoldingTransaction implements TransactionPort {
+  readonly workFinished: Gate = createGate();
+
+  readonly commitAllowed: Gate = createGate();
+
+  constructor(private readonly innerTransaction: TransactionPort) {}
+
+  run<TResult>(work: TransactionWork<TResult>): Promise<TResult> {
+    return this.innerTransaction.run(
+      async (repositories: TransactionRepositories): Promise<TResult> => {
+        const result: TResult = await work(repositories);
+        this.workFinished.open();
+        await this.commitAllowed.opened;
+        return result;
+      },
+    );
+  }
+
+  readSnapshot<TResult>(work: SnapshotWork<TResult>): Promise<TResult> {
+    return this.innerTransaction.readSnapshot(work);
   }
 }
 
@@ -297,6 +372,29 @@ describe('DrizzleTransactionAdapter', () => {
         expect(waiting).toBe(1);
       },
       { timeout: 2_000, interval: 10 },
+    );
+
+  const firstOfSavedOrWaitingForLock = <TAttempt>(
+    resultSaving: Promise<TAttempt>,
+  ): Promise<string> =>
+    Promise.race([
+      resultSaving.then((): string => SAVED_WITHOUT_WAITING),
+      waitUntilAnotherTransactionWaitsForLock().then((): string => WAITED_FOR_CANCEL_COMMIT),
+    ]);
+
+  const deliveryStatusesOf = async (id: AlarmId): Promise<ReadonlyArray<string>> =>
+    (await deliveriesOf(id)).map((delivery: Delivery): string => delivery.snapshot().state.status);
+
+  const sendWorker = (sender: MessageSenderPort): SendNextDeliveryService =>
+    new SendNextDeliveryService(
+      transaction,
+      new AlwaysGrantedPermit(),
+      sender,
+      new RandomLeaseTokenGenerator(),
+      new FixedClock(),
+      new FixedDispatchSettings(),
+      new ZeroJitter(),
+      new WorkerShutdownSignalAdapter(),
     );
 
   const startDispatch = (): StartDispatchService =>
@@ -683,5 +781,70 @@ describe('DrizzleTransactionAdapter', () => {
     KindAssertion.assertKind(waitedLookup, 'found');
     const { job: waitedJob }: KindMember<ExpansionJobLookup, 'found'> = waitedLookup;
     expect(waitedJob.isCompleted()).toBe(true);
+  });
+  it('DB-20 응답을 기다리는 Delivery가 있는 알림을 취소 트랜잭션이 잠그고 대기 Delivery를 취소한 채 아직 커밋하지 않았다 / 워커가 재시도할 결과를 저장한다 → 결과 저장이 취소 커밋을 기다렸다가 취소된 알림을 보고 RETRY_WAIT 대신 CANCELLED로 저장한다', async (): Promise<void> => {
+    const alarmId: AlarmId = await dispatchedBulkAlarm();
+    await insertPendingDeliveries(alarmId, ['BULK']);
+    const sender: PausingMessageSender = new PausingMessageSender({ kind: 'transient-failure' });
+    const sendAttempt: Promise<SendAttempt> = sendWorker(sender).execute();
+    await sender.sending.opened;
+    const cancelTransaction: CommitHoldingTransaction = new CommitHoldingTransaction(transaction);
+    const cancelling: Promise<CancelAlarmResult> = new CancelAlarmService(
+      cancelTransaction,
+      new FixedClock(),
+    ).execute({ alarmId });
+
+    let resultSavingOrder: string = '';
+    try {
+      await cancelTransaction.workFinished.opened;
+      sender.responded.open();
+      resultSavingOrder = await firstOfSavedOrWaitingForLock(sendAttempt);
+    } finally {
+      cancelTransaction.commitAllowed.open();
+      await Promise.allSettled([sendAttempt, cancelling]);
+    }
+
+    expect(await deliveryStatusesOf(alarmId)).toEqual(['CANCELLED']);
+    expect(resultSavingOrder).toBe(WAITED_FOR_CANCEL_COMMIT);
+    expect(await cancelling).toMatchObject({ kind: 'cancelled' });
+  });
+
+  it('DB-20 reconcile 조회 중 취소 트랜잭션이 커밋 전이면 발송 내역이 없다는 결과도 취소 커밋을 기다렸다가 RETRY_WAIT 대신 CANCELLED로 저장한다', async (): Promise<void> => {
+    const alarmId: AlarmId = await dispatchedBulkAlarm();
+    await insertPendingDeliveries(alarmId, ['BULK']);
+    const timedOutSender: PausingMessageSender = new PausingMessageSender({
+      kind: 'indeterminate',
+    });
+    timedOutSender.responded.open();
+    await sendWorker(timedOutSender).execute();
+    expect(await deliveryStatusesOf(alarmId)).toEqual(['UNKNOWN']);
+    const lookup: PausingMessageLookup = new PausingMessageLookup();
+    const reconcileAttempt: Promise<ReconcileAttempt> = new ReconcileNextDeliveryService(
+      transaction,
+      lookup,
+      new FixedClock(RECONCILE_DUE_ISO),
+      new FixedReconcileSettings(),
+      new ZeroJitter(),
+    ).execute();
+    await lookup.lookingUp.opened;
+    const cancelTransaction: CommitHoldingTransaction = new CommitHoldingTransaction(transaction);
+    const cancelling: Promise<CancelAlarmResult> = new CancelAlarmService(
+      cancelTransaction,
+      new FixedClock(),
+    ).execute({ alarmId });
+
+    let resultSavingOrder: string = '';
+    try {
+      await cancelTransaction.workFinished.opened;
+      lookup.answered.open();
+      resultSavingOrder = await firstOfSavedOrWaitingForLock(reconcileAttempt);
+    } finally {
+      cancelTransaction.commitAllowed.open();
+      await Promise.allSettled([reconcileAttempt, cancelling]);
+    }
+
+    expect(await deliveryStatusesOf(alarmId)).toEqual(['CANCELLED']);
+    expect(resultSavingOrder).toBe(WAITED_FOR_CANCEL_COMMIT);
+    expect(await cancelling).toMatchObject({ kind: 'cancelled' });
   });
 });

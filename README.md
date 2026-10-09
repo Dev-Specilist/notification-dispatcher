@@ -458,8 +458,8 @@ src/modules/notification/
 3. **허가:** 발송 루프는 먼저 공유 rate limiter에서 발송 허가를 얻습니다. 못 얻으면 claim하지 않고 쉽니다. 종료가 요청된 뒤라면 허가를 얻었어도 claim하지 않고 `stopped`로 끝납니다.
 4. **claim:** 그 순간 발송 가능한(`PENDING` 또는 재시도 시각이 지난 `RETRY_WAIT`) 건 중 최우선 1건을 `FOR UPDATE SKIP LOCKED`로 잡아 새 `leaseToken`과 lease를 걸고 요청 시작을 기록합니다. 알림이 취소됐으면 그 건을 `CANCELLED`로 바꿉니다.
 5. **발송:** 남은 lease가 요청 타임아웃보다 짧으면 보내지 않고, `leaseToken`이 그대로일 때만 시도 횟수를 되돌려 `PENDING`으로 반납합니다(claim 커밋이 늦어질 수 있어 직전에 다시 확인). 요청은 `clientRef` = 발송 건 id, 5초 타임아웃입니다.
-6. **결과 기록:** `leaseToken`과 상태가 그대로일 때만 저장합니다(fencing). 202 → `SENT`, 400 → `FAILED`, 500/503 → backoff 후 `RETRY_WAIT`, 429 · 연결 실패 → rate limiter 정지 + 시도 횟수를 쓰지 않는 `RETRY_WAIT`, 타임아웃 · 요청 후 연결 끊김 → `UNKNOWN`. 그 사이 알림이 취소됐고 재시도할 건이면 `CANCELLED`로 둡니다.
-7. **reconcile:** 확인 시각(마지막 요청 시작 또는 lease 만료 + `RECONCILE_DELAY_MS`)이 지난 `UNKNOWN` 1건을 고르면서 확인 시각을 `DISPATCH_LEASE_MS`만큼 미뤄 다른 워커가 같은 건을 조회하지 않게 합니다(조회 중 워커가 죽으면 그만큼 뒤 다시 대상이 됨). 발송 내역이 있으면 `SENT`, 없으면 최대 시도 안에서 `RETRY_WAIT`(알림이 취소됐으면 `CANCELLED`), 조회 실패면 backoff 후 재조회, 확인 기간이 지나면 `UNCONFIRMED`로 종결합니다. 확정은 확인 시각 · 조회 실패 횟수가 그대로일 때만 저장합니다. 별도 루프가 lease가 만료된 `IN_FLIGHT`를 `UNKNOWN`으로 넘겨 같은 경로로 확정합니다.
+6. **결과 기록:** `leaseToken`과 상태가 그대로일 때만 저장합니다(fencing). 202 → `SENT`, 400 → `FAILED`, 500/503 → backoff 후 `RETRY_WAIT`, 429 · 연결 실패 → rate limiter 정지 + 시도 횟수를 쓰지 않는 `RETRY_WAIT`, 타임아웃 · 요청 후 연결 끊김 → `UNKNOWN`. 그 사이 알림이 취소됐고 재시도할 건이면 `CANCELLED`로 둡니다. 이때 알림을 공유 잠금(`FOR SHARE`)으로 읽어, 커밋 전인 취소가 있으면 그 커밋을 기다린 뒤 판단합니다(잠금 없이 읽으면 취소가 대기 건을 정리한 직후 `RETRY_WAIT`가 저장돼 취소된 알림에 대기 건이 남습니다). 잠금 순서는 취소와 같은 알림 → 발송 건이라 교착이 생기지 않습니다.
+7. **reconcile:** 확인 시각(마지막 요청 시작 또는 lease 만료 + `RECONCILE_DELAY_MS`)이 지난 `UNKNOWN` 1건을 고르면서 확인 시각을 `DISPATCH_LEASE_MS`만큼 미뤄 다른 워커가 같은 건을 조회하지 않게 합니다(조회 중 워커가 죽으면 그만큼 뒤 다시 대상이 됨). 발송 내역이 있으면 `SENT`, 없으면 최대 시도 안에서 `RETRY_WAIT`(알림이 취소됐으면 `CANCELLED`, 결과 기록과 같이 알림을 공유 잠금으로 읽음), 조회 실패면 backoff 후 재조회, 확인 기간이 지나면 `UNCONFIRMED`로 종결합니다. 확정은 확인 시각 · 조회 실패 횟수가 그대로일 때만 저장합니다. 별도 루프가 lease가 만료된 `IN_FLIGHT`를 `UNKNOWN`으로 넘겨 같은 경로로 확정합니다.
 8. **완료:** 완료 확인 루프가 발송 중인 알림을 100개씩 훑으며, 알림마다 잠그고 `AlarmCompletionChecker`가 "확장 완료 여부"와 "미종결 발송 건 수"를 넘겨 알림이 스스로 `COMPLETED`를 판단합니다. 결과가 확정될 때마다 하면 10만 명 알림 하나에서 미종결 집계가 10만 번 돌아 주기적으로 합니다(대가: 완료 표시가 한 바퀴 + 1초만큼 늦을 수 있음).
 
 ```text
@@ -518,7 +518,7 @@ Delivery  PENDING ─claim─▶ IN_FLIGHT ─202──────────�
 | lease를 잃은 워커의 늦은 결과      | 토큰과 상태가 일치할 때만 저장(fencing)                                                                                                                |
 | 두 워커가 같은 결과 불명 건을 조회 | 고를 때 확인 시각을 미뤄 예약, 확정은 조건부 저장                                                                                                      |
 | 확장 · 발송 중 워커 종료           | 늦는 요청은 abort해 `UNKNOWN`으로 저장. 강제 종료된 건은 lease 만료 후 다른 워커가 cursor부터 이어받거나 `UNKNOWN`으로 복구해 조회로 확정(재전송 없음) |
-| 발송 중 취소                       | 대기 건을 한 번에 `CANCELLED`로, claim과 결과 저장 때도 알림 상태 재확인. 이미 나간 요청은 결과대로 기록                                               |
+| 발송 중 취소                       | 대기 건을 한 번에 `CANCELLED`로, claim과 결과 저장 때도 알림 상태 재확인(결과 저장은 `FOR SHARE`로 취소 커밋을 기다림). 이미 나간 요청은 결과대로 기록 |
 
 ### 3-9. 운영 구성과 종료
 
