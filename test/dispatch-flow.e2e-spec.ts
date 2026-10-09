@@ -18,13 +18,17 @@ interface DeliveryRow {
   readonly attempts: number;
 }
 
-interface UrgentDispatch {
-  readonly alarmId: string;
-  readonly dispatchedAt: number;
-}
-
 interface HeldRow {
   readonly held: boolean;
+}
+
+interface UrgentDispatch {
+  readonly alarmId: string;
+  readonly bulkStartedBeforeUrgent: number;
+}
+
+interface StartedCountRow {
+  readonly started: number;
 }
 
 interface SentCountRow {
@@ -57,7 +61,9 @@ type MockMessage = MockMessages['messages'][number];
 
 const COMPLETION_TIMEOUT_MS: number = 60_000;
 
-const ALREADY_IN_FLIGHT_TOLERANCE_MS: number = 500;
+const DISPATCH_CONCURRENCY: number = 8;
+
+const URGENT_RECIPIENTS: number = 100;
 
 const dispatchedBulkAlarm = async (): Promise<CreatedAlarm> => {
   const createdAlarm: CreatedAlarm = createdAlarmSchema.parse(
@@ -182,6 +188,17 @@ describe('발송 전체 흐름', () => {
       );
     const [{ sent }]: ReadonlyArray<SentCountRow> = result.rows;
     return sent;
+  };
+
+  const startedDeliveryCount = async (alarmId: string): Promise<number> => {
+    const result: QueryResult<StartedCountRow> = await api
+      .get(Pool)
+      .query<StartedCountRow>(
+        "SELECT count(*)::int AS started FROM deliveries WHERE alarm_id = $1 AND status <> 'PENDING'",
+        [alarmId],
+      );
+    const [{ started }]: ReadonlyArray<StartedCountRow> = result.rows;
+    return started;
   };
 
   const resetRateLimiter = async (): Promise<void> => {
@@ -317,45 +334,50 @@ describe('발송 전체 흐름', () => {
       { USER_COUNT: '300', RATE_LIMIT: '50' },
       async (mockApi: MockApiContainer): Promise<void> => {
         const { id: bulkAlarmId }: CreatedAlarm = await dispatchedBulkAlarm();
-        const { alarmId: urgentAlarmId, dispatchedAt: urgentDispatchedAt }: UrgentDispatch =
-          await runWorkers(1, mockApi, async (): Promise<UrgentDispatch> => {
-            await vi.waitFor(
-              async (): Promise<void> => {
-                expect(await sentDeliveryCount(bulkAlarmId)).toBeGreaterThanOrEqual(50);
-              },
-              { timeout: COMPLETION_TIMEOUT_MS, interval: 100 },
-            );
-            const { id: alarmId }: CreatedAlarm = await createUrgentAlarm(20);
-            const dispatchedAt: number = Date.now();
-            await spec().post(`/alarms/${alarmId}/dispatch`).expectStatus(202);
-            await vi.waitFor(
-              async (): Promise<void> => {
-                expect(await alarmStatus(alarmId)).toBe('COMPLETED');
-                expect(await alarmStatus(bulkAlarmId)).toBe('COMPLETED');
-              },
-              { timeout: COMPLETION_TIMEOUT_MS, interval: 500 },
-            );
-            return { alarmId, dispatchedAt };
-          });
+        await resetRateLimiter();
+        const { alarmId: urgentAlarmId, bulkStartedBeforeUrgent }: UrgentDispatch =
+          await runWorkers(
+            1,
+            mockApi,
+            async (): Promise<UrgentDispatch> => {
+              await vi.waitFor(
+                async (): Promise<void> => {
+                  expect(await sentDeliveryCount(bulkAlarmId)).toBeGreaterThanOrEqual(50);
+                },
+                { timeout: COMPLETION_TIMEOUT_MS, interval: 100 },
+              );
+              const { id: alarmId }: CreatedAlarm = await createUrgentAlarm(URGENT_RECIPIENTS);
+              await spec().post(`/alarms/${alarmId}/dispatch`).expectStatus(202);
+              const startedBulk: number = await startedDeliveryCount(bulkAlarmId);
+              await vi.waitFor(
+                async (): Promise<void> => {
+                  expect(await alarmStatus(alarmId)).toBe('COMPLETED');
+                  expect(await alarmStatus(bulkAlarmId)).toBe('COMPLETED');
+                },
+                { timeout: COMPLETION_TIMEOUT_MS, interval: 500 },
+              );
+              return { alarmId, bulkStartedBeforeUrgent: startedBulk };
+            },
+            { DISPATCH_CONCURRENCY: String(DISPATCH_CONCURRENCY) },
+          );
 
         const urgentSentAt: ReadonlyArray<number> = (
           await deliveriesOf(urgentAlarmId, mockApi)
         ).flatMap(({ mockSentAt }: DeliveryDelivered): ReadonlyArray<number> => mockSentAt);
         const lastUrgentSentAt: number = Math.max(...urgentSentAt);
-        const bulkSentWhileUrgentWaiting: ReadonlyArray<number> = (
+        const bulkSentBeforeLastUrgent: ReadonlyArray<number> = (
           await deliveriesOf(bulkAlarmId, mockApi)
         )
           .flatMap(({ mockSentAt }: DeliveryDelivered): ReadonlyArray<number> => mockSentAt)
-          .filter(
-            (sentAt: number): boolean =>
-              sentAt > urgentDispatchedAt + ALREADY_IN_FLIGHT_TOLERANCE_MS &&
-              sentAt < lastUrgentSentAt,
-          );
-        expect(urgentSentAt).toHaveLength(20);
-        expect(bulkSentWhileUrgentWaiting).toEqual([]);
+          .filter((sentAt: number): boolean => sentAt < lastUrgentSentAt);
+        expect(urgentSentAt).toHaveLength(URGENT_RECIPIENTS);
+        expect(bulkSentBeforeLastUrgent.length).toBeLessThanOrEqual(
+          bulkStartedBeforeUrgent + DISPATCH_CONCURRENCY,
+        );
       },
     );
   }, 120_000);
+
   it.each([2, 3])(
     'E2E-04 워커 여러 개(%i개) / 대량 알림 발송 → 429 없이 중복·누락 없이 끝난다',
     async (workerCount: number): Promise<void> => {
