@@ -28,7 +28,6 @@ export type EnvShape = {
   readonly RETRY_MAX_ATTEMPTS: z.ZodDefault<PositiveIntegerSchema>;
   readonly RETRY_BASE_DELAY_MS: z.ZodDefault<PositiveMillisecondsSchema>;
   readonly RETRY_MAX_DELAY_MS: z.ZodDefault<PositiveMillisecondsSchema>;
-  readonly LOOKUP_RETRY_MAX_ATTEMPTS: z.ZodDefault<PositiveIntegerSchema>;
   readonly LOOKUP_RETRY_BASE_DELAY_MS: z.ZodDefault<PositiveMillisecondsSchema>;
   readonly LOOKUP_RETRY_MAX_DELAY_MS: z.ZodDefault<PositiveMillisecondsSchema>;
   readonly UNCONFIRMED_AFTER_MS: z.ZodDefault<PositiveMillisecondsSchema>;

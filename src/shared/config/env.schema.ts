@@ -26,7 +26,6 @@ const DEFAULT_RECONCILE_DELAY: Milliseconds = positiveMillisecondsSchema.parse(3
 const DEFAULT_RETRY_MAX_ATTEMPTS: PositiveInteger = positiveIntegerSchema.parse(5);
 const DEFAULT_RETRY_BASE_DELAY: Milliseconds = positiveMillisecondsSchema.parse(1000);
 const DEFAULT_RETRY_MAX_DELAY: Milliseconds = positiveMillisecondsSchema.parse(60000);
-const DEFAULT_LOOKUP_RETRY_MAX_ATTEMPTS: PositiveInteger = positiveIntegerSchema.parse(10);
 const DEFAULT_LOOKUP_RETRY_BASE_DELAY: Milliseconds = positiveMillisecondsSchema.parse(5000);
 const DEFAULT_LOOKUP_RETRY_MAX_DELAY: Milliseconds = positiveMillisecondsSchema.parse(60000);
 const DEFAULT_UNCONFIRMED_AFTER: Milliseconds = positiveMillisecondsSchema.parse(3600000);
@@ -54,7 +53,6 @@ export const createEnvSchema = (defaultPort: Port): EnvSchema =>
       RETRY_MAX_ATTEMPTS: positiveIntegerSchema.default(DEFAULT_RETRY_MAX_ATTEMPTS),
       RETRY_BASE_DELAY_MS: positiveMillisecondsSchema.default(DEFAULT_RETRY_BASE_DELAY),
       RETRY_MAX_DELAY_MS: positiveMillisecondsSchema.default(DEFAULT_RETRY_MAX_DELAY),
-      LOOKUP_RETRY_MAX_ATTEMPTS: positiveIntegerSchema.default(DEFAULT_LOOKUP_RETRY_MAX_ATTEMPTS),
       LOOKUP_RETRY_BASE_DELAY_MS: positiveMillisecondsSchema.default(
         DEFAULT_LOOKUP_RETRY_BASE_DELAY,
       ),

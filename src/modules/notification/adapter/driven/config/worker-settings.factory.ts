@@ -22,6 +22,9 @@ export class WorkerSettingsFactory {
 
   private static readonly MAX_PERMITS_PER_SECOND: number = 50;
 
+  private static readonly LOOKUP_ATTEMPTS_UNBOUNDED_UNTIL_UNCONFIRMED: number =
+    Number.MAX_SAFE_INTEGER;
+
   private static readonly MIN_EMISSION_INTERVAL_MS: number =
     1_000 / WorkerSettingsFactory.MAX_PERMITS_PER_SECOND;
 
@@ -34,7 +37,6 @@ export class WorkerSettingsFactory {
       RETRY_MAX_ATTEMPTS: config.get('RETRY_MAX_ATTEMPTS'),
       RETRY_BASE_DELAY_MS: config.get('RETRY_BASE_DELAY_MS'),
       RETRY_MAX_DELAY_MS: config.get('RETRY_MAX_DELAY_MS'),
-      LOOKUP_RETRY_MAX_ATTEMPTS: config.get('LOOKUP_RETRY_MAX_ATTEMPTS'),
       LOOKUP_RETRY_BASE_DELAY_MS: config.get('LOOKUP_RETRY_BASE_DELAY_MS'),
       LOOKUP_RETRY_MAX_DELAY_MS: config.get('LOOKUP_RETRY_MAX_DELAY_MS'),
       UNCONFIRMED_AFTER_MS: config.get('UNCONFIRMED_AFTER_MS'),
@@ -69,13 +71,16 @@ export class WorkerSettingsFactory {
         ),
         retryPolicy: WorkerSettingsFactory.retryPolicyOf(
           'RETRY',
-          env.RETRY_MAX_ATTEMPTS,
+          WorkerSettingsFactory.attemptLimitOf('RETRY_MAX_ATTEMPTS', env.RETRY_MAX_ATTEMPTS),
           env.RETRY_BASE_DELAY_MS,
           env.RETRY_MAX_DELAY_MS,
         ),
         lookupRetryPolicy: WorkerSettingsFactory.retryPolicyOf(
           'LOOKUP_RETRY',
-          env.LOOKUP_RETRY_MAX_ATTEMPTS,
+          WorkerSettingsFactory.attemptLimitOf(
+            'LOOKUP_ATTEMPTS_UNBOUNDED_UNTIL_UNCONFIRMED',
+            WorkerSettingsFactory.LOOKUP_ATTEMPTS_UNBOUNDED_UNTIL_UNCONFIRMED,
+          ),
           env.LOOKUP_RETRY_BASE_DELAY_MS,
           env.LOOKUP_RETRY_MAX_DELAY_MS,
         ),
@@ -113,12 +118,12 @@ export class WorkerSettingsFactory {
 
   private static retryPolicyOf(
     prefix: RetryEnvPrefix,
-    rawMaxAttempts: number,
+    maxAttempts: AttemptLimit,
     rawBaseDelayMs: number,
     rawMaxDelayMs: number,
   ): RetryPolicy {
     const creation: RetryPolicyCreation = RetryPolicy.create({
-      maxAttempts: WorkerSettingsFactory.attemptLimitOf(`${prefix}_MAX_ATTEMPTS`, rawMaxAttempts),
+      maxAttempts,
       baseDelayMs: WorkerSettingsFactory.durationOf(`${prefix}_BASE_DELAY_MS`, rawBaseDelayMs),
       maxDelayMs: WorkerSettingsFactory.durationOf(`${prefix}_MAX_DELAY_MS`, rawMaxDelayMs),
     });

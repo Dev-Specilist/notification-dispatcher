@@ -5,6 +5,7 @@ import { AttemptLimit } from '@/modules/notification/domain/delivery/delivery.ty
 import { RetryPolicy } from '@/modules/notification/domain/delivery/retry-policy';
 import { RetryPolicyCreation } from '@/modules/notification/domain/delivery/retry-policy.type';
 import {
+  DeliverySettingsValues,
   WorkerEnv,
   WorkerSettings,
 } from '@/modules/notification/adapter/driven/config/worker-settings.type';
@@ -31,7 +32,6 @@ const NON_DEFAULT_ENV: Readonly<Record<string, string>> = {
   RETRY_MAX_ATTEMPTS: '3',
   RETRY_BASE_DELAY_MS: '500',
   RETRY_MAX_DELAY_MS: '30000',
-  LOOKUP_RETRY_MAX_ATTEMPTS: '6',
   LOOKUP_RETRY_BASE_DELAY_MS: '2000',
   LOOKUP_RETRY_MAX_DELAY_MS: '20000',
   UNCONFIRMED_AFTER_MS: '600000',
@@ -73,6 +73,9 @@ const retryPolicy = (maxAttempts: number, baseDelayMs: number, maxDelayMs: numbe
   return creation.policy;
 };
 
+const unboundedLookupRetryPolicy = (baseDelayMs: number, maxDelayMs: number): RetryPolicy =>
+  retryPolicy(Number.MAX_SAFE_INTEGER, baseDelayMs, maxDelayMs);
+
 describe('WorkerSettingsFactory', () => {
   afterEach((): void => {
     vi.unstubAllEnvs();
@@ -105,7 +108,9 @@ describe('WorkerSettingsFactory', () => {
       unconfirmedAfterMs: 3_600_000,
     });
     expect(settings.deliverySettings.retryPolicy).toEqual(retryPolicy(5, 1_000, 60_000));
-    expect(settings.deliverySettings.lookupRetryPolicy).toEqual(retryPolicy(10, 5_000, 60_000));
+    expect(settings.deliverySettings.lookupRetryPolicy).toEqual(
+      unboundedLookupRetryPolicy(5_000, 60_000),
+    );
     expect(settings.mockApi).toEqual({
       baseUrl: new URL('http://localhost:4000'),
       requestTimeoutMs: 5_000,
@@ -128,13 +133,23 @@ describe('WorkerSettingsFactory', () => {
       unconfirmedAfterMs: 600_000,
     });
     expect(settings.deliverySettings.retryPolicy).toEqual(retryPolicy(3, 500, 30_000));
-    expect(settings.deliverySettings.lookupRetryPolicy).toEqual(retryPolicy(6, 2_000, 20_000));
+    expect(settings.deliverySettings.lookupRetryPolicy).toEqual(
+      unboundedLookupRetryPolicy(2_000, 20_000),
+    );
     expect(settings.recipientDirectory).toEqual({
       baseUrl: new URL('http://mock:4000'),
       requestTimeoutMs: 3_000,
       pageLimit: 500,
     });
     expect(settings.rateLimiter).toEqual({ name: 'mock-message-send', emissionIntervalMs: 25 });
+  });
+
+  it('조회 재시도 정책은 시도 횟수로 소진되지 않고 조회 종료는 UNCONFIRMED_AFTER_MS에 맡긴다', (): void => {
+    const { lookupRetryPolicy }: DeliverySettingsValues = WorkerSettingsFactory.create(
+      env({}),
+    ).deliverySettings;
+
+    expect(lookupRetryPolicy.isExhausted(Number.MAX_SAFE_INTEGER - 1)).toBe(false);
   });
 
   it('제한기 간격이 정확히 20ms(초당 50건)이면 허용한다', (): void => {
