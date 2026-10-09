@@ -120,7 +120,7 @@ describe('WorkerSettingsFactory', () => {
       requestTimeoutMs: 5_000,
       pageLimit: 1_000,
     });
-    expect(settings.rateLimiter).toEqual({ name: 'mock-message-send', emissionIntervalMs: 20 });
+    expect(settings.rateLimiter).toEqual({ name: 'mock-message-send', emissionIntervalMs: 21 });
   });
 
   it('기본값과 다른 유효한 env 값을 그대로 설정에 반영한다', (): void => {
@@ -153,24 +153,24 @@ describe('WorkerSettingsFactory', () => {
   });
 
   it('발송 허가 유효 시간은 제한기 간격의 2배로 정한다', (): void => {
-    expect(WorkerSettingsFactory.create(env({})).deliverySettings.maxPermitAgeMs).toBe(40);
+    expect(WorkerSettingsFactory.create(env({})).deliverySettings.maxPermitAgeMs).toBe(42);
     expect(
       WorkerSettingsFactory.create(env({ RATE_LIMIT_INTERVAL_MS: '25' })).deliverySettings
         .maxPermitAgeMs,
     ).toBe(50);
   });
 
-  it('제한기 간격이 정확히 20ms(초당 50건)이면 허용한다', (): void => {
+  it('제한기 간격이 21ms이면 허가 유효 시간(간격 × 2)만큼 늦게 시작한 요청까지 더해도 임의의 1초 구간 요청이 50건 이하라 허용한다', (): void => {
     expect(
-      WorkerSettingsFactory.create(env({ RATE_LIMIT_INTERVAL_MS: '20' })).rateLimiter
+      WorkerSettingsFactory.create(env({ RATE_LIMIT_INTERVAL_MS: '21' })).rateLimiter
         .emissionIntervalMs,
-    ).toBe(20);
+    ).toBe(21);
   });
 
   it.each<InvalidEnvCase>([
     [
-      '제한기 간격이 20ms보다 짧아 초당 50건을 넘을 수 있으면',
-      { RATE_LIMIT_INTERVAL_MS: '19' },
+      '제한기 간격이 21ms보다 짧아 늦게 시작한 요청까지 더하면 임의의 1초 구간 요청이 50건을 넘을 수 있으면',
+      { RATE_LIMIT_INTERVAL_MS: '20' },
       /RATE_LIMIT_INTERVAL_MS/,
     ],
     [

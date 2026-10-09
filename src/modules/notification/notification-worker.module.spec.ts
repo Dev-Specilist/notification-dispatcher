@@ -50,8 +50,8 @@ describe('NotificationWorkerModule', () => {
 
   it('워커 설정이 서로 맞지 않으면 기동할 때 실패한다', async (): Promise<void> => {
     vi.stubEnv('DATABASE_URL', 'postgres://app:secret@localhost:5432/notification');
-    vi.stubEnv('RATE_LIMIT_INTERVAL_MS', '19');
+    vi.stubEnv('RATE_LIMIT_INTERVAL_MS', '20');
 
-    await expect(compile()).rejects.toThrow('RATE_LIMIT_INTERVAL_MS(19) must be at least 20');
+    await expect(compile()).rejects.toThrow('RATE_LIMIT_INTERVAL_MS(20) must be at least 21');
   });
 });

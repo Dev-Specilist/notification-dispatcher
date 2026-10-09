@@ -27,8 +27,11 @@ export class WorkerSettingsFactory {
   private static readonly LOOKUP_ATTEMPTS_UNBOUNDED_UNTIL_UNCONFIRMED: number =
     Number.MAX_SAFE_INTEGER;
 
-  private static readonly MIN_EMISSION_INTERVAL_MS: number =
-    1_000 / WorkerSettingsFactory.MAX_PERMITS_PER_SECOND;
+  private static readonly MIN_EMISSION_INTERVAL_MS: number = Math.ceil(
+    1_000 /
+      (WorkerSettingsFactory.MAX_PERMITS_PER_SECOND -
+        WorkerSettingsFactory.PERMIT_AGE_LIMIT_IN_EMISSION_INTERVALS),
+  );
 
   static fromConfig(config: TypedConfigService): WorkerSettings {
     return WorkerSettingsFactory.create({
@@ -151,7 +154,7 @@ export class WorkerSettingsFactory {
     );
     if (intervalMs < WorkerSettingsFactory.MIN_EMISSION_INTERVAL_MS) {
       throw new Error(
-        `RATE_LIMIT_INTERVAL_MS(${intervalMs}) must be at least ${WorkerSettingsFactory.MIN_EMISSION_INTERVAL_MS} to keep sends at or below ${WorkerSettingsFactory.MAX_PERMITS_PER_SECOND} per second`,
+        `RATE_LIMIT_INTERVAL_MS(${intervalMs}) must be at least ${WorkerSettingsFactory.MIN_EMISSION_INTERVAL_MS} to keep request starts at or below ${WorkerSettingsFactory.MAX_PERMITS_PER_SECOND} in any 1s window even when a request starts up to the permit age limit after its permit`,
       );
     }
     return intervalMs;

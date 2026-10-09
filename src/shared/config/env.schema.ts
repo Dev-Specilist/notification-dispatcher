@@ -38,7 +38,7 @@ const DEFAULT_LOOKUP_RETRY_MAX_DELAY: PositiveMilliseconds =
   positiveMillisecondsSchema.parse(60_000);
 const DEFAULT_UNCONFIRMED_AFTER: PositiveMilliseconds = positiveMillisecondsSchema.parse(3_600_000);
 const DEFAULT_USER_PAGE_LIMIT: PositiveInteger = positiveIntegerSchema.parse(1_000);
-const DEFAULT_RATE_LIMIT_INTERVAL: PositiveMilliseconds = positiveMillisecondsSchema.parse(20);
+const DEFAULT_RATE_LIMIT_INTERVAL: PositiveMilliseconds = positiveMillisecondsSchema.parse(21);
 const DEFAULT_DISPATCH_CONCURRENCY: PositiveInteger = positiveIntegerSchema.parse(8);
 const DEFAULT_WORKER_POLL_INTERVAL: TimerDelayMs = timerDelayMsSchema.parse(100);
 const DEFAULT_WORKER_ERROR_DELAY: TimerDelayMs = timerDelayMsSchema.parse(1_000);
