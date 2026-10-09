@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type {
+import {
   databaseUrlSchema,
   hostSchema,
   httpUrlSchema,

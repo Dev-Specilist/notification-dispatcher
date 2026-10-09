@@ -1,10 +1,9 @@
-import type { NodePgQueryResultHKT } from 'drizzle-orm/node-postgres';
-import type { PgDatabase } from 'drizzle-orm/pg-core';
-import type { notificationSchema } from '@/modules/notification/adapter/driven/persistence/notification.schema';
-import type { PgInsertValue, PgUpdateSetSource } from 'drizzle-orm/pg-core';
-import type { alarms } from '@/modules/notification/adapter/driven/persistence/alarm/alarm.table';
-import type { deliveries } from '@/modules/notification/adapter/driven/persistence/delivery/delivery.table';
-import type { expansionJobs } from '@/modules/notification/adapter/driven/persistence/expansion-job/expansion-job.table';
+import { NodePgQueryResultHKT } from 'drizzle-orm/node-postgres';
+import { PgDatabase, PgInsertValue, PgUpdateSetSource } from 'drizzle-orm/pg-core';
+import { notificationSchema } from '@/modules/notification/adapter/driven/persistence/notification.schema';
+import { alarms } from '@/modules/notification/adapter/driven/persistence/alarm/alarm.table';
+import { deliveries } from '@/modules/notification/adapter/driven/persistence/delivery/delivery.table';
+import { expansionJobs } from '@/modules/notification/adapter/driven/persistence/expansion-job/expansion-job.table';
 
 export type NotificationSchema = typeof notificationSchema;
 

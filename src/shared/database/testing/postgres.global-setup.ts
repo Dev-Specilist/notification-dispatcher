@@ -2,7 +2,7 @@ import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';
-import type { TestProject } from 'vitest/node';
+import { TestProject } from 'vitest/node';
 import { TestDatabase } from '@/shared/database/testing/test-database.helper';
 
 declare module 'vitest' {

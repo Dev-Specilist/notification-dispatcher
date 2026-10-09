@@ -1,7 +1,7 @@
 import { LogLevel } from '@nestjs/common';
 import { z } from 'zod';
 import { ProcessRole } from '@/shared/config/primitive.type';
-import type { logFormatSchema, logLevelSchema } from '@/shared/logging/logging.schema';
+import { logFormatSchema, logLevelSchema } from '@/shared/logging/logging.schema';
 
 export type LogLevelSchema = typeof logLevelSchema;
 

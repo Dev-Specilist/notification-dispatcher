@@ -1,7 +1,7 @@
 import { ChildProcessWithoutNullStreams, execFileSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { rm } from 'node:fs/promises';
-import net from 'node:net';
+import { createServer, Server } from 'node:net';
 import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 
@@ -130,7 +130,7 @@ export class WorkerProcess {
   }
 
   private static async freePort(): Promise<number> {
-    const probe: net.Server = net.createServer();
+    const probe: Server = createServer();
     await new Promise<void>((resolve: () => void, reject: (failure: Error) => void): void => {
       probe.once('error', (failure: Error): void => {
         probe.close();
@@ -138,7 +138,7 @@ export class WorkerProcess {
       });
       probe.listen(0, WorkerProcess.HOST, resolve);
     });
-    const address: ReturnType<net.Server['address']> = probe.address();
+    const address: ReturnType<Server['address']> = probe.address();
     await new Promise<void>((resolve: () => void): void => {
       probe.close((): void => resolve());
     });

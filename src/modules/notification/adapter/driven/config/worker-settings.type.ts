@@ -1,4 +1,4 @@
-import type { RetryPolicy } from '@/modules/notification/domain/delivery/retry-policy';
+import { RetryPolicy } from '@/modules/notification/domain/delivery/retry-policy';
 import {
   MockApiSettings,
   RecipientDirectorySettings,
