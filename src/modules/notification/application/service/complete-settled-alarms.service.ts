@@ -1,17 +1,41 @@
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
+import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { AlarmSnapshot } from '@/modules/notification/domain/alarm/alarm.type';
 import { AlarmRepositoryPredicates } from '@/modules/notification/application/port/out/alarm-repository.predicate';
 import {
   AlarmPage,
+  AlarmPageNext,
   AlarmPageStart,
+  AlarmPosition,
   PageSize,
 } from '@/modules/notification/application/port/out/alarm-repository.type';
 import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
 import { SnapshotRepositories } from '@/modules/notification/application/port/out/transaction.type';
 import { CompleteAlarmResult } from '@/modules/notification/application/port/in/alarm-result.type';
 import { CompleteAlarmIfSettledUseCase } from '@/modules/notification/application/port/in/complete-alarm-if-settled.use-case';
-import { SettledAlarmsSwept } from '@/modules/notification/application/port/in/complete-settled-alarms.type';
+import {
+  AlarmCompletionFailure,
+  CompleteSettledAlarmsCommand,
+  SettledAlarmsPageChecked,
+} from '@/modules/notification/application/port/in/complete-settled-alarms.type';
 import { CompleteSettledAlarmsUseCase } from '@/modules/notification/application/port/in/complete-settled-alarms.use-case';
+import {
+  ListNext,
+  ListPosition,
+  ListStart,
+} from '@/modules/notification/application/port/in/list-alarms.type';
+
+interface AlarmCompletionChecked {
+  readonly kind: 'checked';
+  readonly result: CompleteAlarmResult;
+}
+
+interface AlarmCompletionFailed {
+  readonly kind: 'failed';
+  readonly failure: AlarmCompletionFailure;
+}
+
+type AlarmCompletionAttempt = AlarmCompletionChecked | AlarmCompletionFailed;
 
 export class CompleteSettledAlarmsService implements CompleteSettledAlarmsUseCase {
   private static readonly PAGE_SIZE: PageSize = CompleteSettledAlarmsService.pageSize(100);
@@ -21,24 +45,29 @@ export class CompleteSettledAlarmsService implements CompleteSettledAlarmsUseCas
     private readonly completeAlarmIfSettled: CompleteAlarmIfSettledUseCase,
   ) {}
 
-  async execute(): Promise<SettledAlarmsSwept> {
-    let checkedAlarmCount: number = 0;
+  async execute({
+    start,
+  }: Readonly<CompleteSettledAlarmsCommand>): Promise<SettledAlarmsPageChecked> {
+    const page: AlarmPage = await this.dispatchingPage(
+      CompleteSettledAlarmsService.toPageStart(start),
+    );
     let completedAlarmCount: number = 0;
-    let start: AlarmPageStart = { kind: 'newest' };
-    let page: AlarmPage;
-    do {
-      page = await this.dispatchingPage(start);
-      for (const alarm of page.alarms) {
-        checkedAlarmCount += 1;
-        if ((await this.complete(alarm)).kind === 'completed') {
-          completedAlarmCount += 1;
-        }
+    const failures: Array<AlarmCompletionFailure> = [];
+    for (const alarm of page.alarms) {
+      const attempt: AlarmCompletionAttempt = await this.complete(alarm);
+      if (attempt.kind === 'failed') {
+        failures.push(attempt.failure);
+      } else if (attempt.result.kind === 'completed') {
+        completedAlarmCount += 1;
       }
-      if (page.next.kind === 'more') {
-        start = { kind: 'after', position: page.next.after };
-      }
-    } while (page.next.kind === 'more');
-    return { kind: 'swept', checkedAlarmCount, completedAlarmCount };
+    }
+    return {
+      kind: 'checked',
+      checkedAlarmCount: page.alarms.length,
+      completedAlarmCount,
+      failures,
+      next: CompleteSettledAlarmsService.toListNext(page.next),
+    };
   }
 
   private dispatchingPage(start: Readonly<AlarmPageStart>): Promise<AlarmPage> {
@@ -53,9 +82,33 @@ export class CompleteSettledAlarmsService implements CompleteSettledAlarmsUseCas
     );
   }
 
-  private complete(alarm: Alarm): Promise<CompleteAlarmResult> {
+  private async complete(alarm: Alarm): Promise<AlarmCompletionAttempt> {
     const { id: alarmId }: AlarmSnapshot = alarm.snapshot();
-    return this.completeAlarmIfSettled.execute({ alarmId });
+    try {
+      return { kind: 'checked', result: await this.completeAlarmIfSettled.execute({ alarmId }) };
+    } catch (thrown) {
+      const reason: string = thrown instanceof Error ? thrown.message : String(thrown);
+      return { kind: 'failed', failure: { alarmId, reason } };
+    }
+  }
+
+  private static toPageStart(start: Readonly<ListStart>): AlarmPageStart {
+    if (start.kind === 'newest') {
+      return start;
+    }
+    const { createdAt, alarmId }: ListPosition = start.position;
+    if (!AlarmPredicates.isAlarmId(alarmId) || !Number.isFinite(createdAt.getTime())) {
+      return { kind: 'newest' };
+    }
+    return { kind: 'after', position: { createdAt, id: alarmId } };
+  }
+
+  private static toListNext(next: AlarmPageNext): ListNext {
+    if (next.kind === 'last') {
+      return next;
+    }
+    const { createdAt, id: alarmId }: AlarmPosition = next.after;
+    return { kind: 'more', after: { createdAt, alarmId } };
   }
 
   private static pageSize(rawPageSize: number): PageSize {

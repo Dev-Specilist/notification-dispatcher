@@ -1,5 +1,10 @@
-import { Injectable, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import {
+  AlarmCompletionFailure,
+  SettledAlarmsPageChecked,
+} from '@/modules/notification/application/port/in/complete-settled-alarms.type';
 import { CompleteSettledAlarmsUseCase } from '@/modules/notification/application/port/in/complete-settled-alarms.use-case';
+import { ListStart } from '@/modules/notification/application/port/in/list-alarms.type';
 import { ExpandNextPageUseCase } from '@/modules/notification/application/port/in/expand-next-page.use-case';
 import { ExpansionPageAttempt } from '@/modules/notification/application/port/in/expand-next-page.type';
 import { ReconcileNextDeliveryUseCase } from '@/modules/notification/application/port/in/reconcile-next-delivery.use-case';
@@ -17,7 +22,9 @@ import { TypedConfigService } from '@/shared/config/typed-config.service';
 
 @Injectable()
 export class DispatchWorker implements OnApplicationBootstrap, OnModuleDestroy {
+  private readonly logger: Logger = new Logger('DispatchWorker');
   private readonly loops: ReadonlyArray<PollingLoopRunner>;
+  private completionStart: ListStart = { kind: 'newest' };
 
   constructor(
     private readonly expandNextPage: ExpandNextPageUseCase,
@@ -91,7 +98,17 @@ export class DispatchWorker implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   private async checkCompletion(): Promise<PollingOutcome> {
-    await this.completeSettledAlarms.execute();
+    const { failures, next }: SettledAlarmsPageChecked = await this.completeSettledAlarms.execute({
+      start: this.completionStart,
+    });
+    failures.forEach(({ alarmId, reason }: AlarmCompletionFailure): void => {
+      this.logger.warn(`completion check failed for alarm ${alarmId}: ${reason}`);
+    });
+    if (next.kind === 'more') {
+      this.completionStart = { kind: 'after', position: next.after };
+      return 'worked';
+    }
+    this.completionStart = { kind: 'newest' };
     return 'idle';
   }
 }

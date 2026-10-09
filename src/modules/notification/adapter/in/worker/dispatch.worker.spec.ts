@@ -2,17 +2,26 @@ import { setTimeout } from 'node:timers/promises';
 import {
   BeforeApplicationShutdown,
   DynamicModule,
+  Logger,
   Module,
   OnApplicationShutdown,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Pool } from 'pg';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
 import { ShutdownService } from '@/bootstrap/lifecycle/shutdown.service';
 import { ReadinessPort } from '@/modules/health/application/port/out/readiness.port';
 import { InMemoryReadinessAdapter } from '@/modules/health/adapter/out/in-memory/in-memory-readiness.adapter';
 import { CompleteSettledAlarmsUseCase } from '@/modules/notification/application/port/in/complete-settled-alarms.use-case';
-import { SettledAlarmsSwept } from '@/modules/notification/application/port/in/complete-settled-alarms.type';
+import {
+  AlarmCompletionFailure,
+  CompleteSettledAlarmsCommand,
+  SettledAlarmsPageChecked,
+} from '@/modules/notification/application/port/in/complete-settled-alarms.type';
+import {
+  ListPosition,
+  ListStart,
+} from '@/modules/notification/application/port/in/list-alarms.type';
 import { ExpandNextPageUseCase } from '@/modules/notification/application/port/in/expand-next-page.use-case';
 import { ExpansionPageAttempt } from '@/modules/notification/application/port/in/expand-next-page.type';
 import { ReconcileNextDeliveryUseCase } from '@/modules/notification/application/port/in/reconcile-next-delivery.use-case';
@@ -52,6 +61,11 @@ const DISPATCH_CONCURRENCY: number = 3;
 const SHUTDOWN_DRAIN_MS: number = 30;
 const POLL_INTERVAL_MS: number = 5;
 const COMPLETION_CHECK_INTERVAL_MS: number = 20;
+
+const FIRST_PAGE_END: ListPosition = {
+  createdAt: new Date('2026-10-09T09:00:00.000Z'),
+  alarmId: '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10',
+};
 
 const UNCONNECTED_DATABASE_URL: string = 'postgres://app:secret@localhost:5432/notification';
 
@@ -138,12 +152,22 @@ class IdleRecovery implements RecoverExpiredLeaseUseCase {
   }
 }
 
-class CompletingCheck implements CompleteSettledAlarmsUseCase {
+class TwoPageCompletionCheck implements CompleteSettledAlarmsUseCase {
   executions: number = 0;
+  readonly starts: Array<ListStart> = [];
 
-  execute(): Promise<SettledAlarmsSwept> {
+  constructor(private readonly failures: ReadonlyArray<AlarmCompletionFailure> = []) {}
+
+  execute({ start }: Readonly<CompleteSettledAlarmsCommand>): Promise<SettledAlarmsPageChecked> {
     this.executions += 1;
-    return Promise.resolve({ kind: 'swept', checkedAlarmCount: 3, completedAlarmCount: 3 });
+    this.starts.push(start);
+    return Promise.resolve({
+      kind: 'checked',
+      checkedAlarmCount: 100,
+      completedAlarmCount: 100,
+      failures: this.failures,
+      next: start.kind === 'newest' ? { kind: 'more', after: FIRST_PAGE_END } : { kind: 'last' },
+    });
   }
 }
 
@@ -159,7 +183,7 @@ describe('DispatchWorker', () => {
   let sender: HeldSender;
   let reconcile: IdleReconcile;
   let recovery: IdleRecovery;
-  let completionCheck: CompletingCheck;
+  let completionCheck: TwoPageCompletionCheck;
   let probe: ShutdownPhaseProbe;
 
   const executionCounts = (): ExecutionCounts => ({
@@ -211,7 +235,7 @@ describe('DispatchWorker', () => {
     sender = new HeldSender();
     reconcile = new IdleReconcile();
     recovery = new IdleRecovery();
-    completionCheck = new CompletingCheck();
+    completionCheck = new TwoPageCompletionCheck();
     probe = new ShutdownPhaseProbe(sender);
     moduleRef = await compile(sender);
   });
@@ -323,7 +347,7 @@ describe('DispatchWorker', () => {
     );
   });
 
-  it('완료 확인은 알림을 완료했더라도 완료 확인 간격마다 한 번씩만 실행한다', async (): Promise<void> => {
+  it('완료 확인은 다음 페이지가 있으면 바로 이어서 확인하고, 마지막 페이지 뒤에는 간격을 두고 처음부터 다시 확인한다', async (): Promise<void> => {
     const observedMs: number = COMPLETION_CHECK_INTERVAL_MS * 5;
 
     await moduleRef.init();
@@ -331,9 +355,35 @@ describe('DispatchWorker', () => {
     sender.release.open();
     await moduleRef.close();
 
-    expect(completionCheck.executions).toBeGreaterThanOrEqual(1);
+    expect(completionCheck.starts.slice(0, 3)).toEqual([
+      { kind: 'newest' },
+      { kind: 'after', position: FIRST_PAGE_END },
+      { kind: 'newest' },
+    ]);
     expect(completionCheck.executions).toBeLessThanOrEqual(
-      observedMs / COMPLETION_CHECK_INTERVAL_MS + 1,
+      2 * (observedMs / COMPLETION_CHECK_INTERVAL_MS + 1),
     );
+  });
+
+  it('완료 판정에 실패한 알림이 있으면 경고 로그로 남기고 확인을 이어간다', async (): Promise<void> => {
+    const warnLog: MockInstance<Logger['warn']> = vi
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation((): void => {});
+    completionCheck = new TwoPageCompletionCheck([
+      { alarmId: '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10', reason: 'database connection reset' },
+    ]);
+    const failingModule: TestingModule = await compile(sender);
+
+    await failingModule.init();
+    await vi.waitFor((): void => {
+      expect(completionCheck.executions).toBeGreaterThanOrEqual(2);
+    });
+    sender.release.open();
+    await failingModule.close();
+
+    expect(warnLog).toHaveBeenCalledWith(
+      'completion check failed for alarm 0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10: database connection reset',
+    );
+    warnLog.mockRestore();
   });
 });
