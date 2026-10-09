@@ -85,12 +85,12 @@ pnpm dev          # api + worker, SWC watch로 변경 시 재시작
 
 ### 1-3. 테스트
 
-| 명령                           | 범위                                                                                                                                       | 필요 조건 |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ | --------- |
-| `pnpm typecheck` · `pnpm lint` | 타입 검사 · oxlint(type-aware)                                                                                                             | 없음      |
-| `pnpm test`                    | unit: 도메인, 유스케이스(port는 in-memory fake), worker loop                                                                               | 없음      |
-| `pnpm test:int`                | integration: Drizzle repository · rate limiter · mock API adapter · 마이그레이션, 이어서 characterization(mock 한도 방식 · 발송 기록 시점) | Docker    |
-| `pnpm test:e2e`                | HTTP API 동작(상태 코드 · 응답 형식) · OpenAPI 문서, 실제 워커 프로세스 1~3대로 발송 전체 흐름 · 강제 종료 · 취소 · SIGTERM                | Docker    |
+| 명령                           | 범위                                                                                                                                                                        | 필요 조건 |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| `pnpm typecheck` · `pnpm lint` | 타입 검사 · oxlint(type-aware)                                                                                                                                              | 없음      |
+| `pnpm test`                    | unit: 도메인, 유스케이스(port는 in-memory fake), worker loop                                                                                                                | 없음      |
+| `pnpm test:int`                | integration: Drizzle repository · rate limiter · mock API adapter · 마이그레이션 · 종료 조율 · 워커 프로세스 기동, 이어서 characterization(mock 한도 방식 · 발송 기록 시점) | Docker    |
+| `pnpm test:e2e`                | HTTP API 동작(상태 코드 · 응답 형식) · OpenAPI 문서, 실제 워커 프로세스 1~3대로 발송 전체 흐름 · 강제 종료 · 취소 · SIGTERM                                                 | Docker    |
 
 - integration · e2e는 Testcontainers로 실제 PostgreSQL과 mock 컨테이너를 띄웁니다. PostgreSQL은 실행마다 한 번 띄워 마이그레이션한 템플릿 DB를 만들고, 테스트 파일마다 복제한 database를 씁니다. mock은 테스트마다 시나리오에 맞는 설정(`USER_COUNT` · `ERROR_RATE` · `TIMEOUT_RATE` 등)으로 띄웁니다.
 - repository 계약 테스트(contract test, `testing/contract/`) 하나를 in-memory fake와 Drizzle adapter 양쪽에 돌려, unit 테스트의 fake가 실제 구현과 똑같이 동작하게 합니다.
