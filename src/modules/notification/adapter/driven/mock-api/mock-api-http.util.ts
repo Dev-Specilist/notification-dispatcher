@@ -1,8 +1,18 @@
 import { z } from 'zod';
 import { connectionNotEstablishedSchema } from '@/modules/notification/adapter/driven/mock-api/mock-api.schema';
-import { TransportFailures } from '@/modules/notification/adapter/driven/mock-api/mock-api.type';
+import {
+  RequestTimeoutMs,
+  TransportFailures,
+} from '@/modules/notification/adapter/driven/mock-api/mock-api.type';
 
 export class MockApiHttp {
+  static requestSignal(
+    requestTimeoutMs: RequestTimeoutMs,
+    shutdownAbortSignal: AbortSignal,
+  ): AbortSignal {
+    return AbortSignal.any([AbortSignal.timeout(requestTimeoutMs), shutdownAbortSignal]);
+  }
+
   static async attempt<TResult>(
     request: () => Promise<TResult>,
     failures: Readonly<TransportFailures<TResult>>,

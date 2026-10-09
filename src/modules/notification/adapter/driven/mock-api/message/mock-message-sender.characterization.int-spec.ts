@@ -32,6 +32,8 @@ const DENIED_BACKOFF_MS: number = 5;
 
 const REQUEST_TIMEOUT_MS: number = 5_000;
 
+const NO_SHUTDOWN_ABORT: AbortSignal = new AbortController().signal;
+
 const MINIMUM_THROUGHPUT_RATIO: number = 0.8;
 
 const BUCKET_REFILL_MS: number = 1_000;
@@ -100,10 +102,13 @@ describe('MockMessageSenderAdapter', () => {
         { name, emissionIntervalMs: durationMs(1_000 / PERMITS_PER_SECOND) },
         PostgresRateLimiterAdapter.SERVER_CLOCK,
       );
-    const sender: MockMessageSenderAdapter = new MockMessageSenderAdapter({
-      baseUrl: defaultRateMock.baseUrl,
-      requestTimeoutMs: requestTimeoutMs(REQUEST_TIMEOUT_MS),
-    });
+    const sender: MockMessageSenderAdapter = new MockMessageSenderAdapter(
+      {
+        baseUrl: defaultRateMock.baseUrl,
+        requestTimeoutMs: requestTimeoutMs(REQUEST_TIMEOUT_MS),
+      },
+      NO_SHUTDOWN_ABORT,
+    );
     const warmUpLimiter: PostgresRateLimiterAdapter = limiterNamed(`warm-up-${randomUUID()}`);
     await Promise.all(
       Array.from({ length: WORKER_COUNT }, async (): Promise<void> => {
@@ -144,14 +149,20 @@ describe('MockMessageSenderAdapter', () => {
 
   it('EXT-11 TIMEOUT_RATE=1 mock / 발송 요청 직후 응답을 기다리는 동안 발송 내역을 조회한다 → 내역이 이미 있다 (발송 기록 시점에 대한 특성 테스트, reconcile 가정의 근거)', async (): Promise<void> => {
     const clientRef: DeliveryId = newClientRef();
-    const sender: MockMessageSenderAdapter = new MockMessageSenderAdapter({
-      baseUrl: stallingMock.baseUrl,
-      requestTimeoutMs: requestTimeoutMs(SEND_TIMEOUT_MS),
-    });
-    const lookup: MockMessageLookupAdapter = new MockMessageLookupAdapter({
-      baseUrl: stallingMock.baseUrl,
-      requestTimeoutMs: requestTimeoutMs(LOOKUP_TIMEOUT_MS),
-    });
+    const sender: MockMessageSenderAdapter = new MockMessageSenderAdapter(
+      {
+        baseUrl: stallingMock.baseUrl,
+        requestTimeoutMs: requestTimeoutMs(SEND_TIMEOUT_MS),
+      },
+      NO_SHUTDOWN_ABORT,
+    );
+    const lookup: MockMessageLookupAdapter = new MockMessageLookupAdapter(
+      {
+        baseUrl: stallingMock.baseUrl,
+        requestTimeoutMs: requestTimeoutMs(LOOKUP_TIMEOUT_MS),
+      },
+      NO_SHUTDOWN_ABORT,
+    );
     let sendSettled: boolean = false;
 
     const pendingSend: Promise<SendOutcome> = sender

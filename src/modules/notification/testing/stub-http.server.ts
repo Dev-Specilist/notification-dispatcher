@@ -9,7 +9,7 @@ export interface StubResponse {
 
 type StubHandler = (response: ServerResponse) => void;
 
-const NOT_YET_CLOSED: () => void = (): void => {};
+const NOT_YET_SIGNALED: () => void = (): void => {};
 
 export class StubHttpServer {
   private static readonly STREAM_CHUNK_INTERVAL_MS: number = 10;
@@ -17,6 +17,7 @@ export class StubHttpServer {
   private constructor(
     private readonly server: Server,
     readonly baseUrl: URL,
+    readonly requestReceived: Promise<void>,
     readonly responseClosed: Promise<void>,
   ) {}
 
@@ -37,6 +38,10 @@ export class StubHttpServer {
     });
   }
 
+  static neverResponding(): Promise<StubHttpServer> {
+    return StubHttpServer.start((_response: ServerResponse): void => {});
+  }
+
   static droppingConnection(): Promise<StubHttpServer> {
     return StubHttpServer.start((response: ServerResponse): void => {
       response.destroy();
@@ -53,20 +58,30 @@ export class StubHttpServer {
   }
 
   private static async start(handle: StubHandler): Promise<StubHttpServer> {
-    let markClosed: () => void = NOT_YET_CLOSED;
+    let markReceived: () => void = NOT_YET_SIGNALED;
+    const requestReceived: Promise<void> = new Promise<void>((resolve: () => void): void => {
+      markReceived = resolve;
+    });
+    let markClosed: () => void = NOT_YET_SIGNALED;
     const responseClosed: Promise<void> = new Promise<void>((resolve: () => void): void => {
       markClosed = resolve;
     });
     const server: Server = createServer(
       (_request: IncomingMessage, response: ServerResponse): void => {
         response.on('close', markClosed);
+        markReceived();
         handle(response);
       },
     );
     await new Promise<void>((resolve: () => void): void => {
       server.listen(0, '127.0.0.1', resolve);
     });
-    return new StubHttpServer(server, StubHttpServer.urlOf(server.address()), responseClosed);
+    return new StubHttpServer(
+      server,
+      StubHttpServer.urlOf(server.address()),
+      requestReceived,
+      responseClosed,
+    );
   }
 
   private static urlOf(address: ReturnType<Server['address']>): URL {

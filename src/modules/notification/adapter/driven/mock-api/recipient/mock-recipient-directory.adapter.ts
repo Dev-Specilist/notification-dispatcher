@@ -30,14 +30,20 @@ type DirectoryFetch = PageFetched | DirectoryFailed;
 export class MockRecipientDirectoryAdapter implements RecipientDirectoryPort {
   private static readonly OK: number = 200;
 
-  constructor(private readonly settings: Readonly<RecipientDirectorySettings>) {}
+  constructor(
+    private readonly settings: Readonly<RecipientDirectorySettings>,
+    private readonly shutdownAbortSignal: AbortSignal,
+  ) {}
 
   async fetchPage(cursor: PageCursor): Promise<RecipientPage> {
     const fetched: DirectoryFetch = await MockApiHttp.attempt(
       (): Promise<DirectoryFetch> => this.request(cursor),
       {
         notConnected: { kind: 'failed', reason: 'is unreachable' },
-        interrupted: { kind: 'failed', reason: 'dropped the connection or timed out' },
+        interrupted: {
+          kind: 'failed',
+          reason: 'dropped the connection, timed out or was aborted at shutdown',
+        },
       },
     );
     if (fetched.kind === 'failed') {
@@ -53,7 +59,7 @@ export class MockRecipientDirectoryAdapter implements RecipientDirectoryPort {
       url.searchParams.set('cursor', cursor.token);
     }
     const response: Response = await fetch(url, {
-      signal: AbortSignal.timeout(this.settings.requestTimeoutMs),
+      signal: MockApiHttp.requestSignal(this.settings.requestTimeoutMs, this.shutdownAbortSignal),
     });
     if (response.status !== MockRecipientDirectoryAdapter.OK) {
       await MockApiHttp.discardBody(response);

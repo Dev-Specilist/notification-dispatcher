@@ -44,6 +44,8 @@ interface ExecutionCounts {
 
 type ShutdownPhase = 'drain-start' | 'database-close';
 
+type HeldSendEnd = 'released' | 'aborted';
+
 interface PhaseObservation {
   readonly phase: ShutdownPhase;
   readonly sends: number;
@@ -57,6 +59,8 @@ const SHUTDOWN_TIMEOUT_MS: number = 100;
 const POLL_INTERVAL_MS: number = 5;
 const COMPLETION_CHECK_INTERVAL_MS: number = 20;
 const TIMER_STEP_MS: number = 1;
+const REQUEST_ABORT_AFTER_MS: number = SHUTDOWN_TIMEOUT_MS / 2;
+const NEVER_ABORTED_REQUESTS: AbortSignal = new AbortController().signal;
 
 const FIRST_PAGE_END: CompletionScanPosition = {
   createdAt: new Date('2026-10-09T09:00:00.000Z'),
@@ -96,15 +100,30 @@ class HeldSender implements SendNextDeliveryUseCase {
   executions: number = 0;
   inFlight: number = 0;
   completed: number = 0;
+  readonly ends: Array<HeldSendEnd> = [];
   readonly release: Gate = createGate();
+
+  constructor(private readonly requestAbortSignal: AbortSignal) {}
 
   async execute(): Promise<SendAttempt> {
     this.executions += 1;
     this.inFlight += 1;
-    await this.release.opened;
+    const end: HeldSendEnd = await Promise.race([
+      this.release.opened.then((): HeldSendEnd => 'released'),
+      this.requestAborted().then((): HeldSendEnd => 'aborted'),
+    ]);
     this.inFlight -= 1;
     this.completed += 1;
-    return { kind: 'idle' };
+    this.ends.push(end);
+    return end === 'released'
+      ? { kind: 'idle' }
+      : { kind: 'recorded', deliveryId: `aborted-${this.executions}`, outcome: 'indeterminate' };
+  }
+
+  private requestAborted(): Promise<void> {
+    return new Promise<void>((resolve: () => void): void => {
+      this.requestAbortSignal.addEventListener('abort', (): void => resolve(), { once: true });
+    });
   }
 }
 
@@ -244,7 +263,7 @@ describe('DispatchWorker', () => {
     vi.stubEnv('WORKER_POLL_INTERVAL_MS', String(POLL_INTERVAL_MS));
     vi.stubEnv('COMPLETION_CHECK_INTERVAL_MS', String(COMPLETION_CHECK_INTERVAL_MS));
     expansion = new IdleExpansion();
-    sender = new HeldSender();
+    sender = new HeldSender(NEVER_ABORTED_REQUESTS);
     reconcile = new IdleReconcile();
     recovery = new IdleRecovery();
     completionCheck = new TwoPageCompletionCheck();
@@ -303,27 +322,75 @@ describe('DispatchWorker', () => {
     ]);
   });
 
-  it('WRK-04 제한 시간 안에 끝나지 않는 요청 / 종료 절차가 진행된다 → 요청을 중단하고 lease를 남겨 둔 채 종료하며, 남은 건은 lease 만료 후 다른 워커가 reconcile한다 (결과를 저장하지 않은 채 exit(1), 복구·reconcile은 UC-15)', async (): Promise<void> => {
+  it('WRK-04 외부 요청을 중단해도 제한 시간 안에 끝나지 않는 작업 / 종료 절차가 진행된다 → lease를 남겨 둔 채 exit(1)로 종료하며, 남은 건은 lease 만료 후 다른 워커가 복구해 reconcile한다 (복구·reconcile은 UC-15)', async (): Promise<void> => {
     const exit: MockInstance<typeof process.exit> = vi
       .spyOn(process, 'exit')
       .mockImplementation((): never => {
         throw new ExitCalled();
       });
     vi.spyOn(Logger.prototype, 'error').mockImplementation((): void => {});
+    vi.spyOn(Logger.prototype, 'warn').mockImplementation((): void => {});
     await moduleRef.init();
     await vi.advanceTimersByTimeAsync(0);
     expect(sender.inFlight).toBe(DISPATCH_CONCURRENCY);
 
     moduleRef.get(ShutdownService).handleSignal('SIGTERM');
     const closing: Promise<void> = moduleRef.close();
+    await vi.advanceTimersByTimeAsync(SHUTDOWN_DRAIN_MS + SHUTDOWN_TIMEOUT_MS - 1);
+    const requestsAbortedBeforeDeadline: boolean =
+      shutdownSignal.outgoingRequestAbortSignal.aborted;
 
-    expect(() => vi.advanceTimersByTime(SHUTDOWN_DRAIN_MS + SHUTDOWN_TIMEOUT_MS)).toThrow(
-      ExitCalled,
-    );
+    expect(() => vi.advanceTimersByTime(1)).toThrow(ExitCalled);
+    expect(requestsAbortedBeforeDeadline).toBe(true);
     expect(exit).toHaveBeenCalledWith(1);
     expect(sender.completed).toBe(0);
+    expect(probe.observations).toEqual([]);
     sender.release.open();
     await advanceUntilSettled(closing);
+  });
+
+  it('WRK-05 제한 시간의 절반이 지나도 끝나지 않는 외부 요청 / 종료 절차가 진행된다 → 요청을 중단하고 결과를 결과 불명(UNKNOWN)으로 저장한 뒤 DB 연결을 닫는다', async (): Promise<void> => {
+    const exit: MockInstance<typeof process.exit> = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((): never => {
+        throw new ExitCalled();
+      });
+    const warnLog: MockInstance<Logger['warn']> = vi
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation((): void => {});
+    const abortableSender: HeldSender = new HeldSender(shutdownSignal.outgoingRequestAbortSignal);
+    probe = new ShutdownPhaseProbe(abortableSender);
+    const abortableModule: TestingModule = await compile(abortableSender);
+    await abortableModule.init();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(abortableSender.inFlight).toBe(DISPATCH_CONCURRENCY);
+
+    abortableModule.get(ShutdownService).handleSignal('SIGTERM');
+    const closing: Promise<void> = abortableModule.close();
+    await vi.advanceTimersByTimeAsync(REQUEST_ABORT_AFTER_MS - 1);
+    const inFlightBeforeAbort: number = abortableSender.inFlight;
+    await advanceUntilSettled(closing);
+
+    expect(inFlightBeforeAbort).toBe(DISPATCH_CONCURRENCY);
+    expect(abortableSender.ends).toEqual(['aborted', 'aborted', 'aborted']);
+    expect(probe.observations).toEqual([
+      {
+        phase: 'drain-start',
+        sends: DISPATCH_CONCURRENCY,
+        inFlight: 0,
+        completedSends: DISPATCH_CONCURRENCY,
+      },
+      {
+        phase: 'database-close',
+        sends: DISPATCH_CONCURRENCY,
+        inFlight: 0,
+        completedSends: DISPATCH_CONCURRENCY,
+      },
+    ]);
+    expect(warnLog).toHaveBeenCalledWith(
+      `in-flight work did not finish within ${REQUEST_ABORT_AFTER_MS}ms of shutdown, aborting outgoing requests`,
+    );
+    expect(exit).not.toHaveBeenCalled();
   });
 
   it('부트스트랩 전에는 어떤 루프도 실행하지 않는다', async (): Promise<void> => {

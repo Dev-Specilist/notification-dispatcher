@@ -26,6 +26,8 @@ interface FoundSummary {
 
 const REQUEST_TIMEOUT_MS: number = 5_000;
 
+const NO_SHUTDOWN_ABORT: AbortSignal = new AbortController().signal;
+
 const SHORT_TIMEOUT_MS: number = 300;
 
 const requestTimeoutMs = (value: number): RequestTimeoutMs => {
@@ -71,7 +73,10 @@ const summarize = (result: MessageLookupResult): FoundSummary => {
 };
 
 const lookupAt = (baseUrl: URL, timeoutMs: number): MockMessageLookupAdapter =>
-  new MockMessageLookupAdapter({ baseUrl, requestTimeoutMs: requestTimeoutMs(timeoutMs) });
+  new MockMessageLookupAdapter(
+    { baseUrl, requestTimeoutMs: requestTimeoutMs(timeoutMs) },
+    NO_SHUTDOWN_ABORT,
+  );
 
 const lookupThrough = async (stub: StubHttpServer): Promise<MessageLookupResult> => {
   try {
@@ -94,10 +99,13 @@ describe('MockMessageLookupAdapter', () => {
 
   it('EXT-07 이미 발송된 clientRef / 발송 내역을 조회한다 → messageId가 담긴 내역이 나온다', async (): Promise<void> => {
     const clientRef: DeliveryId = newClientRef();
-    const sender: MockMessageSenderAdapter = new MockMessageSenderAdapter({
-      baseUrl: mock.baseUrl,
-      requestTimeoutMs: requestTimeoutMs(REQUEST_TIMEOUT_MS),
-    });
+    const sender: MockMessageSenderAdapter = new MockMessageSenderAdapter(
+      {
+        baseUrl: mock.baseUrl,
+        requestTimeoutMs: requestTimeoutMs(REQUEST_TIMEOUT_MS),
+      },
+      NO_SHUTDOWN_ABORT,
+    );
     const messageId: string = acceptedMessageId(await sender.send(messageWith(clientRef)));
 
     const result: MessageLookupResult = await lookupAt(
@@ -114,10 +122,13 @@ describe('MockMessageLookupAdapter', () => {
 
   it('EXT-07 같은 clientRef로 두 번 발송됐으면 두 내역이 모두 나온다', async (): Promise<void> => {
     const clientRef: DeliveryId = newClientRef();
-    const sender: MockMessageSenderAdapter = new MockMessageSenderAdapter({
-      baseUrl: mock.baseUrl,
-      requestTimeoutMs: requestTimeoutMs(REQUEST_TIMEOUT_MS),
-    });
+    const sender: MockMessageSenderAdapter = new MockMessageSenderAdapter(
+      {
+        baseUrl: mock.baseUrl,
+        requestTimeoutMs: requestTimeoutMs(REQUEST_TIMEOUT_MS),
+      },
+      NO_SHUTDOWN_ABORT,
+    );
     const firstMessageId: string = acceptedMessageId(await sender.send(messageWith(clientRef)));
     const secondMessageId: string = acceptedMessageId(await sender.send(messageWith(clientRef)));
 
@@ -202,5 +213,25 @@ describe('MockMessageLookupAdapter', () => {
     ).findByClientRef(newClientRef());
 
     expect(result).toEqual({ kind: 'lookup-failed' });
+  });
+
+  it('EXT-14 응답하지 않는 조회 API에 요청 중 / 워커 종료로 요청을 중단한다 → 요청 제한 시간을 기다리지 않고 LookupFailed 결과가 나온다', async (): Promise<void> => {
+    const stub: StubHttpServer = await StubHttpServer.neverResponding();
+    const shutdownAbort: AbortController = new AbortController();
+    try {
+      const startedAt: number = performance.now();
+      const lookingUp: Promise<MessageLookupResult> = new MockMessageLookupAdapter(
+        { baseUrl: stub.baseUrl, requestTimeoutMs: requestTimeoutMs(REQUEST_TIMEOUT_MS) },
+        shutdownAbort.signal,
+      ).findByClientRef(newClientRef());
+      await stub.requestReceived;
+
+      shutdownAbort.abort();
+
+      expect(await lookingUp).toEqual({ kind: 'lookup-failed' });
+      expect(performance.now() - startedAt).toBeLessThan(REQUEST_TIMEOUT_MS);
+    } finally {
+      await stub.close();
+    }
   });
 });

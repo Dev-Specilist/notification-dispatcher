@@ -14,7 +14,10 @@ type LookupMessage = LookupBody['messages'][number];
 export class MockMessageLookupAdapter implements MessageLookupPort {
   private static readonly OK: number = 200;
 
-  constructor(private readonly settings: Readonly<MockApiSettings>) {}
+  constructor(
+    private readonly settings: Readonly<MockApiSettings>,
+    private readonly shutdownAbortSignal: AbortSignal,
+  ) {}
 
   findByClientRef(clientRef: DeliveryId): Promise<MessageLookupResult> {
     return MockApiHttp.attempt((): Promise<MessageLookupResult> => this.request(clientRef), {
@@ -27,7 +30,7 @@ export class MockMessageLookupAdapter implements MessageLookupPort {
     const url: URL = new URL('/v1/messages', this.settings.baseUrl);
     url.searchParams.set('clientRef', clientRef);
     const response: Response = await fetch(url, {
-      signal: AbortSignal.timeout(this.settings.requestTimeoutMs),
+      signal: MockApiHttp.requestSignal(this.settings.requestTimeoutMs, this.shutdownAbortSignal),
     });
     if (response.status !== MockMessageLookupAdapter.OK) {
       await MockApiHttp.discardBody(response);

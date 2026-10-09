@@ -74,21 +74,28 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
     },
     {
       provide: MessageSenderPort,
-      inject: [WORKER_SETTINGS],
-      useFactory: ({ mockApi }: WorkerSettings): MessageSenderPort =>
-        new MockMessageSenderAdapter(mockApi),
+      inject: [WORKER_SETTINGS, WorkerShutdownSignalAdapter],
+      useFactory: (
+        { mockApi }: WorkerSettings,
+        { outgoingRequestAbortSignal }: WorkerShutdownSignalAdapter,
+      ): MessageSenderPort => new MockMessageSenderAdapter(mockApi, outgoingRequestAbortSignal),
     },
     {
       provide: MessageLookupPort,
-      inject: [WORKER_SETTINGS],
-      useFactory: ({ mockApi }: WorkerSettings): MessageLookupPort =>
-        new MockMessageLookupAdapter(mockApi),
+      inject: [WORKER_SETTINGS, WorkerShutdownSignalAdapter],
+      useFactory: (
+        { mockApi }: WorkerSettings,
+        { outgoingRequestAbortSignal }: WorkerShutdownSignalAdapter,
+      ): MessageLookupPort => new MockMessageLookupAdapter(mockApi, outgoingRequestAbortSignal),
     },
     {
       provide: RecipientDirectoryPort,
-      inject: [WORKER_SETTINGS],
-      useFactory: ({ recipientDirectory }: WorkerSettings): RecipientDirectoryPort =>
-        new MockRecipientDirectoryAdapter(recipientDirectory),
+      inject: [WORKER_SETTINGS, WorkerShutdownSignalAdapter],
+      useFactory: (
+        { recipientDirectory }: WorkerSettings,
+        { outgoingRequestAbortSignal }: WorkerShutdownSignalAdapter,
+      ): RecipientDirectoryPort =>
+        new MockRecipientDirectoryAdapter(recipientDirectory, outgoingRequestAbortSignal),
     },
     {
       provide: ExpandNextPageUseCase,

@@ -33,7 +33,10 @@ export class MockMessageSenderAdapter implements MessageSenderPort {
 
   private static readonly UNREACHABLE_RETRY_AFTER_MS: number = 5_000;
 
-  constructor(private readonly settings: Readonly<MockApiSettings>) {}
+  constructor(
+    private readonly settings: Readonly<MockApiSettings>,
+    private readonly shutdownAbortSignal: AbortSignal,
+  ) {}
 
   send(message: OutgoingMessage): Promise<SendOutcome> {
     return MockApiHttp.attempt((): Promise<SendOutcome> => this.request(message), {
@@ -52,7 +55,7 @@ export class MockMessageSenderAdapter implements MessageSenderPort {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(message),
-      signal: AbortSignal.timeout(this.settings.requestTimeoutMs),
+      signal: MockApiHttp.requestSignal(this.settings.requestTimeoutMs, this.shutdownAbortSignal),
     });
     if (response.status === MockMessageSenderAdapter.ACCEPTED) {
       return MockMessageSenderAdapter.accepted(

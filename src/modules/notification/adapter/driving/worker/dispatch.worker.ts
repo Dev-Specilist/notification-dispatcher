@@ -23,8 +23,11 @@ import { TypedConfigService } from '@/shared/config/typed-config.service';
 
 @Injectable()
 export class DispatchWorker implements OnApplicationBootstrap, OnModuleDestroy {
+  private static readonly SHUTDOWN_TIMEOUT_SHARE_BEFORE_REQUEST_ABORT: number = 0.5;
+
   private readonly logger: Logger = new Logger('DispatchWorker');
   private readonly loops: ReadonlyArray<PollingLoopRunner>;
+  private readonly requestAbortDelayMs: number;
   private completionStart: CompletionScanStart = { kind: 'newest' };
 
   constructor(
@@ -36,6 +39,10 @@ export class DispatchWorker implements OnApplicationBootstrap, OnModuleDestroy {
     private readonly shutdownSignal: WorkerShutdownSignalAdapter,
     config: TypedConfigService,
   ) {
+    this.requestAbortDelayMs = Math.floor(
+      config.get('SHUTDOWN_TIMEOUT_MS') *
+        DispatchWorker.SHUTDOWN_TIMEOUT_SHARE_BEFORE_REQUEST_ABORT,
+    );
     const delays: PollingDelays = {
       idleDelayMs: config.get('WORKER_POLL_INTERVAL_MS'),
       errorDelayMs: config.get('WORKER_ERROR_DELAY_MS'),
@@ -77,7 +84,14 @@ export class DispatchWorker implements OnApplicationBootstrap, OnModuleDestroy {
 
   async onModuleDestroy(): Promise<void> {
     this.shutdownSignal.request();
+    const requestAbortTimer: NodeJS.Timeout = setTimeout((): void => {
+      this.logger.warn(
+        `in-flight work did not finish within ${this.requestAbortDelayMs}ms of shutdown, aborting outgoing requests`,
+      );
+      this.shutdownSignal.abortOutgoingRequests();
+    }, this.requestAbortDelayMs);
     await Promise.all(this.loops.map((loop: PollingLoopRunner): Promise<void> => loop.stop()));
+    clearTimeout(requestAbortTimer);
   }
 
   private async expand(): Promise<PollingOutcome> {

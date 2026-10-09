@@ -30,6 +30,7 @@ type CreatedAlarm = z.infer<typeof createdAlarmSchema>;
 const ACCEPTED_STATUS: number = 202;
 const NOT_FOUND_STATUS: number = 404;
 const QUIET_PERIOD_MS: number = 300;
+const SHUTDOWN_TIMEOUT_SHORTER_THAN_REQUEST_MS: number = 2_000;
 
 const portOf = (address: ReturnType<Server['address']>): number => {
   if (address && typeof address === 'object') {
@@ -153,6 +154,59 @@ describe('worker 프로세스', () => {
           { status: 'PENDING', deliveries: 1 },
           { status: 'SENT', deliveries: 1 },
         ]);
+      } finally {
+        await worker.kill();
+      }
+    } finally {
+      stubMockApi.releaseSends.open();
+      await new Promise<void>((resolve: () => void): void => {
+        stubMockApi.server.close((): void => resolve());
+      });
+    }
+  }, 60_000);
+
+  it('E2E-08 응답하지 않는 발송 API에 요청 중인 실제 worker 자식 프로세스 / SIGTERM을 보낸다 → 제한 시간의 절반이 지나면 요청을 중단해 UNKNOWN으로 저장하고, lease를 남기지 않은 채 exit 0으로 끝난다', async (): Promise<void> => {
+    const createdAlarm: CreatedAlarm = createdAlarmSchema.parse(
+      await spec()
+        .post('/alarms')
+        .withJson({
+          title: '결제 장애 안내',
+          body: '결제가 지연되고 있습니다',
+          kind: 'URGENT',
+          recipientIds: ['u_000003'],
+        })
+        .expectStatus(201)
+        .returns('res.body'),
+    );
+    await spec().post(`/alarms/${createdAlarm.id}/dispatch`).expectStatus(202);
+    const stubMockApi: StubMockApi = await startStubMockApi();
+    try {
+      const worker: WorkerProcess = await WorkerProcess.start(buildDir, {
+        DATABASE_URL: testDatabase.databaseUrl,
+        MOCK_API_URL: stubMockApi.baseUrl,
+        DISPATCH_CONCURRENCY: '1',
+        SHUTDOWN_DRAIN_MS: '0',
+        SHUTDOWN_TIMEOUT_MS: String(SHUTDOWN_TIMEOUT_SHORTER_THAN_REQUEST_MS),
+      });
+      try {
+        await vi.waitFor(
+          (): void => {
+            expect(stubMockApi.sendRequests).toHaveLength(1);
+          },
+          { timeout: 10_000, interval: 20 },
+        );
+
+        worker.terminate();
+        await worker.exited;
+
+        expect(worker.exitCode).toBe(0);
+        expect(worker.logs.join('')).toContain('aborting outgoing requests');
+        expect(stubMockApi.sendRequests).toHaveLength(1);
+        expect(
+          (await deliveryStatusCounts()).filter(
+            ({ status }: StatusCountRow): boolean => status === 'UNKNOWN' || status === 'IN_FLIGHT',
+          ),
+        ).toEqual([{ status: 'UNKNOWN', deliveries: 1 }]);
       } finally {
         await worker.kill();
       }

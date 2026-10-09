@@ -29,6 +29,8 @@ const USER_COUNT: number = 250;
 
 const REQUEST_TIMEOUT_MS: number = 5_000;
 
+const NO_SHUTDOWN_ABORT: AbortSignal = new AbortController().signal;
+
 const SHORT_TIMEOUT_MS: number = 300;
 
 const requestTimeoutMs = (value: number): RequestTimeoutMs => {
@@ -78,6 +80,7 @@ const fetchFirstPageFrom = async (stub: StubHttpServer): Promise<RecipientPage> 
   try {
     return await new MockRecipientDirectoryAdapter(
       settingsFor(stub.baseUrl, 100, REQUEST_TIMEOUT_MS),
+      NO_SHUTDOWN_ABORT,
     ).fetchPage({ kind: 'first' });
   } finally {
     await stub.close();
@@ -98,6 +101,7 @@ describe('MockRecipientDirectoryAdapter', () => {
   it("EXT-01 mock 사용자 API / cursor로 끝까지 읽는다 → USER_COUNT명이 중복 없이 나오고 마지막 페이지는 { kind: 'end' }로 표현된다", async (): Promise<void> => {
     const directory: MockRecipientDirectoryAdapter = new MockRecipientDirectoryAdapter(
       settingsFor(mock.baseUrl, 100, REQUEST_TIMEOUT_MS),
+      NO_SHUTDOWN_ABORT,
     );
 
     const reading: DirectoryReading = await readToEnd(
@@ -115,6 +119,7 @@ describe('MockRecipientDirectoryAdapter', () => {
   it('EXT-01 다음 cursor가 있으면 next 페이지로, 그 cursor로 이어 읽으면 다음 사용자부터 나온다', async (): Promise<void> => {
     const directory: MockRecipientDirectoryAdapter = new MockRecipientDirectoryAdapter(
       settingsFor(mock.baseUrl, 2, REQUEST_TIMEOUT_MS),
+      NO_SHUTDOWN_ABORT,
     );
 
     const firstPage: RecipientPage = await directory.fetchPage({ kind: 'first' });
@@ -155,6 +160,7 @@ describe('MockRecipientDirectoryAdapter', () => {
     try {
       const directory: MockRecipientDirectoryAdapter = new MockRecipientDirectoryAdapter(
         settingsFor(stub.baseUrl, 100, SHORT_TIMEOUT_MS),
+        NO_SHUTDOWN_ABORT,
       );
 
       await expect(directory.fetchPage({ kind: 'first' })).rejects.toThrow('recipient directory');
@@ -172,8 +178,29 @@ describe('MockRecipientDirectoryAdapter', () => {
     await stub.close();
     const directory: MockRecipientDirectoryAdapter = new MockRecipientDirectoryAdapter(
       settingsFor(stub.baseUrl, 100, REQUEST_TIMEOUT_MS),
+      NO_SHUTDOWN_ABORT,
     );
 
     await expect(directory.fetchPage({ kind: 'first' })).rejects.toThrow('recipient directory');
+  });
+
+  it('EXT-14 응답하지 않는 사용자 API에 요청 중 / 워커 종료로 요청을 중단한다 → 요청 제한 시간을 기다리지 않고 실패로 알린다', async (): Promise<void> => {
+    const stub: StubHttpServer = await StubHttpServer.neverResponding();
+    const shutdownAbort: AbortController = new AbortController();
+    try {
+      const startedAt: number = performance.now();
+      const fetching: Promise<RecipientPage> = new MockRecipientDirectoryAdapter(
+        settingsFor(stub.baseUrl, 100, REQUEST_TIMEOUT_MS),
+        shutdownAbort.signal,
+      ).fetchPage({ kind: 'first' });
+      await stub.requestReceived;
+
+      shutdownAbort.abort();
+
+      await expect(fetching).rejects.toThrow('recipient directory');
+      expect(performance.now() - startedAt).toBeLessThan(REQUEST_TIMEOUT_MS);
+    } finally {
+      await stub.close();
+    }
   });
 });

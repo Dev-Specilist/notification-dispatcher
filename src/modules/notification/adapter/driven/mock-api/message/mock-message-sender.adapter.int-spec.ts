@@ -29,6 +29,8 @@ const RELEASE_WAIT_MS: number = 1_000;
 
 const REQUEST_TIMEOUT_MS: number = 5_000;
 
+const NO_SHUTDOWN_ABORT: AbortSignal = new AbortController().signal;
+
 const SHORT_TIMEOUT_MS: number = 300;
 
 const requestTimeoutMs = (value: number): RequestTimeoutMs => {
@@ -65,7 +67,10 @@ const messageTo = (recipientId: string): OutgoingMessage => {
 };
 
 const senderAt = (baseUrl: URL): MockMessageSenderAdapter =>
-  new MockMessageSenderAdapter({ baseUrl, requestTimeoutMs: requestTimeoutMs(REQUEST_TIMEOUT_MS) });
+  new MockMessageSenderAdapter(
+    { baseUrl, requestTimeoutMs: requestTimeoutMs(REQUEST_TIMEOUT_MS) },
+    NO_SHUTDOWN_ABORT,
+  );
 
 const sendThrough = async (stub: StubHttpServer): Promise<SendOutcome> => {
   try {
@@ -252,10 +257,13 @@ describe('MockMessageSenderAdapter', () => {
   );
 
   it('EXT-06 TIMEOUT_RATE=1 mock / 발송 → 클라이언트 타임아웃 후 Indeterminate 결과가 나온다', async (): Promise<void> => {
-    const sender: MockMessageSenderAdapter = new MockMessageSenderAdapter({
-      baseUrl: stallingMock.baseUrl,
-      requestTimeoutMs: requestTimeoutMs(SHORT_TIMEOUT_MS),
-    });
+    const sender: MockMessageSenderAdapter = new MockMessageSenderAdapter(
+      {
+        baseUrl: stallingMock.baseUrl,
+        requestTimeoutMs: requestTimeoutMs(SHORT_TIMEOUT_MS),
+      },
+      NO_SHUTDOWN_ABORT,
+    );
     const startedAt: number = performance.now();
 
     const outcome: SendOutcome = await sender.send(messageTo('u_000001'));
@@ -267,10 +275,13 @@ describe('MockMessageSenderAdapter', () => {
   it('EXT-06 202 응답 본문이 제한 시간 안에 끝나지 않으면 Indeterminate 결과가 나온다', async (): Promise<void> => {
     const stub: StubHttpServer = await StubHttpServer.streamingEndlessly(202);
     try {
-      const outcome: SendOutcome = await new MockMessageSenderAdapter({
-        baseUrl: stub.baseUrl,
-        requestTimeoutMs: requestTimeoutMs(SHORT_TIMEOUT_MS),
-      }).send(messageTo('u_000001'));
+      const outcome: SendOutcome = await new MockMessageSenderAdapter(
+        {
+          baseUrl: stub.baseUrl,
+          requestTimeoutMs: requestTimeoutMs(SHORT_TIMEOUT_MS),
+        },
+        NO_SHUTDOWN_ABORT,
+      ).send(messageTo('u_000001'));
 
       expect(outcome).toEqual({ kind: 'indeterminate' });
     } finally {
@@ -295,5 +306,25 @@ describe('MockMessageSenderAdapter', () => {
     const stub: StubHttpServer = await StubHttpServer.droppingConnection();
 
     expect(await sendThrough(stub)).toEqual({ kind: 'indeterminate' });
+  });
+
+  it('EXT-14 응답하지 않는 발송 API에 요청 중 / 워커 종료로 요청을 중단한다 → 요청 제한 시간을 기다리지 않고, 발송됐을 수 있으므로 Indeterminate 결과가 나온다', async (): Promise<void> => {
+    const stub: StubHttpServer = await StubHttpServer.neverResponding();
+    const shutdownAbort: AbortController = new AbortController();
+    try {
+      const startedAt: number = performance.now();
+      const sending: Promise<SendOutcome> = new MockMessageSenderAdapter(
+        { baseUrl: stub.baseUrl, requestTimeoutMs: requestTimeoutMs(REQUEST_TIMEOUT_MS) },
+        shutdownAbort.signal,
+      ).send(messageTo('u_000001'));
+      await stub.requestReceived;
+
+      shutdownAbort.abort();
+
+      expect(await sending).toEqual({ kind: 'indeterminate' });
+      expect(performance.now() - startedAt).toBeLessThan(REQUEST_TIMEOUT_MS);
+    } finally {
+      await stub.close();
+    }
   });
 });

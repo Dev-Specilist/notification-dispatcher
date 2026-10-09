@@ -152,7 +152,8 @@ Delivery
 | WRK-01 | 워커 모듈 | 애플리케이션 부트스트랩이 끝난다 | 확장 · 발송 · reconcile · lease 복구 · 완료 확인 루프가 시작된다 |
 | WRK-02 | 실행 중인 워커 | 종료 신호를 받는다 | 새 claim을 즉시 멈추고 readiness를 내린다 |
 | WRK-03 | 진행 중인 요청이 있는 워커 | 종료 절차가 진행된다 | 진행 중 요청의 결과를 제한 시간 안에 저장한 뒤 DB 연결을 닫는다 |
-| WRK-04 | 제한 시간 안에 끝나지 않는 요청 | 종료 절차가 진행된다 | 요청을 중단하고 lease를 남겨 둔 채 종료하며, 남은 건은 lease 만료 후 다른 워커가 reconcile한다 |
+| WRK-04 | 외부 요청을 중단해도 제한 시간 안에 끝나지 않는 작업 | 종료 절차가 진행된다 | lease를 남겨 둔 채 exit(1)로 종료하며, 남은 건은 lease 만료 후 다른 워커가 복구해 reconcile한다 |
+| WRK-05 | 제한 시간의 절반이 지나도 끝나지 않는 외부 요청 | 종료 절차가 진행된다 | 요청을 중단하고 결과를 결과 불명(`UNKNOWN`)으로 저장한 뒤 DB 연결을 닫는다 |
 
 ## DB · 저장소와 동시성 (Testcontainers PostgreSQL)
 
@@ -195,6 +196,7 @@ Delivery
 | EXT-11 | `TIMEOUT_RATE=1` mock | 발송 요청 직후 응답을 기다리는 동안 발송 내역을 조회한다 | 내역이 이미 있다 (발송 기록 시점에 대한 특성 테스트, reconcile 가정의 근거) |
 | EXT-12 | 연결을 거부하는 발송 API (연결 거부·주소 해석 실패) | 발송 | 요청이 나가지 않았으므로 `Unreachable(retryAfterMs)` 결과가 나온다 |
 | EXT-13 | 요청을 받은 뒤 연결을 끊는 발송 API | 발송 | 발송됐을 수 있으므로 `Indeterminate` 결과가 나온다 |
+| EXT-14 | 응답하지 않는 mock API에 요청 중 | 워커 종료로 요청을 중단한다 | 요청 제한 시간을 기다리지 않고, 발송은 발송됐을 수 있으므로 `Indeterminate`, 발송 내역 조회는 `LookupFailed`, 사용자 조회는 실패로 끝난다 |
 
 ## API · REST 계약
 
@@ -224,3 +226,4 @@ Delivery
 | E2E-05 | 워커 여러 개로 발송 중이고 `IN_FLIGHT` 수가 남을 워커들의 동시 발송 수를 넘는다 | 워커 하나를 강제로 멈춘다 | 멈춘 워커의 lease가 만료되어 `UNKNOWN`을 거친 건까지 남은 워커가 이어받아 중복·누락 없이 끝난다 |
 | E2E-06 | 대량 알림 발송 중 | 알림을 취소한다 | 새 발송이 멈추고, 이미 나간 건은 `SENT`로 남으며 나머지는 `CANCELLED`가 된다 |
 | E2E-07 | 실제 worker 자식 프로세스 | SIGTERM을 보낸다 | readiness가 내려가고 새 claim이 멈추며, 진행 중 요청을 마무리하고 exit 0으로 끝난다 (`enableShutdownHooks`의 `useProcessExit: true`) |
+| E2E-08 | 응답하지 않는 발송 API에 요청 중인 실제 worker 자식 프로세스 | SIGTERM을 보낸다 | 제한 시간의 절반이 지나면 요청을 중단해 `UNKNOWN`으로 저장하고, lease를 남기지 않은 채 exit 0으로 끝난다 |
