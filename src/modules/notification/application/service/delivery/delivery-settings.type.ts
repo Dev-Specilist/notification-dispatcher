@@ -12,6 +12,7 @@ export interface ReconcileSettings {
   readonly retryPolicy: RetryPolicy;
   readonly lookupRetryPolicy: RetryPolicy;
   readonly unconfirmedAfterMs: DurationMs;
+  readonly leaseMs: DurationMs;
 }
 
 export type LeaseRecoverySettings = Pick<DispatchSettings, 'reconcileDelayMs'>;

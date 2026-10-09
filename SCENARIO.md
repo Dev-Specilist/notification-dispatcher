@@ -104,6 +104,7 @@ Delivery
 | DLV-20 | `SENT`·`FAILED`·`CANCELLED`·`UNCONFIRMED` Delivery | 어떤 결과든 다시 기록하려 한다 | 종결 상태는 바뀌지 않는다 |
 | DLV-21 | 확인 기간(`UNCONFIRMED_AFTER_MS`)이 지난 `UNKNOWN` Delivery | reconcile 대상을 고른다 | 재전송하지 않고 `UNCONFIRMED`로 종결된다 |
 | DLV-22 | `IN_FLIGHT` Delivery | 발송 API에 연결 자체를 하지 못한다 | `RETRY_WAIT`(`UNREACHABLE`)가 되고 대기 시간 뒤로 미뤄지며 시도 횟수는 되돌린다 |
+| DLV-23 | `UNKNOWN` Delivery | reconcile 대상으로 예약한다 | reconcile 가능 시각이 지금 + lease로 미뤄지고 결과 불명 시작 시각과 조회 실패 횟수는 유지된다 |
 
 ## UC · 유스케이스
 
@@ -130,6 +131,7 @@ Delivery
 | UC-19 | 발송 중인 알림 여러 개 | 완료 확인 유스케이스 | 발송 중인 알림을 모두 확인해 확장이 끝나고 미종결 Delivery가 없는 알림만 `COMPLETED`로 바꾼다 |
 | UC-20 | 발송 API 연결 실패 | 발송 유스케이스 | 공유 처리량 제한기에 대기 시간만큼 정지가 걸려 모든 워커가 함께 멈추고, 해당 건은 시도 횟수를 쓰지 않고 `RETRY_WAIT`가 된다 (장애가 길어도 대기 건이 소모되거나 `UNKNOWN`으로 넘어가지 않는다) |
 | UC-21 | 발송 허가를 기다리는 사이 워커 종료가 요청됐다 | 발송 유스케이스 | 허가를 얻어도 새 Delivery를 claim하지 않고 멈춘다 (이미 시작한 요청의 결과 저장은 계속한다) |
+| UC-22 | 결과 불명 Delivery 여러 건 | 두 워커가 동시에 reconcile한다 | 한 워커가 조회하는 동안 다른 워커는 같은 건을 고르지 않고 다른 건을 조회한다 (조회하던 워커가 멈추면 lease가 지난 뒤 다른 워커가 다시 조회한다) |
 
 ## CFG · 종료 타이머 설정
 
@@ -170,6 +172,7 @@ Delivery
 | DB-16 | 여러 상태의 Delivery를 가진 알림과 다른 알림 | 알림의 상태별 Delivery 수를 조회한다 | 그 알림의 건만 상태마다 세고, 건이 없는 상태는 0이다 |
 | DB-17 | 발송 중인 알림 | 한 스냅샷 안에서 상태별 Delivery 수를 두 번 읽는 사이에 다른 트랜잭션이 Delivery를 바꿔 커밋한다 | 스냅샷 안의 두 조회는 같은 시점의 값을 본다 |
 | DB-18 | 진행 중인 확장 작업 여러 개 | 워커가 확장 작업을 claim한다 | lease가 없거나 만료된 작업 중 가장 먼저 만든 작업을 잡아 lease를 걸고, 잡힌 작업은 다른 워커가 가져가지 않는다 |
+| DB-19 | reconcile 대상으로 예약해 저장한 `UNKNOWN` Delivery | reconcile 후보를 고른다 | 예약 시각 전에는 후보에서 빠지고 이후 다시 후보가 된다 |
 
 ## EXT · 외부 API adapter (Testcontainers mock 서버)
 

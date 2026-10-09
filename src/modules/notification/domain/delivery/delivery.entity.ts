@@ -289,6 +289,17 @@ export class Delivery {
     });
   }
 
+  reserveReconcile(now: Readonly<Date>, leaseMs: DurationMs): DeliveryTransition {
+    const check: UnknownCheck = this.checkUnknown();
+    if (check.kind === 'rejected') {
+      return check;
+    }
+    return this.transitionTo(this.props.attempts, {
+      ...check.state,
+      reconcileAt: new Date(now.getTime() + leaseMs),
+    });
+  }
+
   expireUnconfirmed(now: Readonly<Date>, unconfirmedAfterMs: DurationMs): DeliveryTransition {
     const check: UnknownCheck = this.checkUnknown();
     if (check.kind === 'rejected') {

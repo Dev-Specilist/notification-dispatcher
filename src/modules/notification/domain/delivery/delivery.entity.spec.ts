@@ -767,6 +767,66 @@ describe('Delivery', () => {
     expect(delivery.isReconcilableAt(new Date(nextLookupAt))).toBe(true);
   });
 
+  it('DLV-23 UNKNOWN Delivery / reconcile 대상으로 예약한다 → reconcile 가능 시각이 지금 + lease로 미뤄지고 결과 불명 시작 시각과 조회 실패 횟수는 유지된다', () => {
+    const lookupFailed: Delivery = transitioned(
+      unknownAfterTimeout().recordLookupFailure(at(RECONCILABLE_ISO), retryPolicy(3), jitter(0)),
+    );
+    const reservedAt: Date = new Date(at(RECONCILABLE_ISO).getTime() + 500);
+
+    const reserved: Delivery = transitioned(lookupFailed.reserveReconcile(reservedAt, LEASE_MS));
+
+    expect(reserved.snapshot()).toEqual({
+      ...lookupFailed.snapshot(),
+      state: {
+        status: 'UNKNOWN',
+        unknownSince: at(SETTLED_ISO),
+        reconcileAt: new Date(reservedAt.getTime() + LEASE_MS),
+        lookupFailures: 1,
+      },
+    });
+  });
+
+  it('DLV-23 예약한 UNKNOWN Delivery는 lease가 지나야 다시 reconcile 대상이 된다', () => {
+    const reservedAt: Date = at(RECONCILABLE_ISO);
+    const leaseEndsAt: number = reservedAt.getTime() + LEASE_MS;
+
+    const reserved: Delivery = transitioned(
+      unknownAfterTimeout().reserveReconcile(reservedAt, LEASE_MS),
+    );
+
+    expect(reserved.isReconcilableAt(new Date(leaseEndsAt - 1))).toBe(false);
+    expect(reserved.isReconcilableAt(new Date(leaseEndsAt))).toBe(true);
+  });
+
+  it.each<StatusBuildCase>([
+    ['PENDING', pending],
+    ['IN_FLIGHT', started],
+    ['RETRY_WAIT', retryWaiting],
+  ])(
+    'DLV-23 UNKNOWN이 아닌 %s Delivery는 reconcile 대상으로 예약할 수 없다',
+    (_status: string, build: () => Delivery) => {
+      expect(build().reserveReconcile(at(RECONCILABLE_ISO), LEASE_MS)).toEqual({
+        kind: 'rejected',
+        reason: 'NOT_UNKNOWN',
+      });
+    },
+  );
+
+  it.each<StatusBuildCase>([
+    ['SENT', sent],
+    ['FAILED', failed],
+    ['UNCONFIRMED', unconfirmed],
+    ['CANCELLED', cancelled],
+  ])(
+    'DLV-20 종결된 %s Delivery는 reconcile 대상으로 예약해도 상태가 바뀌지 않는다',
+    (_status: string, build: () => Delivery) => {
+      expect(build().reserveReconcile(at(RECONCILABLE_ISO), LEASE_MS)).toEqual({
+        kind: 'rejected',
+        reason: 'ALREADY_SETTLED',
+      });
+    },
+  );
+
   it.each<StatusBuildCase>([
     ['PENDING', pending],
     ['IN_FLIGHT', started],

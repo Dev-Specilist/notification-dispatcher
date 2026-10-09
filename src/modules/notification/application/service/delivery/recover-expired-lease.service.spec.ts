@@ -194,6 +194,8 @@ class FixedReconcileSettings implements ReconcileSettings {
   readonly lookupRetryPolicy: RetryPolicy = retryPolicy();
 
   readonly unconfirmedAfterMs: DurationMs = durationMs(600_000);
+
+  readonly leaseMs: DurationMs = durationMs(LEASE_MS);
 }
 
 class FixedDispatchSettings implements DispatchSettings {

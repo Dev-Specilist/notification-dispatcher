@@ -549,6 +549,34 @@ export class DeliveryRepositoryContract {
       });
     });
 
+    it('DB-19 예약해 저장한 UNKNOWN Delivery는 예약 시각 전에는 reconcile 후보에서 빠지고 이후 다시 후보가 된다', async (): Promise<void> => {
+      const { deliveryRepository, owner }: Scenario =
+        await DeliveryRepositoryContract.scenario(createRepositories);
+      const uncertain: Delivery = DeliveryRepositoryContract.timedOut(
+        DeliveryRepositoryContract.pending(owner, 'u_000001'),
+      );
+      await deliveryRepository.saveAll([uncertain]);
+      const reservedAt: Date = new Date(NOW_ISO);
+      const reserved: Delivery = DeliveryRepositoryContract.transitioned(
+        uncertain.reserveReconcile(reservedAt, DeliveryRepositoryContract.duration(60_000)),
+      );
+
+      expect(await deliveryRepository.saveReconciled(reserved, uncertain)).toEqual({
+        kind: 'saved',
+      });
+      expect(
+        await deliveryRepository.findNextReconcilable(new Date(reservedAt.getTime() + 59_999)),
+      ).toEqual({ kind: 'none' });
+      expect(
+        DeliveryRepositoryContract.candidateId(
+          await deliveryRepository.findNextReconcilable(new Date(reservedAt.getTime() + 60_000)),
+        ),
+      ).toBe(uncertain.snapshot().id);
+      expect(await DeliveryRepositoryContract.snapshots(deliveryRepository, owner)).toEqual([
+        reserved.snapshot(),
+      ]);
+    });
+
     it('DB-09 lease가 만료된 IN_FLIGHT Delivery / 복구 쿼리 → UNKNOWN으로 바뀌고 reconcile 가능 시각이 기록된다', async (): Promise<void> => {
       const { deliveryRepository, owner }: Scenario =
         await DeliveryRepositoryContract.scenario(createRepositories);

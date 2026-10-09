@@ -18,7 +18,11 @@ import { MessageLookupPort } from '@/modules/notification/application/port/drive
 import { MessageLookupResult } from '@/modules/notification/application/port/driven/for-looking-up-messages/message-lookup.type';
 import { ReconcileSettings } from '@/modules/notification/application/service/delivery/delivery-settings.type';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
-import { ReconcileAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/reconcile-next-delivery.type';
+import {
+  NothingToReconcile,
+  ReconcileAttempt,
+  ReconcileSuperseded,
+} from '@/modules/notification/application/port/driving/for-dispatching-alarms/reconcile-next-delivery.type';
 import { ReconcileNextDeliveryUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/reconcile-next-delivery.use-case';
 import { DeliveryRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.port';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
@@ -31,6 +35,14 @@ interface ReconcileNextDeliveryRepositories {
   >;
 }
 
+interface ReconcileReserved {
+  readonly kind: 'reserved';
+  readonly candidate: Delivery;
+  readonly reserved: Delivery;
+}
+
+type ReconcileReservation = ReconcileReserved | NothingToReconcile | ReconcileSuperseded;
+
 export class ReconcileNextDeliveryService implements ReconcileNextDeliveryUseCase {
   constructor(
     private readonly transaction: TransactionPort,
@@ -41,21 +53,45 @@ export class ReconcileNextDeliveryService implements ReconcileNextDeliveryUseCas
   ) {}
 
   async execute(): Promise<ReconcileAttempt> {
-    const candidate: DeliveryCandidate = await this.transaction.run(
-      ({ deliveryRepository }: ReconcileNextDeliveryRepositories): Promise<DeliveryCandidate> =>
-        deliveryRepository.findNextReconcilable(this.clock.now()),
-    );
-    if (candidate.kind === 'none') {
-      return { kind: 'idle' };
+    const reservation: ReconcileReservation = await this.reserveNext();
+    if (reservation.kind !== 'reserved') {
+      return reservation;
     }
-    const { delivery }: CandidateFound = candidate;
-    const { id: deliveryId }: DeliverySnapshot = delivery.snapshot();
+    const { candidate, reserved }: ReconcileReserved = reservation;
+    const { id: deliveryId }: DeliverySnapshot = candidate.snapshot();
     const lookup: MessageLookupResult = await this.messageLookup.findByClientRef(deliveryId);
-    return this.record(delivery, lookup);
+    return this.record(candidate, reserved, lookup);
   }
 
-  private record(delivery: Delivery, lookup: MessageLookupResult): Promise<ReconcileAttempt> {
-    const { id, alarmId }: DeliverySnapshot = delivery.snapshot();
+  private reserveNext(): Promise<ReconcileReservation> {
+    return this.transaction.run(
+      async ({
+        deliveryRepository,
+      }: ReconcileNextDeliveryRepositories): Promise<ReconcileReservation> => {
+        const now: Date = this.clock.now();
+        const nextReconcilable: DeliveryCandidate =
+          await deliveryRepository.findNextReconcilable(now);
+        if (nextReconcilable.kind === 'none') {
+          return { kind: 'idle' };
+        }
+        const { delivery: candidate }: CandidateFound = nextReconcilable;
+        const reserved: Delivery = ReconcileNextDeliveryService.transitioned(
+          candidate.reserveReconcile(now, this.settings.leaseMs),
+        );
+        const saved: ReconciledSave = await deliveryRepository.saveReconciled(reserved, candidate);
+        return saved.kind === 'saved'
+          ? { kind: 'reserved', candidate, reserved }
+          : { kind: 'superseded', deliveryId: candidate.snapshot().id };
+      },
+    );
+  }
+
+  private record(
+    candidate: Delivery,
+    reserved: Delivery,
+    lookup: MessageLookupResult,
+  ): Promise<ReconcileAttempt> {
+    const { id, alarmId }: DeliverySnapshot = candidate.snapshot();
     return this.transaction.run(
       async ({
         alarmRepository,
@@ -63,9 +99,9 @@ export class ReconcileNextDeliveryService implements ReconcileNextDeliveryUseCas
       }: ReconcileNextDeliveryRepositories): Promise<ReconcileAttempt> => {
         const alarm: AlarmLookup = await alarmRepository.findById(alarmId);
         const reconciled: Delivery = ReconcileNextDeliveryService.transitioned(
-          this.decide(delivery, lookup, alarm, this.clock.now()),
+          this.decide(candidate, lookup, alarm, this.clock.now()),
         );
-        const saved: ReconciledSave = await deliveryRepository.saveReconciled(reconciled, delivery);
+        const saved: ReconciledSave = await deliveryRepository.saveReconciled(reconciled, reserved);
         return saved.kind === 'saved'
           ? { kind: 'reconciled', deliveryId: id, status: reconciled.snapshot().state.status }
           : { kind: 'superseded', deliveryId: id };

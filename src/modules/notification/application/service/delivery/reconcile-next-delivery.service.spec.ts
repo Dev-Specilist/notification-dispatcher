@@ -64,6 +64,7 @@ const CANCELLED_ALARM_ID: string = '1c7d2c5f-0b48-4d3b-9e7b-3a7c3e8f2b21';
 const LEASE_TOKEN: string = '9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7caa';
 const RECONCILE_DELAY_MS: number = 35_000;
 const UNCONFIRMED_AFTER_MS: number = 600_000;
+const LEASE_MS: number = 60_000;
 
 const at = (iso: string): Date => new Date(iso);
 
@@ -213,6 +214,8 @@ class FixedReconcileSettings implements ReconcileSettings {
 
   readonly unconfirmedAfterMs: DurationMs = durationMs(UNCONFIRMED_AFTER_MS);
 
+  readonly leaseMs: DurationMs = durationMs(LEASE_MS);
+
   constructor(maxAttempts: number = 3) {
     this.retryPolicy = retryPolicy(maxAttempts);
   }
@@ -288,6 +291,18 @@ const fixture = async (
     ),
   };
 };
+
+const anotherWorker = (
+  { transaction, clock }: Fixture,
+  lookup: MessageLookupPort,
+): ReconcileNextDeliveryService =>
+  new ReconcileNextDeliveryService(
+    transaction,
+    lookup,
+    clock,
+    new FixedReconcileSettings(),
+    new ZeroJitter(),
+  );
 
 const stateOf = async (
   deliveryRepository: InMemoryDeliveryRepositoryAdapter,
@@ -458,5 +473,62 @@ describe('ReconcileNextDeliveryService', () => {
       status: 'CANCELLED',
     });
     expect((await stateOf(deliveryRepository)).status).toBe('CANCELLED');
+  });
+  it('UC-22 결과 불명 Delivery 여러 건 / 두 워커가 동시에 reconcile한다 → 한 워커가 조회하는 동안 다른 워커는 같은 건을 고르지 않고 다른 건을 조회한다', async (): Promise<void> => {
+    const firstLookup: PausingMessageLookup = new PausingMessageLookup([
+      [deliveryId(1), found(['m_1', TIMED_OUT_ISO])],
+    ]);
+    const reconciling: Fixture = await fixture(
+      [unknownDelivery(1), unknownDelivery(2)],
+      firstLookup,
+    );
+    const secondLookup: ScriptedMessageLookup = new ScriptedMessageLookup([]);
+    const firstAttempt: Promise<ReconcileAttempt> = reconciling.service.execute();
+    await firstLookup.looking.opened;
+
+    const secondAttempt: ReconcileAttempt = await anotherWorker(
+      reconciling,
+      secondLookup,
+    ).execute();
+    firstLookup.answered.open();
+
+    expect(secondLookup.requested).toEqual([deliveryId(2)]);
+    expect(secondAttempt).toEqual({
+      kind: 'reconciled',
+      deliveryId: deliveryId(2),
+      status: 'RETRY_WAIT',
+    });
+    expect(await firstAttempt).toEqual({
+      kind: 'reconciled',
+      deliveryId: deliveryId(1),
+      status: 'SENT',
+    });
+    expect(firstLookup.requested).toEqual([deliveryId(1)]);
+  });
+
+  it('UC-22 조회하던 워커가 결과를 저장하기 전에 멈추면 lease가 지난 뒤 다른 워커가 같은 건을 다시 조회한다', async (): Promise<void> => {
+    const stoppedLookup: PausingMessageLookup = new PausingMessageLookup([
+      [deliveryId(1), found(['m_1', TIMED_OUT_ISO])],
+    ]);
+    const reconciling: Fixture = await fixture([unknownDelivery(1)], stoppedLookup);
+    const takeoverLookup: ScriptedMessageLookup = new ScriptedMessageLookup([
+      [deliveryId(1), found(['m_1', TIMED_OUT_ISO])],
+    ]);
+    const takeoverWorker: ReconcileNextDeliveryService = anotherWorker(reconciling, takeoverLookup);
+    const stoppedAttempt: Promise<ReconcileAttempt> = reconciling.service.execute();
+    await stoppedLookup.looking.opened;
+
+    expect(await takeoverWorker.execute()).toEqual({ kind: 'idle' });
+    reconciling.clock.advanceBy(LEASE_MS);
+    expect(await takeoverWorker.execute()).toEqual({
+      kind: 'reconciled',
+      deliveryId: deliveryId(1),
+      status: 'SENT',
+    });
+    stoppedLookup.answered.open();
+
+    expect(takeoverLookup.requested).toEqual([deliveryId(1)]);
+    expect(await stoppedAttempt).toEqual({ kind: 'superseded', deliveryId: deliveryId(1) });
+    expect((await stateOf(reconciling.deliveryRepository)).status).toBe('SENT');
   });
 });
