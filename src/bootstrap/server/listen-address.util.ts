@@ -1,15 +1,15 @@
 import { NetworkInterfaceInfo, networkInterfaces } from 'node:os';
 import {
-  HttpUrl,
   InterfaceEntry,
   ListenAddress,
+  ListenUrl,
   NetworkInterfaceMap,
   OsInterfaceEntry,
   OsInterfaceInfos,
   OsNetworkInterfaces,
   PresentOsInterfaceInfos,
 } from '@/bootstrap/server/listen-address.type';
-import { Host, Port } from '@/shared/config/primitive.schema';
+import { Host, Port } from '@/shared/config/primitive.type';
 
 export class ListenAddressResolver {
   private static readonly ALL_INTERFACES: ReadonlySet<string> = new Set<string>(['0.0.0.0', '::']);
@@ -55,7 +55,7 @@ export class ListenAddressResolver {
     return Array.isArray(infos);
   }
 
-  private static toUrl(host: string, port: Port): HttpUrl {
+  private static toUrl(host: string, port: Port): ListenUrl {
     const formattedHost: string = host.includes(':') ? `[${host}]` : host;
     return `http://${formattedHost}:${port}`;
   }

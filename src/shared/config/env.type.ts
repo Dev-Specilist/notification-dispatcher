@@ -1,17 +1,15 @@
 import { z } from 'zod';
 import {
-  HostSchema,
-  PortSchema,
-  PositiveMillisecondsSchema,
-} from '@/shared/config/primitive.schema';
-import {
   DatabaseUrlSchema,
+  HostSchema,
   HttpUrlSchema,
+  PortSchema,
   PositiveIntegerSchema,
+  PositiveMillisecondsSchema,
   TimerDelayMsSchema,
   TimerDelayOrZeroMsSchema,
 } from '@/shared/config/primitive.type';
-import { LogFormatSchema, LogLevelSchema } from '@/shared/logging/logging.schema';
+import { LogFormatSchema, LogLevelSchema } from '@/shared/logging/logging.type';
 
 export type EnvShape = {
   readonly HOST: z.ZodDefault<HostSchema>;

@@ -1,12 +1,6 @@
 import { ConsoleLogger, LogLevel } from '@nestjs/common';
-import { ProcessRole } from '@/shared/config/primitive.schema';
-import { LogFormat, logLevelSchema } from '@/shared/logging/logging.schema';
-
-export interface AppLoggerSettings {
-  readonly level: LogLevel;
-  readonly format: LogFormat;
-  readonly role: ProcessRole;
-}
+import { logLevelSchema } from '@/shared/logging/logging.schema';
+import { AppLoggerSettings } from '@/shared/logging/logging.type';
 
 export class AppLogger extends ConsoleLogger {
   static create({ level, format, role }: Readonly<AppLoggerSettings>): AppLogger {

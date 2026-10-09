@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { Pool } from 'pg';
 import { ReadinessPort } from '@/modules/health/application/port/driven/for-tracking-readiness/readiness.port';
-import { Milliseconds } from '@/shared/config/primitive.schema';
+import { Milliseconds } from '@/shared/config/primitive.type';
 import { TypedConfigService } from '@/shared/config/typed-config.service';
 
 type SignalListener = (signal: NodeJS.Signals) => void;

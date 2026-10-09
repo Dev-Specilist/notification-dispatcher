@@ -2,18 +2,22 @@ import { z } from 'zod';
 import { Env, EnvSchema } from '@/shared/config/env.type';
 import {
   databaseUrlSchema,
-  Host,
   hostSchema,
   httpUrlSchema,
-  Milliseconds,
-  Port,
   portSchema,
   positiveIntegerSchema,
   positiveMillisecondsSchema,
   timerDelayMsSchema,
   timerDelayOrZeroMsSchema,
 } from '@/shared/config/primitive.schema';
-import { HttpUrl, PositiveInteger, TimerDelayMs } from '@/shared/config/primitive.type';
+import {
+  Host,
+  HttpUrl,
+  Milliseconds,
+  Port,
+  PositiveInteger,
+  TimerDelayMs,
+} from '@/shared/config/primitive.type';
 import { logFormatSchema, logLevelSchema } from '@/shared/logging/logging.schema';
 
 const DEFAULT_HOST: Host = hostSchema.parse('0.0.0.0');

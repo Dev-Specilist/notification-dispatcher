@@ -2,11 +2,17 @@ import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'v
 import { LogLevel } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { createEnvSchema } from '@/shared/config/env.schema';
-import { Host, Milliseconds, Port, portSchema } from '@/shared/config/primitive.schema';
-import { DatabaseUrl, TimerDelayMs } from '@/shared/config/primitive.type';
+import { portSchema } from '@/shared/config/primitive.schema';
+import {
+  DatabaseUrl,
+  Host,
+  Milliseconds,
+  Port,
+  TimerDelayMs,
+} from '@/shared/config/primitive.type';
 import { TypedConfigModule } from '@/shared/config/typed-config.module';
 import { TypedConfigService } from '@/shared/config/typed-config.service';
-import { LogFormat } from '@/shared/logging/logging.schema';
+import { LogFormat } from '@/shared/logging/logging.type';
 
 describe('TypedConfigService', () => {
   let moduleRef: TestingModule;

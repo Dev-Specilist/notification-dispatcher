@@ -17,7 +17,7 @@ import { Pool } from 'pg';
 import { ApiModule } from '@/bootstrap/api.module';
 import { WorkerModule } from '@/bootstrap/worker.module';
 import { ReadinessPort } from '@/modules/health/application/port/driven/for-tracking-readiness/readiness.port';
-import { ProcessRole } from '@/shared/config/primitive.schema';
+import { ProcessRole } from '@/shared/config/primitive.type';
 import { TestDatabase } from '@/shared/database/testing/test-database';
 
 type RootModuleFactory = () => DynamicModule;

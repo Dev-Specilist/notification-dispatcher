@@ -1,5 +1,5 @@
 import { DynamicModule, Module } from '@nestjs/common';
-import { ProcessRole } from '@/shared/config/primitive.schema';
+import { ProcessRole } from '@/shared/config/primitive.type';
 import { TypedConfigService } from '@/shared/config/typed-config.service';
 import { AppLogger } from '@/shared/logging/app.logger';
 

@@ -2,13 +2,13 @@ import { NetworkInterfaceInfo, networkInterfaces } from 'node:os';
 
 export type InterfaceName = string;
 
-export type HttpUrl = `http://${string}:${number}`;
+export type ListenUrl = `http://${string}:${number}`;
 
 export type ListenAddressLabel = 'Local' | 'Bound' | `Network (${InterfaceName})`;
 
 export interface ListenAddress {
   readonly label: ListenAddressLabel;
-  readonly url: HttpUrl;
+  readonly url: ListenUrl;
 }
 
 export type NetworkInterfaceMap = Readonly<

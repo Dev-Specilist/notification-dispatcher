@@ -2,7 +2,7 @@ import { INestApplication, Logger } from '@nestjs/common';
 import { ShutdownService } from '@/bootstrap/lifecycle/shutdown.service';
 import { ListenAddress } from '@/bootstrap/server/listen-address.type';
 import { ListenAddressResolver } from '@/bootstrap/server/listen-address.util';
-import { Host, Port } from '@/shared/config/primitive.schema';
+import { Host, Port } from '@/shared/config/primitive.type';
 import { TypedConfigService } from '@/shared/config/typed-config.service';
 import { AppLogger } from '@/shared/logging/app.logger';
 
