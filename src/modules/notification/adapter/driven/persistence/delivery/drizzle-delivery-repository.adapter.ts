@@ -9,6 +9,7 @@ import {
   DeliveryStatusTally,
   LeaseToken,
 } from '@/modules/notification/domain/delivery/delivery.type';
+import { DeliveryStatusPredicates } from '@/modules/notification/domain/delivery/delivery-status.predicate';
 import { DeliveryStatusCountsFactory } from '@/modules/notification/domain/delivery/delivery-status-counts.factory';
 import { DeliveryRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.port';
 import {
@@ -34,13 +35,6 @@ interface CountRow {
 }
 
 export class DrizzleDeliveryRepositoryAdapter implements DeliveryRepositoryPort {
-  private static readonly SETTLED_STATUSES: ReadonlyArray<DeliveryRow['status']> = [
-    'SENT',
-    'FAILED',
-    'UNCONFIRMED',
-    'CANCELLED',
-  ];
-
   private static readonly UPSERT_FROM_EXCLUDED: DeliveryUpdate = {
     attempts: DrizzleDeliveryRepositoryAdapter.excluded(deliveries.attempts),
     status: DrizzleDeliveryRepositoryAdapter.excluded(deliveries.status),
@@ -168,7 +162,7 @@ export class DrizzleDeliveryRepositoryAdapter implements DeliveryRepositoryPort 
       .where(
         and(
           eq(deliveries.alarmId, alarmId),
-          notInArray(deliveries.status, [...DrizzleDeliveryRepositoryAdapter.SETTLED_STATUSES]),
+          notInArray(deliveries.status, [...DeliveryStatusPredicates.SETTLED]),
         ),
       );
     const { total }: CountRow = result;
@@ -198,7 +192,10 @@ export class DrizzleDeliveryRepositoryAdapter implements DeliveryRepositoryPort 
         updatedAt: sql`now()`,
       })
       .where(
-        and(eq(deliveries.alarmId, alarmId), inArray(deliveries.status, ['PENDING', 'RETRY_WAIT'])),
+        and(
+          eq(deliveries.alarmId, alarmId),
+          inArray(deliveries.status, [...DeliveryStatusPredicates.WAITING]),
+        ),
       );
   }
 

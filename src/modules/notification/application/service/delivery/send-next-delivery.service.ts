@@ -1,7 +1,4 @@
-import {
-  AlarmFound,
-  AlarmLookup,
-} from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
+import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
 import {
   DeliverySnapshot,
@@ -27,6 +24,7 @@ import { SendAttempt } from '@/modules/notification/application/port/driving/for
 import { SendNextDeliveryUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/send-next-delivery.use-case';
 import { DeliveryRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.port';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
+import { AcceptedTransition } from '@/modules/notification/application/service/accepted-transition.util';
 
 interface SendNextDeliveryRepositories {
   readonly alarmRepository: Pick<AlarmRepositoryPort, 'findById'>;
@@ -97,13 +95,13 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
         const { id, alarmId }: DeliverySnapshot = delivery.snapshot();
         const alarm: AlarmLookup = await alarmRepository.findById(alarmId);
         const claimedAt: Date = this.clock.now();
-        if (!SendNextDeliveryService.isActive(alarm)) {
+        if (alarm.kind === 'missing' || !alarm.alarm.acceptsDeliveries()) {
           await deliveryRepository.saveAll([
-            SendNextDeliveryService.transitioned(delivery.cancel(claimedAt)),
+            AcceptedTransition.delivery(delivery.cancel(claimedAt)),
           ]);
           return { kind: 'skipped', deliveryId: id };
         }
-        const claimed: Delivery = SendNextDeliveryService.transitioned(
+        const claimed: Delivery = AcceptedTransition.delivery(
           delivery.claim(token, claimedAt, this.settings.leaseMs),
         );
         const started: DeliveryTransition = claimed.startRequest(
@@ -115,7 +113,7 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
           await deliveryRepository.saveAll([started.delivery]);
           return { kind: 'released', deliveryId: id };
         }
-        const inFlight: Delivery = SendNextDeliveryService.transitioned(started);
+        const inFlight: Delivery = AcceptedTransition.delivery(started);
         await deliveryRepository.saveAll([inFlight]);
         return { kind: 'ready', delivery: inFlight, body: alarm.alarm.snapshot().body };
       },
@@ -123,9 +121,7 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
   }
 
   private abandonUnsent(delivery: Delivery, token: LeaseToken): Promise<SendAttempt> {
-    const abandoned: Delivery = SendNextDeliveryService.transitioned(
-      delivery.abandonUnsentRequest(token),
-    );
+    const abandoned: Delivery = AcceptedTransition.delivery(delivery.abandonUnsentRequest(token));
     const { id: deliveryId }: DeliverySnapshot = delivery.snapshot();
     return this.transaction.run(
       async ({ deliveryRepository }: SendNextDeliveryRepositories): Promise<SendAttempt> => {
@@ -146,7 +142,7 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
       await this.sendPermit.holdFor(outcome.retryAfterMs);
     }
     const now: Date = this.clock.now();
-    const settled: Delivery = SendNextDeliveryService.transitioned(
+    const settled: Delivery = AcceptedTransition.delivery(
       this.applyOutcome(delivery, token, outcome, now),
     );
     const { id, alarmId }: DeliverySnapshot = delivery.snapshot();
@@ -157,10 +153,9 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
       }: SendNextDeliveryRepositories): Promise<SendAttempt> => {
         const alarm: AlarmLookup = await alarmRepository.findById(alarmId);
         const recorded: Delivery =
-          !SendNextDeliveryService.isActive(alarm) &&
-          settled.snapshot().state.status === 'RETRY_WAIT'
-            ? SendNextDeliveryService.transitioned(settled.cancel(now))
-            : settled;
+          alarm.kind === 'found' && alarm.alarm.acceptsDeliveries()
+            ? settled
+            : settled.cancelIfWaiting(now);
         const saved: LeasedSave = await deliveryRepository.saveLeased(recorded, token);
         return saved.kind === 'saved'
           ? { kind: 'recorded', deliveryId: id, outcome: outcome.kind }
@@ -195,16 +190,5 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
         break;
     }
     return delivery.recordUnknown(token, now, this.settings.reconcileDelayMs);
-  }
-
-  private static isActive(alarm: AlarmLookup): alarm is AlarmFound {
-    return alarm.kind === 'found' && alarm.alarm.snapshot().state.status !== 'CANCELLED';
-  }
-
-  private static transitioned(transition: DeliveryTransition): Delivery {
-    if (transition.kind === 'rejected') {
-      throw new Error(`delivery transition was rejected: ${transition.reason}`);
-    }
-    return transition.delivery;
   }
 }

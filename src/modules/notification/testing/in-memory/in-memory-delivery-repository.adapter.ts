@@ -6,7 +6,6 @@ import {
   DeliverySnapshot,
   DeliveryStatusCounts,
   DeliveryStatusTally,
-  DeliveryTransition,
   LeaseToken,
 } from '@/modules/notification/domain/delivery/delivery.type';
 import { DeliveryStatusCountsFactory } from '@/modules/notification/domain/delivery/delivery-status-counts.factory';
@@ -154,10 +153,7 @@ export class InMemoryDeliveryRepositoryAdapter implements DeliveryRepositoryPort
   async cancelWaiting(alarmId: AlarmId, now: Readonly<Date>): Promise<void> {
     const deliveries: ReadonlyArray<Delivery> = await this.findByAlarmId(alarmId);
     deliveries.forEach((delivery: Delivery): void => {
-      const transition: DeliveryTransition = delivery.cancel(now);
-      if (transition.kind === 'transitioned') {
-        this.store(transition.delivery);
-      }
+      this.store(delivery.cancelIfWaiting(now));
     });
   }
 

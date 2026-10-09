@@ -402,4 +402,32 @@ describe('Alarm', () => {
       error: { code: 'ALARM_STATE_CONFLICT', status: 'COMPLETED', action: 'cancel' },
     });
   });
+
+  it.each<StatusBuildCase>([
+    ['DRAFT', bulkDraft],
+    ['DISPATCHING', dispatching],
+    ['COMPLETED', completed],
+  ])(
+    'UC-08 취소되지 않은 %s 알림은 Delivery를 계속 받는다',
+    (_status: string, build: () => Alarm) => {
+      expect(build().acceptsDeliveries()).toBe(true);
+    },
+  );
+
+  it.each<StatusBuildCase>([
+    ['DRAFT', cancelledFromDraft],
+    ['DISPATCHING', (): Alarm => transitioned(dispatching().cancel(new Date(LATER_ISO)))],
+  ])(
+    'UC-08 %s에서 취소된 알림은 더 이상 Delivery를 받지 않는다',
+    (_status: string, build: () => Alarm) => {
+      expect(build().acceptsDeliveries()).toBe(false);
+    },
+  );
+
+  it('UC-12 대량 알림은 완료 전에 수신자 확장이 끝나야 하고 긴급 알림은 확장이 필요 없다', () => {
+    const urgent: Alarm = created(Alarm.create(alarmId(), draft('URGENT', recipientIds(1)), NOW));
+
+    expect(bulkDraft().requiresExpansion()).toBe(true);
+    expect(urgent.requiresExpansion()).toBe(false);
+  });
 });

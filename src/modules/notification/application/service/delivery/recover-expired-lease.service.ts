@@ -1,9 +1,5 @@
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
-import {
-  DeliverySnapshot,
-  DeliveryTransition,
-  LeaseToken,
-} from '@/modules/notification/domain/delivery/delivery.type';
+import { DeliverySnapshot, LeaseToken } from '@/modules/notification/domain/delivery/delivery.type';
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
 import {
   DeliveryCandidate,
@@ -14,6 +10,7 @@ import { TransactionPort } from '@/modules/notification/application/port/driven/
 import { RecoveryAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/recover-expired-lease.type';
 import { RecoverExpiredLeaseUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/recover-expired-lease.use-case';
 import { DeliveryRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.port';
+import { AcceptedTransition } from '@/modules/notification/application/service/accepted-transition.util';
 
 interface RecoverExpiredLeaseRepositories {
   readonly deliveryRepository: Pick<DeliveryRepositoryPort, 'findNextExpiredLease' | 'saveLeased'>;
@@ -36,7 +33,7 @@ export class RecoverExpiredLeaseService implements RecoverExpiredLeaseUseCase {
         }
         const expired: Delivery = candidate.delivery;
         const { id: deliveryId }: DeliverySnapshot = expired.snapshot();
-        const recovered: Delivery = RecoverExpiredLeaseService.transitioned(
+        const recovered: Delivery = AcceptedTransition.delivery(
           expired.recoverExpiredLease(now, this.settings.reconcileDelayMs),
         );
         const saved: LeasedSave = await deliveryRepository.saveLeased(
@@ -56,12 +53,5 @@ export class RecoverExpiredLeaseService implements RecoverExpiredLeaseUseCase {
       throw new Error(`delivery in ${state.status} has no lease to recover`);
     }
     return state.lease.token;
-  }
-
-  private static transitioned(transition: DeliveryTransition): Delivery {
-    if (transition.kind === 'rejected') {
-      throw new Error(`delivery transition was rejected: ${transition.reason}`);
-    }
-    return transition.delivery;
   }
 }

@@ -109,6 +109,14 @@ export class Alarm {
     });
   }
 
+  acceptsDeliveries(): boolean {
+    return this.props.state.status !== 'CANCELLED';
+  }
+
+  requiresExpansion(): boolean {
+    return this.props.kind === 'BULK';
+  }
+
   snapshot(): AlarmSnapshot {
     const { id, title, body, state, createdAt }: AlarmSnapshot = this.props;
     return {

@@ -980,6 +980,35 @@ describe('Delivery', () => {
     },
   );
 
+  it.each<StatusBuildCase>([
+    ['PENDING', pending],
+    ['RETRY_WAIT', retryWaiting],
+  ])(
+    'DLV-17 대기 중인 %s Delivery는 대기 중일 때만 취소하면 CANCELLED가 된다',
+    (_status: string, build: () => Delivery) => {
+      expect(build().cancelIfWaiting(at(CANCELLED_ISO)).snapshot().state).toEqual({
+        status: 'CANCELLED',
+        cancelledAt: at(CANCELLED_ISO),
+      });
+    },
+  );
+
+  it.each<StatusBuildCase>([
+    ['IN_FLIGHT', started],
+    ['UNKNOWN', unknownAfterTimeout],
+    ['SENT', sent],
+    ['FAILED', failed],
+    ['UNCONFIRMED', unconfirmed],
+    ['CANCELLED', cancelled],
+  ])(
+    'DLV-17 대기 중이 아닌 %s Delivery는 대기 중일 때만 취소해도 그대로 남는다',
+    (_status: string, build: () => Delivery) => {
+      const delivery: Delivery = build();
+
+      expect(delivery.cancelIfWaiting(at(UNCONFIRMED_ISO)).snapshot()).toEqual(delivery.snapshot());
+    },
+  );
+
   it('DLV-18 알림이 취소된 뒤의 IN_FLIGHT Delivery / 늦게 202를 받는다 → 이미 나간 사실대로 SENT가 된다', () => {
     const lateAcceptedAt: Date = at('2026-10-07T09:00:30.000Z');
     const inFlight: Delivery = started();

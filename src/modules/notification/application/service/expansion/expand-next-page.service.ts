@@ -98,7 +98,8 @@ export class ExpandNextPageService implements ExpandNextPageUseCase {
           case 'fetch':
             break;
         }
-        if (ExpandNextPageService.shouldStopExpansion(await alarmRepository.findById(alarmId))) {
+        const alarm: AlarmLookup = await alarmRepository.findById(alarmId);
+        if (alarm.kind === 'missing' || !alarm.alarm.acceptsDeliveries()) {
           return { kind: 'settled', step: await this.stop(expansionJobRepository, job) };
         }
         return nextPage;
@@ -124,11 +125,8 @@ export class ExpandNextPageService implements ExpandNextPageUseCase {
           return 'superseded';
         }
         const { job }: ExpansionJobFound = locked;
-        if (
-          ExpandNextPageService.shouldStopExpansion(
-            await alarmRepository.findByIdForUpdate(alarmId),
-          )
-        ) {
+        const lockedAlarm: AlarmLookup = await alarmRepository.findByIdForUpdate(alarmId);
+        if (lockedAlarm.kind === 'missing' || !lockedAlarm.alarm.acceptsDeliveries()) {
           return this.stop(expansionJobRepository, job);
         }
         await deliveryRepository.insertMissing(
@@ -159,9 +157,5 @@ export class ExpandNextPageService implements ExpandNextPageUseCase {
       throw new Error(`claimed expansion job for alarm ${alarmId} does not exist`);
     }
     return lookup.job;
-  }
-
-  private static shouldStopExpansion(lookup: AlarmLookup): boolean {
-    return lookup.kind === 'missing' || lookup.alarm.snapshot().state.status === 'CANCELLED';
   }
 }

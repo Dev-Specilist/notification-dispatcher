@@ -2,7 +2,6 @@ import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import {
   AlarmCompletion,
   AlarmId,
-  AlarmSnapshot,
   CompletionEvidence,
   DeliveryCount,
 } from '@/modules/notification/domain/alarm/alarm.type';
@@ -44,6 +43,7 @@ export class AlarmCompletionChecker {
         const evidence: CompletionEvidence = {
           expansionCompleted: await AlarmCompletionChecker.isExpansionCompleted(
             lookup.alarm,
+            alarmId,
             expansionJobRepository,
           ),
           unsettledDeliveries,
@@ -65,13 +65,13 @@ export class AlarmCompletionChecker {
 
   private static async isExpansionCompleted(
     alarm: Alarm,
+    alarmId: AlarmId,
     expansionJobRepository: ExpansionJobReader,
   ): Promise<boolean> {
-    const { id, kind }: AlarmSnapshot = alarm.snapshot();
-    if (kind === 'URGENT') {
+    if (!alarm.requiresExpansion()) {
       return true;
     }
-    const lookup: ExpansionJobLookup = await expansionJobRepository.findByAlarmId(id);
+    const lookup: ExpansionJobLookup = await expansionJobRepository.findByAlarmId(alarmId);
     return lookup.kind === 'found' && lookup.job.isCompleted();
   }
 }

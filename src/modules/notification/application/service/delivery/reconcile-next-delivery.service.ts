@@ -3,10 +3,7 @@ import {
   DeliverySnapshot,
   DeliveryTransition,
 } from '@/modules/notification/domain/delivery/delivery.type';
-import {
-  AlarmFound,
-  AlarmLookup,
-} from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
+import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
 import {
   CandidateFound,
@@ -26,6 +23,7 @@ import {
 import { ReconcileNextDeliveryUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/reconcile-next-delivery.use-case';
 import { DeliveryRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.port';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
+import { AcceptedTransition } from '@/modules/notification/application/service/accepted-transition.util';
 
 interface ReconcileNextDeliveryRepositories {
   readonly alarmRepository: Pick<AlarmRepositoryPort, 'findById'>;
@@ -75,7 +73,7 @@ export class ReconcileNextDeliveryService implements ReconcileNextDeliveryUseCas
           return { kind: 'idle' };
         }
         const { delivery: candidate }: CandidateFound = nextReconcilable;
-        const reserved: Delivery = ReconcileNextDeliveryService.transitioned(
+        const reserved: Delivery = AcceptedTransition.delivery(
           candidate.reserveReconcile(now, this.settings.leaseMs),
         );
         const saved: ReconciledSave = await deliveryRepository.saveReconciled(reserved, candidate);
@@ -98,7 +96,7 @@ export class ReconcileNextDeliveryService implements ReconcileNextDeliveryUseCas
         deliveryRepository,
       }: ReconcileNextDeliveryRepositories): Promise<ReconcileAttempt> => {
         const alarm: AlarmLookup = await alarmRepository.findById(alarmId);
-        const reconciled: Delivery = ReconcileNextDeliveryService.transitioned(
+        const reconciled: Delivery = AcceptedTransition.delivery(
           this.decide(candidate, lookup, alarm, this.clock.now()),
         );
         const saved: ReconciledSave = await deliveryRepository.saveReconciled(reconciled, reserved);
@@ -119,7 +117,7 @@ export class ReconcileNextDeliveryService implements ReconcileNextDeliveryUseCas
       case 'found':
         return delivery.reconcileFound(lookup.messages);
       case 'none':
-        return ReconcileNextDeliveryService.isActive(alarm)
+        return alarm.kind === 'found' && alarm.alarm.acceptsDeliveries()
           ? delivery.reconcileNotFound(now, this.settings.retryPolicy, this.jitterSource.next())
           : delivery.reconcileNotFoundAsCancelled(now);
       case 'lookup-failed':
@@ -136,16 +134,5 @@ export class ReconcileNextDeliveryService implements ReconcileNextDeliveryUseCas
           this.settings.lookupRetryPolicy,
           this.jitterSource.next(),
         );
-  }
-
-  private static isActive(alarm: AlarmLookup): alarm is AlarmFound {
-    return alarm.kind === 'found' && alarm.alarm.snapshot().state.status !== 'CANCELLED';
-  }
-
-  private static transitioned(transition: DeliveryTransition): Delivery {
-    if (transition.kind === 'rejected') {
-      throw new Error(`delivery transition was rejected: ${transition.reason}`);
-    }
-    return transition.delivery;
   }
 }

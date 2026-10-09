@@ -1,3 +1,4 @@
+import { DeliveryStatusPredicates } from '@/modules/notification/domain/delivery/delivery-status.predicate';
 import { RetryPolicy } from '@/modules/notification/domain/delivery/retry-policy';
 import {
   DeliveryRejected,
@@ -336,13 +337,18 @@ export class Delivery {
     if (Delivery.isSettled(state)) {
       return Delivery.reject('ALREADY_SETTLED');
     }
-    if (state.status === 'IN_FLIGHT' || state.status === 'UNKNOWN') {
+    if (!DeliveryStatusPredicates.isWaiting(state.status)) {
       return Delivery.reject('OUTCOME_PENDING');
     }
     return this.transitionTo(this.props.attempts, {
       status: 'CANCELLED',
       cancelledAt: Delivery.copyDate(now),
     });
+  }
+
+  cancelIfWaiting(now: Readonly<Date>): Delivery {
+    const cancellation: DeliveryTransition = this.cancel(now);
+    return cancellation.kind === 'rejected' ? this : cancellation.delivery;
   }
 
   isReconcilableAt(now: Readonly<Date>): boolean {
@@ -437,13 +443,8 @@ export class Delivery {
     };
   }
 
-  private static isSettled(state: DeliveryState): boolean {
-    return (
-      state.status === 'SENT' ||
-      state.status === 'FAILED' ||
-      state.status === 'UNCONFIRMED' ||
-      state.status === 'CANCELLED'
-    );
+  private static isSettled({ status }: DeliveryState): boolean {
+    return DeliveryStatusPredicates.isSettled(status);
   }
 
   private static copyState(state: DeliveryState): DeliveryState {
