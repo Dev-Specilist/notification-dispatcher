@@ -164,10 +164,26 @@ describe('Alarm', () => {
     },
   );
 
-  it('ALM-04 긴급 수신자 수 범위는 외부에서 바꿀 수 없어 101명 긴급 알림은 계속 거부된다', () => {
-    const range: object = Reflect.get(Alarm, 'URGENT_RECIPIENT_RANGE');
+  it('ALM-04 거부 결과에 담긴 수신자 수 범위를 바꿔도 다음 검증 범위는 그대로라 100명은 허용하고 101명은 계속 거부한다', () => {
+    const firstRejection: AlarmCreation = Alarm.create(
+      alarmId(),
+      draft('URGENT', recipientIds(101)),
+      NOW,
+    );
+    KindAssertion.assertKind(firstRejection, 'rejected');
+    const { error: firstRejectionError }: KindMember<AlarmCreation, 'rejected'> = firstRejection;
+    Object.assign(firstRejectionError, { min: 0, max: 101 });
 
-    expect(() => Object.assign(range, { max: 101 })).toThrow(TypeError);
+    expect(
+      created(Alarm.create(alarmId(), draft('URGENT', recipientIds(100)), NOW)).snapshot().target,
+    ).toEqual({
+      kind: 'EXPLICIT',
+      recipientIds: recipientIds(100),
+    });
+    expect(Alarm.create(alarmId(), draft('URGENT', recipientIds(0)), NOW)).toEqual({
+      kind: 'rejected',
+      error: { code: 'URGENT_RECIPIENTS_OUT_OF_RANGE', count: 0, min: 1, max: 100 },
+    });
     expect(Alarm.create(alarmId(), draft('URGENT', recipientIds(101)), NOW)).toEqual({
       kind: 'rejected',
       error: { code: 'URGENT_RECIPIENTS_OUT_OF_RANGE', count: 101, min: 1, max: 100 },
