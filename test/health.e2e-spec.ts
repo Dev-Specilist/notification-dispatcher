@@ -9,18 +9,20 @@ import {
   MockInstance,
   vi,
 } from 'vitest';
-import { ConsoleLogger, INestApplication, Type } from '@nestjs/common';
+import { ConsoleLogger, DynamicModule, INestApplication } from '@nestjs/common';
 import { HealthCheckResult } from '@nestjs/terminus';
 import { Test, TestingModule } from '@nestjs/testing';
 import { request, spec } from 'pactum';
 import { Pool } from 'pg';
+import { ApiModule } from '@/bootstrap/api.module';
+import { WorkerModule } from '@/bootstrap/worker.module';
 import { ReadinessPort } from '@/modules/health/application/port/out/readiness.port';
 import { ProcessRole } from '@/shared/config/primitive.schema';
 import { TestDatabase } from '@/shared/database/testing/test-database';
 
-type RootModuleLoader = () => Promise<Type>;
+type RootModuleFactory = () => DynamicModule;
 
-type ProbeCase = Readonly<[ProcessRole, RootModuleLoader]>;
+type ProbeCase = Readonly<[ProcessRole, RootModuleFactory]>;
 
 type ErrorLogSpy = MockInstance<ConsoleLogger['error']>;
 
@@ -31,11 +33,8 @@ const HEALTH_CHECK_FAILED: string = 'Health Check has failed!';
 const WORKER_PASS_FAILED: string = 'pass failed';
 
 const ROOT_MODULES: ReadonlyArray<ProbeCase> = [
-  ['api', async (): Promise<Type> => (await import('@/bootstrap/api.module.js')).ApiModule],
-  [
-    'worker',
-    async (): Promise<Type> => (await import('@/bootstrap/worker.module.js')).WorkerModule,
-  ],
+  ['api', (): DynamicModule => ApiModule.forRoot()],
+  ['worker', (): DynamicModule => WorkerModule.forRoot()],
 ];
 
 const LIVE: HealthCheckResult = { status: 'ok', info: {}, error: {}, details: {} };
@@ -69,9 +68,8 @@ const DATABASE_DOWN: HealthCheckResult = {
 
 describe.each(ROOT_MODULES)(
   '%s 헬스 프로브',
-  (role: ProcessRole, loadRootModule: RootModuleLoader) => {
+  (role: ProcessRole, createRootModule: RootModuleFactory) => {
     let testDatabase: TestDatabase;
-    let rootModule: Type;
     let app: INestApplication;
     let closed: boolean;
     let errorLog: ErrorLogSpy;
@@ -82,7 +80,6 @@ describe.each(ROOT_MODULES)(
     beforeAll(async (): Promise<void> => {
       testDatabase = await TestDatabase.create();
       vi.stubEnv('DATABASE_URL', testDatabase.databaseUrl);
-      rootModule = await loadRootModule();
     });
 
     afterAll(async (): Promise<void> => {
@@ -94,7 +91,7 @@ describe.each(ROOT_MODULES)(
       closed = false;
       errorLog = vi.spyOn(ConsoleLogger.prototype, 'error').mockImplementation((): void => {});
       const moduleRef: TestingModule = await Test.createTestingModule({
-        imports: [rootModule],
+        imports: [createRootModule()],
       }).compile();
       app = moduleRef.createNestApplication();
       await app.listen(0, '127.0.0.1');

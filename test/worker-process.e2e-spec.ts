@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { createServer, IncomingMessage, Server, ServerResponse } from 'node:http';
-import { INestApplication, Type } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { request, spec } from 'pactum';
 import { Pool, QueryResult } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { ApiModule } from '@/bootstrap/api.module';
 import { WorkerProcess } from '@/bootstrap/testing/worker.process';
 import { TestDatabase } from '@/shared/database/testing/test-database';
 
@@ -93,9 +94,8 @@ describe('worker 프로세스', () => {
     buildDir = WorkerProcess.build();
     testDatabase = await TestDatabase.create();
     vi.stubEnv('DATABASE_URL', testDatabase.databaseUrl);
-    const rootModule: Type = (await import('@/bootstrap/api.module.js')).ApiModule;
     const moduleRef: TestingModule = await Test.createTestingModule({
-      imports: [rootModule],
+      imports: [ApiModule.forRoot()],
     }).compile();
     api = moduleRef.createNestApplication();
     await api.listen(0, '127.0.0.1');

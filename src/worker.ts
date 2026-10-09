@@ -4,7 +4,7 @@ import { WorkerModule } from '@/bootstrap/worker.module';
 import { ServerBootstrap } from '@/bootstrap/server/server.bootstrap';
 
 void ServerBootstrap.run(async (): Promise<void> => {
-  const app: INestApplication = await NestFactory.create(WorkerModule, {
+  const app: INestApplication = await NestFactory.create(WorkerModule.forRoot(), {
     bufferLogs: true,
     abortOnError: false,
   });

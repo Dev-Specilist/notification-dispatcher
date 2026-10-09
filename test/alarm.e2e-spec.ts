@@ -1,10 +1,11 @@
 import SwaggerParser from '@apidevtools/swagger-parser';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { INestApplication, Type } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { request, spec } from 'pactum';
 import { Pool, QueryResult } from 'pg';
 import { z } from 'zod';
+import { ApiModule } from '@/bootstrap/api.module';
 import { ApiDocumentationBootstrap } from '@/bootstrap/server/api-documentation.bootstrap';
 import { TestDatabase } from '@/shared/database/testing/test-database';
 
@@ -147,9 +148,8 @@ describe('알림 REST API', () => {
   beforeAll(async (): Promise<void> => {
     testDatabase = await TestDatabase.create();
     vi.stubEnv('DATABASE_URL', testDatabase.databaseUrl);
-    const rootModule: Type = (await import('@/bootstrap/api.module.js')).ApiModule;
     const moduleRef: TestingModule = await Test.createTestingModule({
-      imports: [rootModule],
+      imports: [ApiModule.forRoot()],
     }).compile();
     app = moduleRef.createNestApplication();
     ApiDocumentationBootstrap.setup(app);

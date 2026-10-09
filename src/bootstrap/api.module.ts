@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { DynamicModule, Module } from '@nestjs/common';
 import { LifecycleModule } from '@/bootstrap/lifecycle/lifecycle.module';
 import { HealthModule } from '@/modules/health/health.module';
 import { NotificationApiModule } from '@/modules/notification/notification-api.module';
@@ -9,15 +9,20 @@ import { DatabaseModule } from '@/shared/database/database.module';
 import { ApiStandardModule } from '@/shared/http/api-standard.module';
 import { LoggingModule } from '@/shared/logging/logging.module';
 
-@Module({
-  imports: [
-    TypedConfigModule.forRoot(createEnvSchema(portSchema.parse(3000))),
-    LoggingModule.forRoot('api'),
-    DatabaseModule,
-    ApiStandardModule,
-    HealthModule,
-    NotificationApiModule,
-    LifecycleModule,
-  ],
-})
-export class ApiModule {}
+@Module({})
+export class ApiModule {
+  static forRoot(): DynamicModule {
+    return {
+      module: ApiModule,
+      imports: [
+        TypedConfigModule.forRoot(createEnvSchema(portSchema.parse(3000))),
+        LoggingModule.forRoot('api'),
+        DatabaseModule,
+        ApiStandardModule,
+        HealthModule,
+        NotificationApiModule,
+        LifecycleModule,
+      ],
+    };
+  }
+}

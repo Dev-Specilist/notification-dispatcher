@@ -5,7 +5,7 @@ import { ApiDocumentationBootstrap } from '@/bootstrap/server/api-documentation.
 import { ServerBootstrap } from '@/bootstrap/server/server.bootstrap';
 
 void ServerBootstrap.run(async (): Promise<void> => {
-  const app: INestApplication = await NestFactory.create(ApiModule, {
+  const app: INestApplication = await NestFactory.create(ApiModule.forRoot(), {
     bufferLogs: true,
     abortOnError: false,
   });

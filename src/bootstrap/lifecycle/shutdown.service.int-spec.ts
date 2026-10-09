@@ -1,11 +1,5 @@
 import { scheduler } from 'node:timers/promises';
-import {
-  BeforeApplicationShutdown,
-  ConsoleLogger,
-  DynamicModule,
-  Injectable,
-  Type,
-} from '@nestjs/common';
+import { BeforeApplicationShutdown, ConsoleLogger, Injectable } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Pool, PoolClient, QueryResult } from 'pg';
 import {
@@ -19,15 +13,12 @@ import {
   MockInstance,
   vi,
 } from 'vitest';
+import { ApiModule } from '@/bootstrap/api.module';
 import { ShutdownService } from '@/bootstrap/lifecycle/shutdown.service';
 import { TestDatabase } from '@/shared/database/testing/test-database';
 
 interface ProbeRow {
   readonly answer: number;
-}
-
-interface ApiModuleExport {
-  readonly ApiModule: Type | DynamicModule;
 }
 
 type ExitSpy = MockInstance<typeof process.exit>;
@@ -63,7 +54,6 @@ const yieldUntil = async (condition: () => boolean): Promise<void> => {
 
 describe('ShutdownService', () => {
   let testDatabase: TestDatabase;
-  let rootModule: ApiModuleExport;
   let moduleRef: TestingModule;
   let closed: boolean;
 
@@ -72,7 +62,6 @@ describe('ShutdownService', () => {
     vi.stubEnv('DATABASE_URL', testDatabase.databaseUrl);
     vi.stubEnv('SHUTDOWN_DRAIN_MS', String(DRAIN_MS));
     vi.stubEnv('SHUTDOWN_TIMEOUT_MS', String(TIMEOUT_MS));
-    rootModule = await import('@/bootstrap/api.module.js');
   });
 
   afterAll(async (): Promise<void> => {
@@ -83,7 +72,7 @@ describe('ShutdownService', () => {
   beforeEach(async (): Promise<void> => {
     closed = false;
     moduleRef = await Test.createTestingModule({
-      imports: [rootModule.ApiModule],
+      imports: [ApiModule.forRoot()],
       providers: [DrainingWork],
     }).compile();
   });
