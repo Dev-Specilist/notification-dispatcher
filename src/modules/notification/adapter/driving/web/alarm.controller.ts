@@ -1,20 +1,18 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
 import { ApiAcceptedResponse, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
-import {
-  AlarmResult,
-  CancelAlarmResult,
-  StartDispatchResult,
-} from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
+import { CancelAlarmResult } from '@/modules/notification/application/port/driving/for-managing-alarms/cancel-alarm.type';
 import { CancelAlarmUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/cancel-alarm.use-case';
 import { CreateAlarmResult } from '@/modules/notification/application/port/driving/for-managing-alarms/create-alarm.type';
 import { CreateAlarmUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/create-alarm.use-case';
+import { GetAlarmResult } from '@/modules/notification/application/port/driving/for-managing-alarms/get-alarm.type';
 import { GetAlarmUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/get-alarm.use-case';
 import {
   ListAlarmsQuery,
   ListAlarmsResult,
 } from '@/modules/notification/application/port/driving/for-managing-alarms/list-alarms.type';
 import { ListAlarmsUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/list-alarms.use-case';
+import { StartDispatchResult } from '@/modules/notification/application/port/driving/for-managing-alarms/start-dispatch.type';
 import { StartDispatchUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/start-dispatch.use-case';
 import { alarmIdParamSchema } from '@/modules/notification/adapter/driving/web/alarm-id-param.schema';
 import {
@@ -88,7 +86,7 @@ export class AlarmController {
   async findOne(
     @Param({ schema: alarmIdParamSchema }) { id: alarmId }: AlarmIdParam,
   ): Promise<AlarmDetailResponse> {
-    const result: AlarmResult = await this.getAlarm.execute({ alarmId });
+    const result: GetAlarmResult = await this.getAlarm.execute({ alarmId });
     if (result.kind === 'not-found') {
       throw AlarmPresenter.problemOf(result.error);
     }

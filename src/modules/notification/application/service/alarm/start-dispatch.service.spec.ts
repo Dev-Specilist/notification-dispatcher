@@ -8,7 +8,7 @@ import { DeliveryId, DeliverySnapshot } from '@/modules/notification/domain/deli
 import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
 import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/delivery-id-generator.port';
-import { StartDispatchResult } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
+import { StartDispatchResult } from '@/modules/notification/application/port/driving/for-managing-alarms/start-dispatch.type';
 import { StartDispatchService } from '@/modules/notification/application/service/alarm/start-dispatch.service';
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-delivery-repository.adapter';

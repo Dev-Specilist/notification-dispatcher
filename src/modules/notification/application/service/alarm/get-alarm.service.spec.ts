@@ -16,8 +16,8 @@ import {
 import { TransactionRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import {
   AlarmFoundResult,
-  AlarmResult,
-} from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
+  GetAlarmResult,
+} from '@/modules/notification/application/port/driving/for-managing-alarms/get-alarm.type';
 import { DeliveryProgressView } from '@/modules/notification/application/port/driving/for-managing-alarms/delivery-progress-view.type';
 import { AlarmViewMapper } from '@/modules/notification/application/service/alarm/view/alarm-view.mapper';
 import { GetAlarmService } from '@/modules/notification/application/service/alarm/get-alarm.service';
@@ -58,7 +58,7 @@ const storedAlarm = (): Alarm => {
   return alarm;
 };
 
-const found = (result: AlarmResult): AlarmFoundResult => {
+const found = (result: GetAlarmResult): AlarmFoundResult => {
   KindAssertion.assertKind(result, 'found');
   return result;
 };
@@ -139,7 +139,7 @@ describe('GetAlarmService', () => {
     const { alarmRepository, service }: Fixture = fixture();
     await alarmRepository.save(storedAlarm());
 
-    const result: AlarmResult = await service.execute({ alarmId: MISSING_ID });
+    const result: GetAlarmResult = await service.execute({ alarmId: MISSING_ID });
 
     expect(result).toEqual({
       kind: 'not-found',
@@ -150,7 +150,7 @@ describe('GetAlarmService', () => {
   it('UC-02 알림 id 형식이 아닌 값으로 조회하면 저장소를 거치지 않고 알림 없음 오류가 난다', async (): Promise<void> => {
     const service: GetAlarmService = new GetAlarmService(new UnusedTransaction());
 
-    const result: AlarmResult = await service.execute({ alarmId: 'not-a-uuid' });
+    const result: GetAlarmResult = await service.execute({ alarmId: 'not-a-uuid' });
 
     expect(result).toEqual({
       kind: 'not-found',
@@ -172,7 +172,7 @@ describe('GetAlarmService', () => {
     );
     await uncommittedSaved.opened;
 
-    const result: Promise<AlarmResult> = service.execute({ alarmId: STORED_ID });
+    const result: Promise<GetAlarmResult> = service.execute({ alarmId: STORED_ID });
     failureReleased.open();
 
     await expect(failing).rejects.toThrow('other transaction failed');

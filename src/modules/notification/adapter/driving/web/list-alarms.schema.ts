@@ -1,6 +1,8 @@
 import { z } from 'zod';
-import { AlarmStatusName } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
-import { AlarmKindName } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-view.type';
+import {
+  AlarmKindName,
+  AlarmStatusName,
+} from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-view.type';
 import {
   ListAlarmsQuery,
   ListFilter,

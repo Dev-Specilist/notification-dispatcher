@@ -6,7 +6,7 @@ import {
   AlarmActionName,
   AlarmNotFoundError,
   AlarmStateConflictError,
-} from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
+} from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-error.type';
 import { AlarmCreationError } from '@/modules/notification/application/port/driving/for-managing-alarms/create-alarm.type';
 import { DeliveryProgressView } from '@/modules/notification/application/port/driving/for-managing-alarms/delivery-progress-view.type';
 import {

@@ -22,7 +22,7 @@ import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
 import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
-import { CancelAlarmResult } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
+import { CancelAlarmResult } from '@/modules/notification/application/port/driving/for-managing-alarms/cancel-alarm.type';
 import { CancelAlarmService } from '@/modules/notification/application/service/alarm/cancel-alarm.service';
 import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-alarm-repository.adapter';
 import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-delivery-repository.adapter';

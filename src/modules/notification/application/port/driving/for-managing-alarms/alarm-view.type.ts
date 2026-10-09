@@ -40,3 +40,5 @@ export interface AlarmView {
   readonly state: AlarmViewState;
   readonly createdAt: Date;
 }
+
+export type AlarmStatusName = AlarmViewState['status'];

@@ -10,8 +10,10 @@ import { AlarmLookup } from '@/modules/notification/application/port/driven/for-
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
 import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/delivery-id-generator.port';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
-import { AlarmCommand } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-command.type';
-import { StartDispatchResult } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
+import {
+  StartDispatchCommand,
+  StartDispatchResult,
+} from '@/modules/notification/application/port/driving/for-managing-alarms/start-dispatch.type';
 import { StartDispatchUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/start-dispatch.use-case';
 import { AlarmViewMapper } from '@/modules/notification/application/service/alarm/view/alarm-view.mapper';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
@@ -31,7 +33,7 @@ export class StartDispatchService implements StartDispatchUseCase {
     private readonly clock: ClockPort,
   ) {}
 
-  execute({ alarmId }: Readonly<AlarmCommand>): Promise<StartDispatchResult> {
+  execute({ alarmId }: Readonly<StartDispatchCommand>): Promise<StartDispatchResult> {
     if (!AlarmPredicates.isAlarmId(alarmId)) {
       return Promise.resolve({ kind: 'not-found', error: { code: 'ALARM_NOT_FOUND', alarmId } });
     }

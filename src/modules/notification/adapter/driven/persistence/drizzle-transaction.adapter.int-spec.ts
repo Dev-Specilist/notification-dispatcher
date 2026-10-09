@@ -49,10 +49,8 @@ import {
   SnapshotRepositories,
   TransactionRepositories,
 } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
-import {
-  CancelAlarmResult,
-  StartDispatchResult,
-} from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
+import { CancelAlarmResult } from '@/modules/notification/application/port/driving/for-managing-alarms/cancel-alarm.type';
+import { StartDispatchResult } from '@/modules/notification/application/port/driving/for-managing-alarms/start-dispatch.type';
 import { CancelAlarmService } from '@/modules/notification/application/service/alarm/cancel-alarm.service';
 import { ExpansionPageAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/expand-next-page.type';
 import { ExpandNextPageService } from '@/modules/notification/application/service/expansion/expand-next-page.service';

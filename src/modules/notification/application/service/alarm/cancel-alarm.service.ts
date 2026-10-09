@@ -3,8 +3,10 @@ import { AlarmTransition, AlarmTransitioned } from '@/modules/notification/domai
 import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
 import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
-import { AlarmCommand } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-command.type';
-import { CancelAlarmResult } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
+import {
+  CancelAlarmCommand,
+  CancelAlarmResult,
+} from '@/modules/notification/application/port/driving/for-managing-alarms/cancel-alarm.type';
 import { CancelAlarmUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/cancel-alarm.use-case';
 import { AlarmViewMapper } from '@/modules/notification/application/service/alarm/view/alarm-view.mapper';
 import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
@@ -21,7 +23,7 @@ export class CancelAlarmService implements CancelAlarmUseCase {
     private readonly clock: ClockPort,
   ) {}
 
-  execute({ alarmId }: Readonly<AlarmCommand>): Promise<CancelAlarmResult> {
+  execute({ alarmId }: Readonly<CancelAlarmCommand>): Promise<CancelAlarmResult> {
     if (!AlarmPredicates.isAlarmId(alarmId)) {
       return Promise.resolve({ kind: 'not-found', error: { code: 'ALARM_NOT_FOUND', alarmId } });
     }

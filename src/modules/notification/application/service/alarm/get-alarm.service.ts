@@ -4,8 +4,10 @@ import { DeliveryStatusCounts } from '@/modules/notification/domain/delivery/del
 import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
 import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
 import { SnapshotRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
-import { AlarmResult } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
-import { GetAlarmQuery } from '@/modules/notification/application/port/driving/for-managing-alarms/get-alarm.type';
+import {
+  GetAlarmQuery,
+  GetAlarmResult,
+} from '@/modules/notification/application/port/driving/for-managing-alarms/get-alarm.type';
 import { GetAlarmUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/get-alarm.use-case';
 import { AlarmViewMapper } from '@/modules/notification/application/service/alarm/view/alarm-view.mapper';
 import { DeliveryProgressViewMapper } from '@/modules/notification/application/service/alarm/view/delivery-progress-view.mapper';
@@ -13,12 +15,12 @@ import { DeliveryProgressViewMapper } from '@/modules/notification/application/s
 export class GetAlarmService implements GetAlarmUseCase {
   constructor(private readonly transaction: TransactionPort) {}
 
-  async execute({ alarmId }: Readonly<GetAlarmQuery>): Promise<AlarmResult> {
+  async execute({ alarmId }: Readonly<GetAlarmQuery>): Promise<GetAlarmResult> {
     if (!AlarmPredicates.isAlarmId(alarmId)) {
       return { kind: 'not-found', error: { code: 'ALARM_NOT_FOUND', alarmId } };
     }
     return this.transaction.readSnapshot(
-      (repositories: SnapshotRepositories): Promise<AlarmResult> =>
+      (repositories: SnapshotRepositories): Promise<GetAlarmResult> =>
         GetAlarmService.readAlarmWithProgress(repositories, alarmId),
     );
   }
@@ -26,7 +28,7 @@ export class GetAlarmService implements GetAlarmUseCase {
   private static async readAlarmWithProgress(
     { alarmRepository, deliveryRepository }: SnapshotRepositories,
     alarmId: AlarmId,
-  ): Promise<AlarmResult> {
+  ): Promise<GetAlarmResult> {
     const lookup: AlarmLookup = await alarmRepository.findById(alarmId);
     if (lookup.kind === 'missing') {
       return { kind: 'not-found', error: { code: 'ALARM_NOT_FOUND', alarmId } };

@@ -1,6 +1,6 @@
-import { AlarmStatusName } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
 import {
   AlarmKindName,
+  AlarmStatusName,
   AlarmView,
 } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-view.type';
 
