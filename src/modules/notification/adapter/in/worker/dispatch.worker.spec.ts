@@ -320,6 +320,7 @@ describe('DispatchWorker', () => {
     );
     expect(exit).toHaveBeenCalledWith(1);
     expect(sender.completed).toBe(0);
+    vi.useRealTimers();
     sender.release.open();
     await closing;
   });
