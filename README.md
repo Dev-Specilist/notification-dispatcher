@@ -424,9 +424,131 @@ OpenAPI 3.0 문서는 `/docs-json`에서, 같은 문서의 Swagger UI는 `/docs`
 | `POST` | `/alarms/:id/cancel` | 발송 취소 |
 | `GET` | `/livez` · `/readyz` | liveness(의존성을 보지 않음) · readiness(종료 중이거나 DB에 1초 안에 쿼리할 수 없으면 503) 프로브 |
 
-에러는 RFC 9457 Problem Details로 응답합니다. 예외는 `/livez` · `/readyz`로, k8s 프로브가 기대하는 terminus 형식을 그대로 유지합니다. 도메인 오류는 `ALARM_NOT_FOUND`(404), `ALARM_STATE_CONFLICT`(409)처럼 HTTP 상태와 `code`로 바꿔 응답합니다.
+알림의 상태는 `DRAFT` → `DISPATCHING` → `COMPLETED`, 그리고 `DRAFT` · `DISPATCHING`에서 `CANCELLED`로만 바뀝니다. 응답에는 그 상태에 해당하는 시각만 들어갑니다(`dispatchedAt` · `completedAt` · `cancelledAt`).
+
+아래 예시는 `docker compose up`으로 띄운 서버의 실제 응답입니다(id · 시각은 실행마다 다릅니다).
+
+### 알림 생성 — `POST /alarms`
+
+대량 알림은 전체 사용자에게, 긴급 알림은 `recipientIds`로 지정한 사용자(1~100명)에게 보냅니다. 대량 알림에는 `recipientIds`를 넣지 않습니다.
+
+```bash
+curl -X POST localhost:3000/alarms -H 'Content-Type: application/json' \
+  -d '{"title":"추석 이벤트 안내","body":"추석 맞이 쿠폰이 도착했습니다","kind":"BULK"}'
+```
 
 ```json
+201 Created
+{
+  "id": "af8abf04-e0fe-4405-8828-806d87c1aef3",
+  "title": "추석 이벤트 안내",
+  "body": "추석 맞이 쿠폰이 도착했습니다",
+  "kind": "BULK",
+  "recipientIds": [],
+  "createdAt": "2026-10-09T01:18:46.881Z",
+  "status": "DRAFT"
+}
+```
+
+```bash
+curl -X POST localhost:3000/alarms -H 'Content-Type: application/json' \
+  -d '{"title":"결제 인증번호","body":"인증번호는 482913 입니다","kind":"URGENT","recipientIds":["u_000001","u_000002"]}'
+```
+
+### 발송 시작 — `POST /alarms/:id/dispatch`
+
+발송은 워커가 비동기로 처리하므로 `202 Accepted`와 `DISPATCHING` 알림을 돌려줍니다. 진행 상황은 단건 조회로 확인합니다.
+
+```json
+202 Accepted
+{
+  "id": "11755e9d-05c7-4b20-b697-572625c343b6",
+  "title": "결제 인증번호",
+  "body": "인증번호는 482913 입니다",
+  "kind": "URGENT",
+  "recipientIds": ["u_000001", "u_000002"],
+  "createdAt": "2026-10-09T01:18:46.847Z",
+  "status": "DISPATCHING",
+  "dispatchedAt": "2026-10-09T01:18:46.903Z"
+}
+```
+
+### 단건 조회 — `GET /alarms/:id`
+
+알림과 수신자별 Delivery의 상태별 개수를 같은 시점의 스냅샷으로 함께 돌려줍니다.
+
+```json
+200 OK
+{
+  "id": "11755e9d-05c7-4b20-b697-572625c343b6",
+  "title": "결제 인증번호",
+  "body": "인증번호는 482913 입니다",
+  "kind": "URGENT",
+  "recipientIds": ["u_000001", "u_000002"],
+  "createdAt": "2026-10-09T01:18:46.847Z",
+  "status": "COMPLETED",
+  "dispatchedAt": "2026-10-09T01:18:46.903Z",
+  "completedAt": "2026-10-09T01:18:48.400Z",
+  "deliveries": {
+    "total": 2,
+    "byStatus": {
+      "PENDING": 0, "IN_FLIGHT": 0, "RETRY_WAIT": 0, "UNKNOWN": 0,
+      "SENT": 2, "FAILED": 0, "UNCONFIRMED": 0, "CANCELLED": 0
+    }
+  }
+}
+```
+
+### 목록 조회 — `GET /alarms`
+
+| 쿼리 | 값 | 기본값 |
+| --- | --- | --- |
+| `status` | `DRAFT` · `DISPATCHING` · `COMPLETED` · `CANCELLED` | 전체 |
+| `kind` | `BULK` · `URGENT` | 전체 |
+| `limit` | 1~100 | 20 |
+| `cursor` | 이전 응답의 `page.nextCursor` | 최신부터 |
+
+생성 역순으로 돌려주고, 다음 페이지가 있을 때만 `page.nextCursor`가 있습니다. cursor는 마지막 항목의 `(createdAt, id)`라서 페이지를 넘기는 사이에 알림이 생기거나 상태가 바뀌어도 같은 항목이 두 번 나오거나 빠지지 않습니다.
+
+```json
+200 OK   GET /alarms?limit=1
+{
+  "items": [{ "id": "af8abf04-…", "title": "추석 이벤트 안내", "kind": "BULK", "status": "CANCELLED", "…": "…" }],
+  "page": { "nextCursor": "MjAyNi0xMC0wOVQwMToxODo0Ni44ODFafGFmOGFiZjA0LWUwZmUtNDQwNS04ODI4LTgwNmQ4N2MxYWVmMw" }
+}
+```
+
+### 발송 취소 — `POST /alarms/:id/cancel`
+
+`DRAFT` · `DISPATCHING` 알림을 취소합니다. 아직 보내지 않은 Delivery는 `CANCELLED`가 되고, 이미 보낸 요청의 결과는 그대로 기록됩니다.
+
+```json
+200 OK
+{
+  "id": "af8abf04-e0fe-4405-8828-806d87c1aef3",
+  "title": "추석 이벤트 안내",
+  "body": "추석 맞이 쿠폰이 도착했습니다",
+  "kind": "BULK",
+  "recipientIds": [],
+  "createdAt": "2026-10-09T01:18:46.881Z",
+  "status": "CANCELLED",
+  "dispatchedAt": "2026-10-09T01:18:49.961Z",
+  "cancelledAt": "2026-10-09T01:18:52.027Z"
+}
+```
+
+### 에러 응답
+
+에러는 RFC 9457 Problem Details(`application/problem+json`)로 응답하고, 원인을 `code`로, 필드별 검증 오류를 `errors[]`로 줍니다. 예외는 `/livez` · `/readyz`로, k8s 프로브가 기대하는 terminus 형식을 그대로 유지합니다.
+
+| 상태 | `code` | 상황 |
+| --- | --- | --- |
+| 400 | `VALIDATION_FAILED` | 본문 · 경로 · 쿼리 값이 형식에 맞지 않거나 도메인 규칙(제목 비어 있음, 긴급 수신자 1~100명 등)을 어김 |
+| 404 | `ALARM_NOT_FOUND` | 없는 알림 |
+| 409 | `ALARM_STATE_CONFLICT` | 현재 상태에서 할 수 없는 전이(예: 완료된 알림 취소, 발송 중인 알림 다시 발송) |
+
+```json
+400 Bad Request
 {
   "type": "about:blank",
   "title": "Bad Request",
@@ -434,6 +556,19 @@ OpenAPI 3.0 문서는 `/docs-json`에서, 같은 문서의 Swagger UI는 `/docs`
   "detail": "요청 값이 올바르지 않습니다",
   "instance": "/alarms",
   "code": "VALIDATION_FAILED",
-  "errors": [{ "field": "title", "message": "Too small: expected string to have >=1 characters" }]
+  "errors": [{ "field": "title", "message": "제목이 비어 있습니다" }]
+}
+```
+
+```json
+409 Conflict
+{
+  "type": "about:blank",
+  "title": "Conflict",
+  "status": 409,
+  "detail": "COMPLETED 상태의 알림은 취소할 수 없습니다",
+  "instance": "/alarms/11755e9d-05c7-4b20-b697-572625c343b6/cancel",
+  "code": "ALARM_STATE_CONFLICT",
+  "errors": []
 }
 ```
