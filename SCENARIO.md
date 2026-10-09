@@ -9,6 +9,7 @@
 | `ALM` | 알림 도메인 규칙 | `src/modules/notification/domain/alarm/*.spec.ts` |
 | `DLV` | 수신자별 발송(Delivery) 도메인 규칙 | `src/modules/notification/domain/delivery/*.spec.ts` |
 | `UC` | 유스케이스 (포트는 in-memory fake) | `src/modules/notification/application/service/*.spec.ts` |
+| `CFG` | 종료 타이머 설정 | `src/shared/config/env.schema.spec.ts` |
 | `WRK` | 워커 실행 · 종료 | `src/modules/notification/adapter/in/worker/*.spec.ts` |
 | `DB` | 저장소 · 동시성 (Testcontainers PostgreSQL) | `src/modules/notification/adapter/out/persistence/*.int-spec.ts` · `src/modules/notification/testing/contract/*.contract.ts` |
 | `EXT` | 외부 API adapter (Testcontainers mock 서버) | `src/modules/notification/adapter/out/external-api/*.int-spec.ts` |
@@ -126,6 +127,14 @@ Delivery
 | UC-17 | 상태·종류가 다른 알림 여러 개 | 목록 조회 유스케이스 | 필터에 맞는 알림을 생성 역순으로 한 페이지 반환하고, 더 있으면 다음 시작 위치를 함께 반환한다 |
 | UC-18 | 진행 중인 확장 작업 여러 개 | 다음 확장 페이지 유스케이스 | 잡을 수 있는 작업 하나의 한 페이지만 처리하고 진행을 기록해, 다음 페이지는 다른 워커도 이어받을 수 있다 |
 | UC-19 | 발송 중인 알림 여러 개 | 완료 확인 유스케이스 | 발송 중인 알림을 모두 확인해 확장이 끝나고 미종결 Delivery가 없는 알림만 `COMPLETED`로 바꾼다 |
+
+## CFG · 종료 타이머 설정
+
+| ID | Given | When | Then |
+| --- | --- | --- | --- |
+| CFG-01 | 종료 drain·timeout 중 하나 또는 두 값의 합계가 2,147,483,647ms를 초과한다 | 환경변수를 검증한다 | 프로세스 기동 전에 설정을 거부한다 |
+| CFG-02 | drain이 0 이상이고 timeout이 양수이며 합계가 2,147,483,647ms 이하인 정수 설정 | 환경변수를 검증한다 | drain 0과 합계 상한을 포함해 허용한다 |
+| CFG-03 | lease·확인 기간이 Node 타이머 상한을 초과한다 | 환경변수를 검증한다 | 직접 타이머에 쓰지 않는 일반 기간은 종료 타이머 상한 때문에 거부하지 않는다 |
 
 ## WRK · 워커 실행과 종료
 

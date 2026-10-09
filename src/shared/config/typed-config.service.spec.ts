@@ -3,7 +3,7 @@ import { LogLevel } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { createEnvSchema } from '@/shared/config/env.schema';
 import { Host, Milliseconds, Port, portSchema } from '@/shared/config/primitive.schema';
-import { DatabaseUrl } from '@/shared/config/primitive.type';
+import { DatabaseUrl, TimerDelayMs } from '@/shared/config/primitive.type';
 import { TypedConfigModule } from '@/shared/config/typed-config.module';
 import { TypedConfigService } from '@/shared/config/typed-config.service';
 import { LogFormat } from '@/shared/logging/logging.schema';
@@ -36,6 +36,7 @@ describe('TypedConfigService', () => {
     expectTypeOf(config.get('PORT')).toEqualTypeOf<Port>();
     expectTypeOf(config.get('HOST')).toEqualTypeOf<Host>();
     expectTypeOf(config.get('SHUTDOWN_DRAIN_MS')).toEqualTypeOf<Milliseconds>();
+    expectTypeOf(config.get('SHUTDOWN_TIMEOUT_MS')).toEqualTypeOf<TimerDelayMs>();
     expectTypeOf(config.get('LOG_LEVEL')).toExtend<LogLevel>();
     expectTypeOf(config.get('LOG_FORMAT')).toEqualTypeOf<LogFormat>();
     expectTypeOf(config.get('DATABASE_URL')).toEqualTypeOf<DatabaseUrl>();

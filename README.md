@@ -298,6 +298,8 @@ Delivery   PENDING ─claim(leaseToken)─▶ IN_FLIGHT ─202──────
 4. `onApplicationShutdown`: DB 연결을 닫고, 프로세스는 exit 0으로 끝납니다.
 5. 제한 시간 안에 끝나지 않으면 exit 1로 강제 종료합니다. 결과를 저장하지 못한 Delivery는 lease를 가진 채 남고, lease가 만료되면 다른 워커가 `UNKNOWN`으로 복구해 발송 내역 조회로 확정합니다.
 
+`SHUTDOWN_DRAIN_MS`는 0 이상, `SHUTDOWN_TIMEOUT_MS`는 양수 정수이며, 각 값과 합계는 Node 타이머 상한인 2,147,483,647ms 이하로 제한합니다. 상한을 넘는 타이머가 1ms로 실행되어 조기에 강제 종료되는 것을 막기 위해 환경변수 검증에서 거부합니다.
+
 ### 중복과 누락을 막는 방법
 
 | 상황 | 처리 |

@@ -34,6 +34,10 @@ export const timerDelayMsSchema = integer
   .pipe(z.number().min(1).max(MAX_TIMER_DELAY_MS))
   .brand<'TimerDelayMs'>();
 
+export const timerDelayOrZeroMsSchema = integer
+  .pipe(z.number().min(0).max(MAX_TIMER_DELAY_MS))
+  .brand<'Milliseconds'>();
+
 export const databaseUrlSchema = z.url({ protocol: /^postgres(ql)?$/ }).brand<'DatabaseUrl'>();
 
 export const httpUrlSchema = z.url({ protocol: /^https?$/ }).brand<'HttpUrl'>();

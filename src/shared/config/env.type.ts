@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import {
   HostSchema,
-  MillisecondsSchema,
   PortSchema,
   PositiveMillisecondsSchema,
 } from '@/shared/config/primitive.schema';
@@ -10,14 +9,15 @@ import {
   HttpUrlSchema,
   PositiveIntegerSchema,
   TimerDelayMsSchema,
+  TimerDelayOrZeroMsSchema,
 } from '@/shared/config/primitive.type';
 import { LogFormatSchema, LogLevelSchema } from '@/shared/logging/logging.schema';
 
 export type EnvShape = {
   readonly HOST: z.ZodDefault<HostSchema>;
   readonly PORT: z.ZodDefault<PortSchema>;
-  readonly SHUTDOWN_DRAIN_MS: z.ZodDefault<MillisecondsSchema>;
-  readonly SHUTDOWN_TIMEOUT_MS: z.ZodDefault<PositiveMillisecondsSchema>;
+  readonly SHUTDOWN_DRAIN_MS: z.ZodDefault<TimerDelayOrZeroMsSchema>;
+  readonly SHUTDOWN_TIMEOUT_MS: z.ZodDefault<TimerDelayMsSchema>;
   readonly LOG_LEVEL: z.ZodDefault<LogLevelSchema>;
   readonly LOG_FORMAT: z.ZodDefault<LogFormatSchema>;
   readonly DATABASE_URL: DatabaseUrlSchema;

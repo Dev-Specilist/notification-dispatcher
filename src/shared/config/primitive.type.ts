@@ -4,6 +4,7 @@ import type {
   httpUrlSchema,
   positiveIntegerSchema,
   timerDelayMsSchema,
+  timerDelayOrZeroMsSchema,
 } from '@/shared/config/primitive.schema';
 
 export type DatabaseUrlSchema = typeof databaseUrlSchema;
@@ -21,3 +22,5 @@ export type PositiveInteger = z.infer<PositiveIntegerSchema>;
 export type TimerDelayMsSchema = typeof timerDelayMsSchema;
 
 export type TimerDelayMs = z.infer<TimerDelayMsSchema>;
+
+export type TimerDelayOrZeroMsSchema = typeof timerDelayOrZeroMsSchema;
