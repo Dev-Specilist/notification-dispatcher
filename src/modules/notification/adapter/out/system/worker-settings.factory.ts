@@ -14,6 +14,7 @@ import {
 } from '@/modules/notification/adapter/out/system/worker-settings.type';
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
+import { TypedConfigService } from '@/shared/config/typed-config.service';
 
 type RetryEnvPrefix = 'RETRY' | 'LOOKUP_RETRY';
 
@@ -24,6 +25,24 @@ export class WorkerSettingsFactory {
 
   private static readonly MIN_EMISSION_INTERVAL_MS: number =
     1_000 / WorkerSettingsFactory.MAX_PERMITS_PER_SECOND;
+
+  static fromConfig(config: TypedConfigService): WorkerSettings {
+    return WorkerSettingsFactory.create({
+      MOCK_API_URL: config.get('MOCK_API_URL'),
+      DISPATCH_MAX_REQUEST_MS: config.get('DISPATCH_MAX_REQUEST_MS'),
+      DISPATCH_LEASE_MS: config.get('DISPATCH_LEASE_MS'),
+      RECONCILE_DELAY_MS: config.get('RECONCILE_DELAY_MS'),
+      RETRY_MAX_ATTEMPTS: config.get('RETRY_MAX_ATTEMPTS'),
+      RETRY_BASE_DELAY_MS: config.get('RETRY_BASE_DELAY_MS'),
+      RETRY_MAX_DELAY_MS: config.get('RETRY_MAX_DELAY_MS'),
+      LOOKUP_RETRY_MAX_ATTEMPTS: config.get('LOOKUP_RETRY_MAX_ATTEMPTS'),
+      LOOKUP_RETRY_BASE_DELAY_MS: config.get('LOOKUP_RETRY_BASE_DELAY_MS'),
+      LOOKUP_RETRY_MAX_DELAY_MS: config.get('LOOKUP_RETRY_MAX_DELAY_MS'),
+      UNCONFIRMED_AFTER_MS: config.get('UNCONFIRMED_AFTER_MS'),
+      USER_PAGE_LIMIT: config.get('USER_PAGE_LIMIT'),
+      RATE_LIMIT_INTERVAL_MS: config.get('RATE_LIMIT_INTERVAL_MS'),
+    });
+  }
 
   static create(env: Readonly<WorkerEnv>): WorkerSettings {
     const maxRequestMs: DurationMs = WorkerSettingsFactory.durationOf(

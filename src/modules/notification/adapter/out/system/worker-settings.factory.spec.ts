@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { Test, TestingModule } from '@nestjs/testing';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import { AttemptLimit } from '@/modules/notification/domain/delivery/delivery.type';
 import { RetryPolicy } from '@/modules/notification/domain/delivery/retry-policy';
@@ -13,10 +14,30 @@ import { DurationMs } from '@/shared/domain/duration.type';
 import { createEnvSchema } from '@/shared/config/env.schema';
 import { Env } from '@/shared/config/env.type';
 import { portSchema } from '@/shared/config/primitive.schema';
+import { TypedConfigModule } from '@/shared/config/typed-config.module';
+import { TypedConfigService } from '@/shared/config/typed-config.service';
+
+type EnvEntry = Readonly<[key: string, rawValue: string]>;
 
 type InvalidEnvCase = Readonly<
   [label: string, overrides: Readonly<Record<string, string>>, reason: RegExp]
 >;
+
+const NON_DEFAULT_ENV: Readonly<Record<string, string>> = {
+  MOCK_API_URL: 'http://mock:4000',
+  DISPATCH_MAX_REQUEST_MS: '3000',
+  DISPATCH_LEASE_MS: '20000',
+  RECONCILE_DELAY_MS: '40000',
+  RETRY_MAX_ATTEMPTS: '3',
+  RETRY_BASE_DELAY_MS: '500',
+  RETRY_MAX_DELAY_MS: '30000',
+  LOOKUP_RETRY_MAX_ATTEMPTS: '6',
+  LOOKUP_RETRY_BASE_DELAY_MS: '2000',
+  LOOKUP_RETRY_MAX_DELAY_MS: '20000',
+  UNCONFIRMED_AFTER_MS: '600000',
+  USER_PAGE_LIMIT: '500',
+  RATE_LIMIT_INTERVAL_MS: '25',
+};
 
 const env = (overrides: Readonly<Record<string, string>>): WorkerEnv => {
   const parsed: Env = createEnvSchema(portSchema.parse(3001)).parse({
@@ -53,6 +74,27 @@ const retryPolicy = (maxAttempts: number, baseDelayMs: number, maxDelayMs: numbe
 };
 
 describe('WorkerSettingsFactory', () => {
+  afterEach((): void => {
+    vi.unstubAllEnvs();
+  });
+
+  it('검증된 설정 서비스의 env 값을 그대로 옮겨 같은 워커 설정을 만든다', async (): Promise<void> => {
+    vi.stubEnv('DATABASE_URL', 'postgres://app:secret@localhost:5432/notification');
+    Object.entries(NON_DEFAULT_ENV).forEach(([key, rawValue]: EnvEntry): void => {
+      vi.stubEnv(key, rawValue);
+    });
+    const moduleRef: TestingModule = await Test.createTestingModule({
+      imports: [TypedConfigModule.forRoot(createEnvSchema(portSchema.parse(3001)))],
+    }).compile();
+
+    const settings: WorkerSettings = WorkerSettingsFactory.fromConfig(
+      moduleRef.get(TypedConfigService),
+    );
+    await moduleRef.close();
+
+    expect(settings).toEqual(WorkerSettingsFactory.create(env(NON_DEFAULT_ENV)));
+  });
+
   it('env 값을 발송·lease 복구·reconcile 설정과 mock API·제한기 설정으로 바꾼다', (): void => {
     const settings: WorkerSettings = WorkerSettingsFactory.create(env({}));
 
@@ -77,23 +119,7 @@ describe('WorkerSettingsFactory', () => {
   });
 
   it('기본값과 다른 유효한 env 값을 그대로 설정에 반영한다', (): void => {
-    const settings: WorkerSettings = WorkerSettingsFactory.create(
-      env({
-        MOCK_API_URL: 'http://mock:4000',
-        DISPATCH_MAX_REQUEST_MS: '3000',
-        DISPATCH_LEASE_MS: '20000',
-        RECONCILE_DELAY_MS: '40000',
-        RETRY_MAX_ATTEMPTS: '3',
-        RETRY_BASE_DELAY_MS: '500',
-        RETRY_MAX_DELAY_MS: '30000',
-        LOOKUP_RETRY_MAX_ATTEMPTS: '6',
-        LOOKUP_RETRY_BASE_DELAY_MS: '2000',
-        LOOKUP_RETRY_MAX_DELAY_MS: '20000',
-        UNCONFIRMED_AFTER_MS: '600000',
-        USER_PAGE_LIMIT: '500',
-        RATE_LIMIT_INTERVAL_MS: '25',
-      }),
-    );
+    const settings: WorkerSettings = WorkerSettingsFactory.create(env(NON_DEFAULT_ENV));
 
     expect(settings.deliverySettings).toMatchObject({
       leaseMs: 20_000,
