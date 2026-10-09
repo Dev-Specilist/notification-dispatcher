@@ -147,7 +147,7 @@ env는 기동 시 zod로 검증하고, 값이 잘못되거나 서로 맞지 않�
 | `pnpm test:int`                | integration: Drizzle repository · rate limiter · mock API adapter · 마이그레이션 · 종료 조율 · 워커 프로세스 기동, 이어서 characterization(mock 한도 방식 · 발송 기록 시점) | Docker    |
 | `pnpm test:e2e`                | HTTP API 동작(상태 코드 · 응답 형식) · OpenAPI 문서, 실제 워커 프로세스 1~3대로 발송 전체 흐름 · 강제 종료 · 취소 · SIGTERM                                                 | Docker    |
 
-- integration · e2e는 Testcontainers로 실제 PostgreSQL과 mock 컨테이너를 띄웁니다. PostgreSQL은 실행마다 한 번 띄워 마이그레이션한 템플릿 DB를 만들고, 테스트 파일마다 복제한 database를 씁니다. mock은 테스트마다 시나리오에 맞는 설정(`USER_COUNT` · `ERROR_RATE` · `TIMEOUT_RATE` 등)으로 띄웁니다.
+- integration · e2e는 Testcontainers로 실제 PostgreSQL과 mock 컨테이너를 띄웁니다. PostgreSQL은 실행마다 한 번 띄워 마이그레이션한 템플릿 DB를 만들고, 테스트 파일마다 복제한 database를 씁니다. mock은 시나리오에 맞는 설정(`USER_COUNT` · `ERROR_RATE` · `TIMEOUT_RATE` 등)별로 띄우고, 발송 흐름 E2E에서는 같은 설정을 쓰는 테스트끼리 컨테이너를 공유합니다(발송 내역은 발송 건 id인 `clientRef`로 조회하므로 테스트끼리 섞이지 않음).
 - repository 계약 테스트(contract test, `testing/contract/`) 하나를 in-memory fake와 Drizzle adapter 양쪽에 돌려, unit 테스트의 fake가 실제 구현과 똑같이 동작하게 합니다.
 - e2e는 "정확히 1번 보냈다"를 DB가 아니라 mock의 발송 내역으로 발송 건마다 셉니다.
 
