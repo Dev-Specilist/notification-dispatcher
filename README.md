@@ -529,6 +529,7 @@ Delivery  PENDING ─claim─▶ IN_FLIGHT ─202──────────�
 
 - **마이그레이션은 별도 일회성 `migrate` 엔트리포인트 · 컨테이너입니다.** 앱 기동 때 하면 API 서버 · 워커 여러 개가 동시에 실행하는데 Drizzle의 `migrate()`는 잠금을 잡지 않습니다. advisory lock으로 감싸는 대안보다 단계를 분리하는 쪽이 단순하고, compose가 순서를 보장합니다.
 - **`/livez`와 `/readyz`를 나눕니다.** liveness가 DB를 보면 DB 장애 때 멀쩡한 프로세스까지 재시작됩니다.
+- **기동할 때 DB에 한 번 연결해 봅니다.** pg Pool은 첫 쿼리 때 연결하므로, 그대로 두면 DB 주소가 틀려도 API 서버 · 워커가 떠서 readiness만 503을 내거나 워커 루프가 오류 로그만 반복합니다. `DatabaseModule`의 `onModuleInit`에서 `SELECT 1`(연결 대기 최대 5초)이 실패하면 `failed to start: database is unreachable at startup: …`을 남기고 exit 1로 끝납니다(`migrate` 포함, DB-22).
 - **연결 수는 `DATABASE_POOL_MAX`(20)로 정합니다.** 워커 한 프로세스가 루프 12개(발송 8 + 4)를 돌려 pg 기본값 10이면 연결을 기다리는 루프가 생깁니다. 대가로 (워커 대수 + API 서버) × 20이 PostgreSQL `max_connections`(기본 100)를 넘지 않게 조정해야 합니다.
 - **종료는 Nest lifecycle 단계에 나눠 둡니다.** 같은 단계 안의 순서는 모듈 깊이와 등록 순서에 좌우되므로, 앞뒤가 중요한 일은 서로 다른 단계에 둡니다.
   1. 종료 신호를 받는 즉시 readiness를 내리고, 제한 시간(`SHUTDOWN_DRAIN_MS` + `SHUTDOWN_TIMEOUT_MS`)을 재는 감시 타이머를 시작합니다.

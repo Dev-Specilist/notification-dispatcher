@@ -26,6 +26,8 @@ interface BackendRow {
   readonly pid: number;
 }
 
+const UNREACHABLE_DATABASE_URL: string = 'postgres://app:secret@127.0.0.1:1/notification';
+
 describe('DatabaseModule', () => {
   let testDatabase: TestDatabase;
   let moduleRef: TestingModule;
@@ -57,6 +59,22 @@ describe('DatabaseModule', () => {
     const result: QueryResult<ProbeRow> = await pool.query<ProbeRow>('SELECT 1 AS answer');
 
     expect(result.rows).toEqual([{ answer: 1 }]);
+  });
+
+  it('DB-22 DB에 연결할 수 있다 / 모듈을 초기화한다 → 연결 확인을 통과해 기동을 이어간다', async (): Promise<void> => {
+    await expect(moduleRef.init()).resolves.toBe(moduleRef);
+  });
+
+  it('DB-22 DB에 연결할 수 없다 / 모듈을 초기화한다 → 초기화 단계에서 원인을 담은 오류로 기동을 멈춘다', async (): Promise<void> => {
+    vi.stubEnv('DATABASE_URL', UNREACHABLE_DATABASE_URL);
+    const unreachableModuleRef: TestingModule = await Test.createTestingModule({
+      imports: [TypedConfigModule.forRoot(createEnvSchema(portSchema.parse(3000))), DatabaseModule],
+    }).compile();
+
+    await expect(unreachableModuleRef.init()).rejects.toThrow(
+      /database is unreachable at startup: .+/,
+    );
+    await unreachableModuleRef.get(Pool).end();
   });
 
   it('종료 단계에서 DB Pool을 닫는다', async (): Promise<void> => {

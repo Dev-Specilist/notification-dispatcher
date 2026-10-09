@@ -186,6 +186,7 @@ Delivery
 | DB-19 | reconcile 대상으로 예약해 저장한 `UNKNOWN` Delivery | reconcile 후보를 고른다 | 예약 시각 전에는 후보에서 빠지고 이후 다시 후보가 된다 |
 | DB-20 | 응답을 기다리는 Delivery가 있는 알림을 취소 트랜잭션이 잠그고 대기 Delivery를 취소한 채 아직 커밋하지 않았다 | 워커가 재시도할 결과를 저장한다 | 결과 저장이 취소 커밋을 기다렸다가 취소된 알림을 보고 `RETRY_WAIT` 대신 `CANCELLED`로 저장한다 (발송 결과와 reconcile 결과 모두 알림을 공유 잠금(`FOR SHARE`)으로 읽는다) |
 | DB-21 | claim을 커밋한 Delivery가 있는 알림을 취소 트랜잭션이 잠그고 대기 Delivery를 취소한 채 아직 커밋하지 않았다 | 워커가 보내기 직전 알림을 확인한다 | 확인이 취소 커밋을 기다렸다가 취소된 알림을 보고 요청을 보내지 않은 채 `CANCELLED`로 저장한다 |
+| DB-22 | DB에 연결할 수 없다 (또는 연결할 수 있다) | api · worker · migrate의 모듈을 초기화한다 | 초기화 단계에서 `SELECT 1`이 실패해 원인을 담은 오류로 기동을 멈춘다 (연결할 수 있으면 기동을 이어간다) |
 
 ## EXT · 외부 API adapter (Testcontainers mock 서버)
 
