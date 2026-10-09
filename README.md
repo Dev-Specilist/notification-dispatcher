@@ -121,21 +121,22 @@ docker rm -f notification-postgres notification-mock
 
 env는 기동 시 zod로 검증하고, 값이 잘못되거나 서로 맞지 않는 조합(예: lease ≤ 요청 타임아웃, 허가 간격 < 21ms)이면 기동하지 않습니다.
 
-| 환경 변수                                                                            | 기본값                                                       | 설명                                                                      |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| `DATABASE_URL`                                                                       | (필수)                                                       | PostgreSQL 접속 주소                                                      |
-| `DATABASE_POOL_MAX`                                                                  | `20`                                                         | 프로세스당 PostgreSQL 연결 수 상한                                        |
-| `MOCK_API_URL`                                                                       | `http://localhost:4000`                                      | 외부 발송 API 주소                                                        |
-| `DISPATCH_CONCURRENCY`                                                               | `8`                                                          | 워커 프로세스당 동시 발송 루프 수                                         |
-| `DISPATCH_MAX_REQUEST_MS` · `DISPATCH_LEASE_MS`                                      | `5000` · `30000`                                             | 외부 API 요청 타임아웃 · 발송 건과 확장 작업의 lease                      |
-| `RECONCILE_DELAY_MS` · `UNCONFIRMED_AFTER_MS`                                        | `35000` · `3600000`                                          | 결과 불명 건을 조회하기 전 대기 · 이 기간 안에 확정 못 하면 `UNCONFIRMED` |
-| `RETRY_MAX_ATTEMPTS` · `RETRY_BASE_DELAY_MS` · `RETRY_MAX_DELAY_MS`                  | `5` · `1000` · `60000`                                       | 500/503 재시도                                                            |
-| `LOOKUP_RETRY_BASE_DELAY_MS` · `LOOKUP_RETRY_MAX_DELAY_MS`                           | `5000` · `60000`                                             | 발송 내역 조회 실패 시 backoff                                            |
-| `RATE_LIMIT_INTERVAL_MS`                                                             | `21`                                                         | 발송 허가 간격(21 미만이면 기동 거부). 허가 유효 시간은 이 값의 2배       |
-| `USER_PAGE_LIMIT`                                                                    | `1000`                                                       | 수신자 확장 페이지 크기(1~1000)                                           |
-| `WORKER_POLL_INTERVAL_MS` · `WORKER_ERROR_DELAY_MS` · `COMPLETION_CHECK_INTERVAL_MS` | `100` · `1000` · `1000`                                      | 할 일이 없을 때 · 오류 뒤 · 완료 확인 한 바퀴 뒤 대기                     |
-| `SHUTDOWN_DRAIN_MS` · `SHUTDOWN_TIMEOUT_MS`                                          | `5000` · `25000`                                             | 종료 시 drain 시간 · 제한 시간                                            |
-| `HOST` · `PORT` · `LOG_LEVEL` · `LOG_FORMAT`                                         | `0.0.0.0` · API 서버 `3000` / 워커 `3001` · `log` · `pretty` | compose는 `LOG_FORMAT=json`                                               |
+| 환경 변수                                                                            | 기본값                                                       | 설명                                                                                                          |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                                                       | (필수)                                                       | PostgreSQL 접속 주소                                                                                          |
+| `DATABASE_POOL_MAX`                                                                  | `20`                                                         | 프로세스당 PostgreSQL 연결 수 상한                                                                            |
+| `DATABASE_STATEMENT_TIMEOUT_MS` · `DATABASE_LOCK_TIMEOUT_MS`                         | `15000` · `5000`                                             | 쿼리 한 문장의 실행 시간 상한 · 행 잠금을 기다리는 시간 상한(PostgreSQL `statement_timeout` · `lock_timeout`) |
+| `MOCK_API_URL`                                                                       | `http://localhost:4000`                                      | 외부 발송 API 주소                                                                                            |
+| `DISPATCH_CONCURRENCY`                                                               | `8`                                                          | 워커 프로세스당 동시 발송 루프 수                                                                             |
+| `DISPATCH_MAX_REQUEST_MS` · `DISPATCH_LEASE_MS`                                      | `5000` · `30000`                                             | 외부 API 요청 타임아웃 · 발송 건과 확장 작업의 lease                                                          |
+| `RECONCILE_DELAY_MS` · `UNCONFIRMED_AFTER_MS`                                        | `35000` · `3600000`                                          | 결과 불명 건을 조회하기 전 대기 · 이 기간 안에 확정 못 하면 `UNCONFIRMED`                                     |
+| `RETRY_MAX_ATTEMPTS` · `RETRY_BASE_DELAY_MS` · `RETRY_MAX_DELAY_MS`                  | `5` · `1000` · `60000`                                       | 500/503 재시도                                                                                                |
+| `LOOKUP_RETRY_BASE_DELAY_MS` · `LOOKUP_RETRY_MAX_DELAY_MS`                           | `5000` · `60000`                                             | 발송 내역 조회 실패 시 backoff                                                                                |
+| `RATE_LIMIT_INTERVAL_MS`                                                             | `21`                                                         | 발송 허가 간격(21 미만이면 기동 거부). 허가 유효 시간은 이 값의 2배                                           |
+| `USER_PAGE_LIMIT`                                                                    | `1000`                                                       | 수신자 확장 페이지 크기(1~1000)                                                                               |
+| `WORKER_POLL_INTERVAL_MS` · `WORKER_ERROR_DELAY_MS` · `COMPLETION_CHECK_INTERVAL_MS` | `100` · `1000` · `1000`                                      | 할 일이 없을 때 · 오류 뒤 · 완료 확인 한 바퀴 뒤 대기                                                         |
+| `SHUTDOWN_DRAIN_MS` · `SHUTDOWN_TIMEOUT_MS`                                          | `5000` · `25000`                                             | 종료 시 drain 시간 · 제한 시간                                                                                |
+| `HOST` · `PORT` · `LOG_LEVEL` · `LOG_FORMAT`                                         | `0.0.0.0` · API 서버 `3000` / 워커 `3001` · `log` · `pretty` | compose는 `LOG_FORMAT=json`                                                                                   |
 
 ### 1-3. 테스트
 
@@ -531,6 +532,7 @@ Delivery  PENDING ─claim─▶ IN_FLIGHT ─202──────────�
 - **마이그레이션은 별도 일회성 `migrate` 엔트리포인트 · 컨테이너입니다.** 앱 기동 때 하면 API 서버 · 워커 여러 개가 동시에 실행하는데 Drizzle의 `migrate()`는 잠금을 잡지 않습니다. advisory lock으로 감싸는 대안보다 단계를 분리하는 쪽이 단순하고, compose가 순서를 보장합니다.
 - **`/livez`와 `/readyz`를 나눕니다.** liveness가 DB를 보면 DB 장애 때 멀쩡한 프로세스까지 재시작됩니다.
 - **기동할 때 DB에 한 번 연결해 봅니다.** pg Pool은 첫 쿼리 때 연결하므로, 그대로 두면 DB 주소가 틀려도 API 서버 · 워커가 떠서 readiness만 503을 내거나 워커 루프가 오류 로그만 반복합니다. `DatabaseModule`의 `onModuleInit`에서 `SELECT 1`(연결 대기 최대 5초)이 실패하면 `failed to start: database is unreachable at startup: …`을 남기고 exit 1로 끝납니다(`migrate` 포함, DB-22).
+- **쿼리 실행은 15초, 잠금 대기는 5초에서 끊습니다.** pg Pool의 `statement_timeout` · `lock_timeout`을 연결마다 걸어, 잠금 경합이나 예상 밖의 느린 쿼리가 연결과 행 잠금을 붙잡은 채 워커 루프 전체를 멈추지 않게 합니다. 끊긴 트랜잭션은 롤백되고 연결은 Pool로 돌아오며(DB-23 · DB-24), 그 루프는 오류 지연 뒤 다시 시도합니다. 기본값은 가장 무거운 쿼리를 10만 건에서 잰 값에 여유를 둔 것입니다. 대기 건 10만 건 취소(`UPDATE`) 약 1.9초, 상태별 집계 약 0.03초였습니다(PostgreSQL 18 컨테이너, 1회). 취소 트랜잭션은 알림 행을 잠근 채 이 `UPDATE`를 하므로, 같은 알림의 결과 저장이 기다리는 시간(약 2초)보다 잠금 대기 제한을 길게 두었습니다. `migrate`는 큰 테이블의 DDL이 오래 걸릴 수 있어 그 연결에서만 `statement_timeout`을 끄고, 잠금 대기 제한은 그대로 둬 실행 중인 앱의 잠금 뒤에서 무한히 기다리지 않게 합니다(DB-25). 트랜잭션 유휴 제한(`idle_in_transaction_session_timeout`)은 두지 않았습니다. 트랜잭션 안에서 외부 호출을 기다리지 않아 걸릴 일이 없고, 걸리면 꺼낸 연결에서 오류 이벤트가 나 처리할 곳이 따로 필요하기 때문입니다.
 - **연결 수는 `DATABASE_POOL_MAX`(20)로 정합니다.** 워커 한 프로세스가 루프 12개(발송 8 + 4)를 돌려 pg 기본값 10이면 연결을 기다리는 루프가 생깁니다. 대가로 (워커 대수 + API 서버) × 20이 PostgreSQL `max_connections`(기본 100)를 넘지 않게 조정해야 합니다.
 - **종료는 Nest lifecycle 단계에 나눠 둡니다.** 같은 단계 안의 순서는 모듈 깊이와 등록 순서에 좌우되므로, 앞뒤가 중요한 일은 서로 다른 단계에 둡니다.
   1. 종료 신호를 받는 즉시 readiness를 내리고, 제한 시간(`SHUTDOWN_DRAIN_MS` + `SHUTDOWN_TIMEOUT_MS`)을 재는 감시 타이머를 시작합니다.
@@ -594,7 +596,6 @@ Delivery  PENDING ─claim─▶ IN_FLIGHT ─202──────────�
 - **결과 불명 건 사후 감사와 append-only 시도 이력:** 상태 전이마다 한 행을 쌓는 이력 테이블과, 알림 완료 후 `UNKNOWN`을 거친 건만 다시 조회하는 감사로 `SENT` 확정 뒤 생긴 중복과 시도 경과를 드러내겠습니다.
 - **rate limiter가 거절할 때 다음 허가 시각 반환:** 지금은 100ms 폴링이라, 다음 허가 시각만큼만 기다리면 rate limiter 쓰기와 허가 사이의 빈틈이 함께 줄어듭니다.
 - **수신자 목록 조회 실패 시 확장 lease 즉시 해제:** 지금은 lease 만료(30초) 뒤에 다시 시도됩니다.
-- **쿼리 실행 시간 제한:** 연결 대기 제한(5초)만 있어, `statement_timeout` · `lock_timeout`을 근거와 함께 정하고 통합 테스트로 확인하겠습니다.
 - **완료 확인 중복 줄이기:** 워커가 많아지면 advisory lock으로 한 워커만 확인하게 하겠습니다.
 - **`noUncheckedIndexedAccess` 도입과 고정 시계 fixture 공용화:** 결과 discriminated union 좁히기와 Gate는 공용 테스트 helper로 모았습니다. 남은 것은 테스트마다 조금씩 다른 고정 시계 fixture의 공용화와, 배열 인덱스 접근의 빈 배열 경로를 컴파일러가 잡게 하는 설정입니다.
 - **초기 60초 처리량이 워커 수와 무관하게 초당 14~16건인 원인 분석:** 확장 속도 · mock 응답 지연 · 컨테이너 자원을 나눠 측정하고, 원인이 확장이라면 확장을 발송보다 앞서 몇 페이지 미리 진행하는 방안을 검토합니다.

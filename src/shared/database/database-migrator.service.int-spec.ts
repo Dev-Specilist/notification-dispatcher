@@ -61,6 +61,14 @@ describe('DatabaseMigrator', () => {
     expect(pool.ended).toBe(true);
   });
 
+  it('DB-25 문장 시간 제한이 짧게 설정됐다 / migration을 적용한다 → migration 연결에는 문장 시간 제한을 두지 않아 끝까지 적용된다', async (): Promise<void> => {
+    vi.stubEnv('DATABASE_STATEMENT_TIMEOUT_MS', '1');
+
+    await migrateOnce();
+
+    expect(await publicTables()).toEqual(NOTIFICATION_TABLES);
+  });
+
   it('이미 적용된 DB에 다시 실행해도 실패하지 않고 테이블이 그대로다', async (): Promise<void> => {
     await migrateOnce();
     expect(await publicTables()).toEqual(NOTIFICATION_TABLES);

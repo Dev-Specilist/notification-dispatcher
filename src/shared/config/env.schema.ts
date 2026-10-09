@@ -25,6 +25,8 @@ const DEFAULT_HOST: Host = hostSchema.parse('0.0.0.0');
 const DEFAULT_DRAIN: TimerDelayOrZeroMs = timerDelayOrZeroMsSchema.parse(5_000);
 const DEFAULT_TIMEOUT: TimerDelayMs = timerDelayMsSchema.parse(25_000);
 const DEFAULT_DATABASE_POOL_MAX: PositiveInteger = positiveIntegerSchema.parse(20);
+const DEFAULT_DATABASE_STATEMENT_TIMEOUT: TimerDelayMs = timerDelayMsSchema.parse(15_000);
+const DEFAULT_DATABASE_LOCK_TIMEOUT: TimerDelayMs = timerDelayMsSchema.parse(5_000);
 const DEFAULT_MOCK_API_URL: HttpUrl = httpUrlSchema.parse('http://localhost:4000');
 const DEFAULT_MAX_REQUEST: PositiveMilliseconds = positiveMillisecondsSchema.parse(5_000);
 const DEFAULT_LEASE: PositiveMilliseconds = positiveMillisecondsSchema.parse(30_000);
@@ -55,6 +57,8 @@ export const createEnvSchema = (defaultPort: Port): EnvSchema =>
       LOG_FORMAT: logFormatSchema.default('pretty'),
       DATABASE_URL: databaseUrlSchema,
       DATABASE_POOL_MAX: positiveIntegerSchema.default(DEFAULT_DATABASE_POOL_MAX),
+      DATABASE_STATEMENT_TIMEOUT_MS: timerDelayMsSchema.default(DEFAULT_DATABASE_STATEMENT_TIMEOUT),
+      DATABASE_LOCK_TIMEOUT_MS: timerDelayMsSchema.default(DEFAULT_DATABASE_LOCK_TIMEOUT),
       MOCK_API_URL: httpUrlSchema.default(DEFAULT_MOCK_API_URL),
       DISPATCH_MAX_REQUEST_MS: positiveMillisecondsSchema.default(DEFAULT_MAX_REQUEST),
       DISPATCH_LEASE_MS: positiveMillisecondsSchema.default(DEFAULT_LEASE),

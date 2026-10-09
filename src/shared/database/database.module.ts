@@ -36,6 +36,8 @@ export class DatabaseModule implements OnModuleInit {
       connectionString: config.get('DATABASE_URL'),
       max: config.get('DATABASE_POOL_MAX'),
       connectionTimeoutMillis: DatabaseModule.CONNECTION_TIMEOUT_MS,
+      statement_timeout: config.get('DATABASE_STATEMENT_TIMEOUT_MS'),
+      lock_timeout: config.get('DATABASE_LOCK_TIMEOUT_MS'),
     });
     pool.on('error', (error: Error): void => {
       DatabaseModule.logger.error(`idle database connection failed: ${error.message}`);

@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { Injectable, Logger } from '@nestjs/common';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 
 @Injectable()
 export class DatabaseMigrator {
@@ -14,7 +14,13 @@ export class DatabaseMigrator {
 
   async migrate(): Promise<void> {
     const migrationsFolder: string = join(process.cwd(), DatabaseMigrator.MIGRATIONS_FOLDER);
-    await migrate(drizzle({ client: this.pool }), { migrationsFolder });
+    const migrationClient: PoolClient = await this.pool.connect();
+    try {
+      await migrationClient.query('SET statement_timeout = 0');
+      await migrate(drizzle({ client: migrationClient }), { migrationsFolder });
+    } finally {
+      migrationClient.release(true);
+    }
     this.logger.log(`migrations in ${migrationsFolder} are applied`);
   }
 }

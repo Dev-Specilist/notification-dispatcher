@@ -30,6 +30,8 @@ describe('환경변수 스키마', () => {
       LOG_FORMAT: 'pretty',
       DATABASE_URL,
       DATABASE_POOL_MAX: 20,
+      DATABASE_STATEMENT_TIMEOUT_MS: 15000,
+      DATABASE_LOCK_TIMEOUT_MS: 5000,
       MOCK_API_URL: 'http://localhost:4000',
       DISPATCH_MAX_REQUEST_MS: 5000,
       DISPATCH_LEASE_MS: 30000,
@@ -67,6 +69,8 @@ describe('환경변수 스키마', () => {
       LOG_LEVEL: 'debug',
       LOG_FORMAT: 'json',
       DATABASE_POOL_MAX: '30',
+      DATABASE_STATEMENT_TIMEOUT_MS: '20000',
+      DATABASE_LOCK_TIMEOUT_MS: '3000',
       MOCK_API_URL: 'http://mock:4000',
       DISPATCH_MAX_REQUEST_MS: '3000',
       DISPATCH_LEASE_MS: '20000',
@@ -93,6 +97,8 @@ describe('환경변수 스키마', () => {
       LOG_FORMAT: 'json',
       DATABASE_URL,
       DATABASE_POOL_MAX: 30,
+      DATABASE_STATEMENT_TIMEOUT_MS: 20000,
+      DATABASE_LOCK_TIMEOUT_MS: 3000,
       MOCK_API_URL: 'http://mock:4000',
       DISPATCH_MAX_REQUEST_MS: 3000,
       DISPATCH_LEASE_MS: 20000,
@@ -187,6 +193,27 @@ describe('환경변수 스키마', () => {
       expect((): Env => validate({ ...REQUIRED, DATABASE_POOL_MAX: rawPoolMax })).toThrow(
         /DATABASE_POOL_MAX/,
       );
+    },
+  );
+
+  it('CFG-06 DB 시간 제한을 지정하지 않으면 문장 실행 15초, 잠금 대기 5초로 둔다', (): void => {
+    const { DATABASE_STATEMENT_TIMEOUT_MS, DATABASE_LOCK_TIMEOUT_MS }: Env = validate(REQUIRED);
+
+    expect(DATABASE_STATEMENT_TIMEOUT_MS).toBe(15_000);
+    expect(DATABASE_LOCK_TIMEOUT_MS).toBe(5_000);
+  });
+
+  it.each<WorkerSettingCase>([
+    ['DATABASE_STATEMENT_TIMEOUT_MS', '0'],
+    ['DATABASE_STATEMENT_TIMEOUT_MS', '2147483648'],
+    ['DATABASE_LOCK_TIMEOUT_MS', '0'],
+    ['DATABASE_LOCK_TIMEOUT_MS', '-1'],
+    ['DATABASE_LOCK_TIMEOUT_MS', '1.5'],
+    ['DATABASE_STATEMENT_TIMEOUT_MS', 'abc'],
+  ])(
+    'CFG-07 양의 정수 ms가 아니거나 PostgreSQL 상한을 넘는 DB 시간 제한 %s="%s"는 거부한다',
+    (key: string, rawValue: string): void => {
+      expect((): Env => validate({ ...REQUIRED, [key]: rawValue })).toThrow(new RegExp(key));
     },
   );
 
