@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   hostSchema,
-  millisecondsSchema,
+  nonNegativeMillisecondsSchema,
   portSchema,
   positiveMillisecondsSchema,
   processRoleSchema,
@@ -25,11 +25,11 @@ describe('primitive 스키마', () => {
   });
 
   it.each(['', '-1', '1.5'])('잘못된 밀리초 "%s"는 거부한다', (raw: string) => {
-    expect(millisecondsSchema.safeParse(raw).success).toBe(false);
+    expect(nonNegativeMillisecondsSchema.safeParse(raw).success).toBe(false);
   });
 
   it('밀리초는 0을 허용한다', () => {
-    expect(millisecondsSchema.parse('0')).toBe(0);
+    expect(nonNegativeMillisecondsSchema.parse('0')).toBe(0);
   });
 
   it.each(['', '0', '-1'])('양수 밀리초는 "%s"를 거부한다', (raw: string) => {

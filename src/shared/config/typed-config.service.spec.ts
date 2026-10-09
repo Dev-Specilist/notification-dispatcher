@@ -6,9 +6,9 @@ import { portSchema } from '@/shared/config/primitive.schema';
 import {
   DatabaseUrl,
   Host,
-  Milliseconds,
   Port,
   TimerDelayMs,
+  TimerDelayOrZeroMs,
 } from '@/shared/config/primitive.type';
 import { TypedConfigModule } from '@/shared/config/typed-config.module';
 import { TypedConfigService } from '@/shared/config/typed-config.service';
@@ -41,7 +41,7 @@ describe('TypedConfigService', () => {
   it('키마다 스키마의 도메인 타입을 추론한다', () => {
     expectTypeOf(config.get('PORT')).toEqualTypeOf<Port>();
     expectTypeOf(config.get('HOST')).toEqualTypeOf<Host>();
-    expectTypeOf(config.get('SHUTDOWN_DRAIN_MS')).toEqualTypeOf<Milliseconds>();
+    expectTypeOf(config.get('SHUTDOWN_DRAIN_MS')).toEqualTypeOf<TimerDelayOrZeroMs>();
     expectTypeOf(config.get('SHUTDOWN_TIMEOUT_MS')).toEqualTypeOf<TimerDelayMs>();
     expectTypeOf(config.get('LOG_LEVEL')).toExtend<LogLevel>();
     expectTypeOf(config.get('LOG_FORMAT')).toEqualTypeOf<LogFormat>();
@@ -51,6 +51,6 @@ describe('TypedConfigService', () => {
   it('검증을 거치지 않은 원시 값은 도메인 타입 자리에 들어갈 수 없다', () => {
     expectTypeOf<number>().not.toExtend<Port>();
     expectTypeOf<string>().not.toExtend<Host>();
-    expectTypeOf<number>().not.toExtend<Milliseconds>();
+    expectTypeOf<number>().not.toExtend<TimerDelayOrZeroMs>();
   });
 });

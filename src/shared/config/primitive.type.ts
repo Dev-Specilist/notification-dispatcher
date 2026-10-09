@@ -3,7 +3,7 @@ import type {
   databaseUrlSchema,
   hostSchema,
   httpUrlSchema,
-  millisecondsSchema,
+  nonNegativeMillisecondsSchema,
   portSchema,
   positiveIntegerSchema,
   positiveMillisecondsSchema,
@@ -20,11 +20,13 @@ export type PortSchema = typeof portSchema;
 
 export type Port = z.infer<PortSchema>;
 
-export type MillisecondsSchema = typeof millisecondsSchema;
+export type NonNegativeMillisecondsSchema = typeof nonNegativeMillisecondsSchema;
 
-export type Milliseconds = z.infer<MillisecondsSchema>;
+export type NonNegativeMilliseconds = z.infer<NonNegativeMillisecondsSchema>;
 
 export type PositiveMillisecondsSchema = typeof positiveMillisecondsSchema;
+
+export type PositiveMilliseconds = z.infer<PositiveMillisecondsSchema>;
 
 export type DatabaseUrlSchema = typeof databaseUrlSchema;
 
@@ -43,6 +45,8 @@ export type TimerDelayMsSchema = typeof timerDelayMsSchema;
 export type TimerDelayMs = z.infer<TimerDelayMsSchema>;
 
 export type TimerDelayOrZeroMsSchema = typeof timerDelayOrZeroMsSchema;
+
+export type TimerDelayOrZeroMs = z.infer<TimerDelayOrZeroMsSchema>;
 
 export type ProcessRoleSchema = typeof processRoleSchema;
 

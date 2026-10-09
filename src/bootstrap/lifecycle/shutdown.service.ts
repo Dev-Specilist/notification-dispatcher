@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { Pool } from 'pg';
 import { ReadinessPort } from '@/modules/health/application/port/driven/for-tracking-readiness/readiness.port';
-import { Milliseconds } from '@/shared/config/primitive.type';
+import { TimerDelayOrZeroMs } from '@/shared/config/primitive.type';
 import { TypedConfigService } from '@/shared/config/typed-config.service';
 
 type SignalListener = (signal: NodeJS.Signals) => void;
@@ -52,7 +52,7 @@ export class ShutdownService
 
   async beforeApplicationShutdown(signal: string = 'close'): Promise<void> {
     this.stopAcceptingTraffic(signal);
-    const drainMs: Milliseconds = this.config.get('SHUTDOWN_DRAIN_MS');
+    const drainMs: TimerDelayOrZeroMs = this.config.get('SHUTDOWN_DRAIN_MS');
     await new Promise<void>((resolve: () => void): void => {
       setTimeout(resolve, drainMs);
     });
