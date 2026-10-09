@@ -23,6 +23,10 @@ interface UrgentDispatch {
   readonly dispatchedAt: number;
 }
 
+interface HeldRow {
+  readonly held: boolean;
+}
+
 interface SentCountRow {
   readonly sent: number;
 }
@@ -178,6 +182,20 @@ describe('발송 전체 흐름', () => {
       );
     const [{ sent }]: ReadonlyArray<SentCountRow> = result.rows;
     return sent;
+  };
+
+  const resetRateLimiter = async (): Promise<void> => {
+    await api.get(Pool).query('DELETE FROM rate_limiters');
+  };
+
+  const rateLimiterWasHeld = async (): Promise<boolean> => {
+    const result: QueryResult<HeldRow> = await api
+      .get(Pool)
+      .query<HeldRow>(
+        "SELECT bool_or(held_until <> '-infinity'::timestamptz) AS held FROM rate_limiters",
+      );
+    const [{ held }]: ReadonlyArray<HeldRow> = result.rows;
+    return held;
   };
 
   const runWorkers = async <TResult>(
@@ -338,7 +356,38 @@ describe('발송 전체 흐름', () => {
       },
     );
   }, 120_000);
-  it.todo('E2E-04 워커 3개 / 대량 알림 발송 → 429가 지속되지 않고 중복·누락 없이 끝난다');
+  it.each([2, 3])(
+    'E2E-04 워커 여러 개(%i개) / 대량 알림 발송 → 429 없이 중복·누락 없이 끝난다',
+    async (workerCount: number): Promise<void> => {
+      await withMockApi(
+        { USER_COUNT: '300', RATE_LIMIT: '50' },
+        async (mockApi: MockApiContainer): Promise<void> => {
+          await resetRateLimiter();
+          const { id: alarmId }: CreatedAlarm = await dispatchedBulkAlarm();
+
+          await runWorkers(workerCount, mockApi, async (): Promise<void> => {
+            await vi.waitFor(
+              async (): Promise<void> => {
+                expect(await alarmStatus(alarmId)).toBe('COMPLETED');
+              },
+              { timeout: COMPLETION_TIMEOUT_MS, interval: 500 },
+            );
+          });
+
+          const deliveries: ReadonlyArray<DeliveryDelivered> = await deliveriesOf(alarmId, mockApi);
+          expect(deliveries).toHaveLength(300);
+          expect(
+            deliveries.filter(
+              ({ status, mockMessages }: DeliveryDelivered): boolean =>
+                status !== 'SENT' || mockMessages !== 1,
+            ),
+          ).toEqual([]);
+          expect(await rateLimiterWasHeld()).toBe(false);
+        },
+      );
+    },
+    120_000,
+  );
   it.todo(
     'E2E-05 워커 3개로 발송 중 / 워커 하나를 강제로 멈춘다 → 남은 워커가 lease 만료분까지 이어받아 중복·누락 없이 끝난다',
   );
