@@ -27,6 +27,7 @@ export interface DeliverySettingsValues {
   readonly leaseMs: DurationMs;
   readonly maxRequestMs: DurationMs;
   readonly reconcileDelayMs: DurationMs;
+  readonly maxPermitAgeMs: DurationMs;
   readonly retryPolicy: RetryPolicy;
   readonly lookupRetryPolicy: RetryPolicy;
   readonly unconfirmedAfterMs: DurationMs;

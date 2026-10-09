@@ -152,6 +152,14 @@ describe('WorkerSettingsFactory', () => {
     expect(lookupRetryPolicy.isExhausted(Number.MAX_SAFE_INTEGER - 1)).toBe(false);
   });
 
+  it('발송 허가 유효 시간은 제한기 간격의 2배로 정한다', (): void => {
+    expect(WorkerSettingsFactory.create(env({})).deliverySettings.maxPermitAgeMs).toBe(40);
+    expect(
+      WorkerSettingsFactory.create(env({ RATE_LIMIT_INTERVAL_MS: '25' })).deliverySettings
+        .maxPermitAgeMs,
+    ).toBe(50);
+  });
+
   it('제한기 간격이 정확히 20ms(초당 50건)이면 허용한다', (): void => {
     expect(
       WorkerSettingsFactory.create(env({ RATE_LIMIT_INTERVAL_MS: '20' })).rateLimiter

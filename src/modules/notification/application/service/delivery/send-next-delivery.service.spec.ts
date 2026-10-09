@@ -243,6 +243,8 @@ class FixedDispatchSettings implements DispatchSettings {
 
   readonly reconcileDelayMs: DurationMs = durationMs(35_000);
 
+  readonly maxPermitAgeMs: DurationMs = durationMs(40);
+
   readonly retryPolicy: RetryPolicy;
 
   constructor(maxAttempts: number = 3, leaseMs: number = 60_000) {
@@ -322,6 +324,31 @@ class GatedSendPermit implements SendPermitPort {
   }
 }
 
+class PacedSendPermit implements SendPermitPort {
+  readonly requestedAtMs: Array<number> = [];
+
+  private nextGrantAtMs: number = Number.NEGATIVE_INFINITY;
+
+  constructor(
+    private readonly clock: ClockPort,
+    private readonly emissionIntervalMs: number,
+  ) {}
+
+  acquire(): Promise<SendPermit> {
+    const requestedAtMs: number = this.clock.now().getTime() - at(NOW_ISO).getTime();
+    this.requestedAtMs.push(requestedAtMs);
+    if (requestedAtMs < this.nextGrantAtMs) {
+      return Promise.resolve({ kind: 'denied' });
+    }
+    this.nextGrantAtMs = requestedAtMs + this.emissionIntervalMs;
+    return Promise.resolve({ kind: 'granted' });
+  }
+
+  holdFor(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
 type Reply = (sentCount: number) => SendOutcome;
 
 const acceptWithSequentialId: Reply = (sentCount: number): SendOutcome => ({
@@ -337,6 +364,19 @@ class RecordingMessageSender implements MessageSenderPort {
   send(message: OutgoingMessage): Promise<SendOutcome> {
     this.sent.push(message);
     return Promise.resolve(this.reply(this.sent.length));
+  }
+}
+
+class TimedMessageSender extends RecordingMessageSender {
+  readonly sentAtMs: Array<number> = [];
+
+  constructor(private readonly clock: ClockPort) {
+    super();
+  }
+
+  override send(message: OutgoingMessage): Promise<SendOutcome> {
+    this.sentAtMs.push(this.clock.now().getTime() - at(NOW_ISO).getTime());
+    return super.send(message);
   }
 }
 
@@ -498,6 +538,24 @@ const slowClaimCommitFixture = async (
   });
   const [slowTransaction]: ReadonlyArray<SlowClaimCommitTransaction> = createdTransactions;
   return { ...builtFixture, slowTransaction };
+};
+
+const maxSendsWithinOneSecond = (sentAtMs: ReadonlyArray<number>): number =>
+  Math.max(
+    ...sentAtMs.map(
+      (windowStartMs: number): number =>
+        sentAtMs.filter(
+          (sentMs: number): boolean => sentMs >= windowStartMs && sentMs < windowStartMs + 1_000,
+        ).length,
+    ),
+  );
+
+const bulkDeliveriesFrom = (firstIndex: number, lastIndex: number): ReadonlyArray<Delivery> => {
+  const deliveries: Array<Delivery> = [];
+  for (let index: number = firstIndex; index <= lastIndex; index += 1) {
+    deliveries.push(pendingDelivery(index, BULK_ALARM_ID, 'BULK', CREATED_ISO));
+  }
+  return deliveries;
 };
 
 const storedState = async (
@@ -840,6 +898,83 @@ describe('SendNextDeliveryService', () => {
       attempts: 0,
       state: { status: 'IN_FLIGHT', lease: { token: PREVIOUS_TOKEN } },
     });
+  });
+
+  it('UC-25 허가를 얻은 뒤 claim이 늦어져 허가가 허가 유효 시간(허가 간격 × 2)보다 오래됐다 / 발송 유스케이스 → 오래된 허가로 보내지 않고 claim한 Delivery를 쥔 채 허가를 한 번 새로 얻어 보낸다', async (): Promise<void> => {
+    const clock: AdjustableClock = new AdjustableClock();
+    const permit: PacedSendPermit = new PacedSendPermit(clock, 20);
+    const sender: TimedMessageSender = new TimedMessageSender(clock);
+    const { service, slowTransaction }: SlowClaimCommitFixture = await slowClaimCommitFixture(
+      pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO),
+      { clock, permit, sender },
+    );
+
+    const attempt: Promise<SendAttempt> = service.execute();
+    await slowTransaction.committing.opened;
+    clock.advanceBy(41);
+    slowTransaction.commitFinished.open();
+
+    expect(await attempt).toEqual({
+      kind: 'recorded',
+      deliveryId: deliveryId(1),
+      outcome: 'accepted',
+    });
+    expect(permit.requestedAtMs).toEqual([0, 41]);
+    expect(sender.sentAtMs).toEqual([41]);
+  });
+
+  it('UC-25 claim이 늦어지는 사이 다른 워커들이 20ms마다 허가를 얻어 보내 새 허가를 못 얻으면, 보내지 않고 시도 횟수를 쓰지 않은 채 PENDING으로 반납해 실제 요청도 20ms 간격을 지킨다', async (): Promise<void> => {
+    const clock: AdjustableClock = new AdjustableClock();
+    const permit: PacedSendPermit = new PacedSendPermit(clock, 20);
+    const sender: TimedMessageSender = new TimedMessageSender(clock);
+    const { deliveryRepository, service, newWorker, slowTransaction }: SlowClaimCommitFixture =
+      await slowClaimCommitFixture(pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO), {
+        clock,
+        permit,
+        sender,
+      });
+    await deliveryRepository.saveAll(bulkDeliveriesFrom(2, 51));
+    const otherWorker: SendNextDeliveryService = newWorker(permit);
+
+    const attempt: Promise<SendAttempt> = service.execute();
+    await slowTransaction.committing.opened;
+    for (let slot: number = 1; slot <= 50; slot += 1) {
+      clock.advanceBy(20);
+      await otherWorker.execute();
+    }
+    slowTransaction.commitFinished.open();
+
+    expect(await attempt).toEqual({ kind: 'released', deliveryId: deliveryId(1) });
+    expect(sender.sentAtMs).toEqual(
+      bulkDeliveriesFrom(1, 50).map(
+        (_delivery: Delivery, index: number): number => (index + 1) * 20,
+      ),
+    );
+    expect(maxSendsWithinOneSecond(sender.sentAtMs)).toBeLessThanOrEqual(50);
+    expect(permit.requestedAtMs.slice(-1)).toEqual([1_000]);
+    const [stored]: ReadonlyArray<Delivery> = await deliveryRepository.findByAlarmId(
+      alarmId(BULK_ALARM_ID),
+    );
+    expect(stored.snapshot()).toMatchObject({ attempts: 0, state: { status: 'PENDING' } });
+  });
+
+  it('UC-25 허가를 얻은 지 허가 유효 시간 이내면 새 허가 없이 보낸다', async (): Promise<void> => {
+    const clock: AdjustableClock = new AdjustableClock();
+    const permit: PacedSendPermit = new PacedSendPermit(clock, 20);
+    const sender: TimedMessageSender = new TimedMessageSender(clock);
+    const { service, slowTransaction }: SlowClaimCommitFixture = await slowClaimCommitFixture(
+      pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO),
+      { clock, permit, sender },
+    );
+
+    const attempt: Promise<SendAttempt> = service.execute();
+    await slowTransaction.committing.opened;
+    clock.advanceBy(40);
+    slowTransaction.commitFinished.open();
+
+    expect(await attempt).toMatchObject({ kind: 'recorded', outcome: 'accepted' });
+    expect(permit.requestedAtMs).toEqual([0]);
+    expect(sender.sentAtMs).toEqual([40]);
   });
 
   it('UC-09 발송 응답을 기다리는 동안 다른 워커가 같은 Delivery를 이어받았으면 늦은 결과를 저장하지 않는다', async (): Promise<void> => {

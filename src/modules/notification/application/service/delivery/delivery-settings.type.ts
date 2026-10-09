@@ -5,6 +5,7 @@ export interface DispatchSettings {
   readonly leaseMs: DurationMs;
   readonly maxRequestMs: DurationMs;
   readonly reconcileDelayMs: DurationMs;
+  readonly maxPermitAgeMs: DurationMs;
   readonly retryPolicy: RetryPolicy;
 }
 

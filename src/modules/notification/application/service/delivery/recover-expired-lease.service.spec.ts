@@ -202,6 +202,8 @@ class FixedDispatchSettings implements DispatchSettings {
 
   readonly reconcileDelayMs: DurationMs = durationMs(RECONCILE_DELAY_MS);
 
+  readonly maxPermitAgeMs: DurationMs = durationMs(40);
+
   readonly retryPolicy: RetryPolicy = retryPolicy();
 }
 

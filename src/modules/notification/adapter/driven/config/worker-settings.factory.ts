@@ -22,6 +22,8 @@ export class WorkerSettingsFactory {
 
   private static readonly MAX_PERMITS_PER_SECOND: number = 50;
 
+  private static readonly PERMIT_AGE_LIMIT_IN_EMISSION_INTERVALS: number = 2;
+
   private static readonly LOOKUP_ATTEMPTS_UNBOUNDED_UNTIL_UNCONFIRMED: number =
     Number.MAX_SAFE_INTEGER;
 
@@ -61,6 +63,9 @@ export class WorkerSettingsFactory {
     }
     const baseUrl: URL = new URL(env.MOCK_API_URL);
     const requestTimeoutMs: RequestTimeoutMs = WorkerSettingsFactory.requestTimeoutOf(maxRequestMs);
+    const emissionIntervalMs: DurationMs = WorkerSettingsFactory.emissionIntervalOf(
+      env.RATE_LIMIT_INTERVAL_MS,
+    );
     return {
       deliverySettings: {
         leaseMs,
@@ -68,6 +73,10 @@ export class WorkerSettingsFactory {
         reconcileDelayMs: WorkerSettingsFactory.durationOf(
           'RECONCILE_DELAY_MS',
           env.RECONCILE_DELAY_MS,
+        ),
+        maxPermitAgeMs: WorkerSettingsFactory.durationOf(
+          'RATE_LIMIT_INTERVAL_MS',
+          emissionIntervalMs * WorkerSettingsFactory.PERMIT_AGE_LIMIT_IN_EMISSION_INTERVALS,
         ),
         retryPolicy: WorkerSettingsFactory.retryPolicyOf(
           'RETRY',
@@ -97,7 +106,7 @@ export class WorkerSettingsFactory {
       },
       rateLimiter: {
         name: WorkerSettingsFactory.RATE_LIMITER_NAME,
-        emissionIntervalMs: WorkerSettingsFactory.emissionIntervalOf(env.RATE_LIMIT_INTERVAL_MS),
+        emissionIntervalMs,
       },
     };
   }

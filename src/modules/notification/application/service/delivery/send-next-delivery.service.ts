@@ -61,6 +61,7 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
   ) {}
 
   async execute(): Promise<SendAttempt> {
+    const permitRequestedAt: Date = this.clock.now();
     const permit: SendPermit = await this.sendPermit.acquire();
     if (permit.kind === 'denied') {
       return { kind: 'no-permit' };
@@ -74,6 +75,9 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
       return step;
     }
     const { alarmId, recipientId, id }: DeliverySnapshot = step.delivery.snapshot();
+    if (!(await this.holdsFreshPermit(permitRequestedAt))) {
+      return this.abandonUnsent(step.delivery, token, 'lease-lost');
+    }
     if (this.shutdownSignal.isRequested()) {
       return this.abandonUnsent(step.delivery, token, 'lease-lost');
     }
@@ -87,6 +91,19 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
       clientRef: id,
     });
     return this.recordOutcome(step.delivery, token, outcome);
+  }
+
+  private async holdsFreshPermit(permitRequestedAt: Readonly<Date>): Promise<boolean> {
+    if (this.isPermitFresh(permitRequestedAt)) {
+      return true;
+    }
+    const renewalRequestedAt: Date = this.clock.now();
+    const renewal: SendPermit = await this.sendPermit.acquire();
+    return renewal.kind === 'granted' && this.isPermitFresh(renewalRequestedAt);
+  }
+
+  private isPermitFresh(permitRequestedAt: Readonly<Date>): boolean {
+    return this.clock.now().getTime() - permitRequestedAt.getTime() <= this.settings.maxPermitAgeMs;
   }
 
   private claimNext(token: LeaseToken): Promise<ClaimStep> {
