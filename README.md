@@ -74,6 +74,19 @@ pnpm dev          # api + worker, SWC watch로 변경 시 재시작
 - 저장소 계약 테스트(`testing/contract/`) 하나를 in-memory fake와 Drizzle adapter 양쪽에 돌려, unit 테스트의 fake가 실제 구현과 같은 계약을 지키게 합니다.
 - e2e는 "정확히 1번 보냈다"를 DB가 아니라 mock의 발송 내역으로 발송 건마다 셉니다.
 
+#### 부하 테스트 (k6, 선택)
+
+```sh
+docker compose up -d --build
+pnpm load:test                          # 기본 RATE=50 (요청/초), DURATION=60s
+RATE=100 DURATION=2m pnpm load:test
+```
+
+- `load/alarm-api.load.ts`(TypeScript, k6가 직접 실행)를 compose `load` 프로필의 `grafana/k6` 컨테이너로 돌립니다. `docker compose up`만으로는 뜨지 않습니다.
+- setup에서 대량 알림을 만들어 발송을 시작하고, 워커가 보내는 동안 `GET /alarms/:id`와 `GET /alarms?limit=20`을 번갈아 일정한 도착률로 호출합니다. teardown에서 발송 중인 알림은 취소합니다.
+- 기준(threshold): 실패율 < 1%, `http_req_duration` p95 < 200ms(전체와 엔드포인트별), check 통과율 > 99%. 요약에는 엔드포인트별 p95와 테스트 동안 보낸 발송 건 수(`dispatch_sent_deliveries`) · 초당 발송 수(`dispatch_sent_per_second`)가 나옵니다.
+- 측정 결과는 최종 측정 후 기록
+
 ## 2. API 사용법
 
 ### 2-1. 엔드포인트

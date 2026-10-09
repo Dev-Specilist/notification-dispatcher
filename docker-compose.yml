@@ -61,5 +61,21 @@ services:
         condition: service_healthy
     stop_grace_period: 35s
 
+  k6:
+    image: grafana/k6:2.2.0
+    profiles: ['load']
+    environment:
+      API_URL: http://api:3000
+      RATE: ${RATE:-50}
+      DURATION: ${DURATION:-60s}
+    volumes:
+      - ./load:/load:ro
+    command: run /load/alarm-api.load.ts
+    depends_on:
+      api:
+        condition: service_healthy
+      worker:
+        condition: service_healthy
+
 volumes:
   postgres_data:

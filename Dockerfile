@@ -12,7 +12,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 FROM deps AS build
 COPY tsconfig.json .swcrc ./
 COPY src ./src
-RUN pnpm typecheck && pnpm build && pnpm prune --prod --ignore-scripts
+RUN pnpm typecheck:app && pnpm build && pnpm prune --prod --ignore-scripts
 
 FROM node:24.21.0-alpine AS runtime
 ENV NODE_ENV=production
