@@ -177,6 +177,58 @@
 - 저장소 port의 계약 테스트(`testing/contract/`) 하나를 in-memory fake와 Drizzle adapter 양쪽에 돌려서, unit 테스트의 fake가 실제 구현과 같은 계약을 지킨다는 것을 보장합니다.
 - pre-push hook이 integration과 e2e까지 돌리므로 push하려면 로컬에 Docker가 실행 중이어야 합니다.
 
+## 데이터 모델과 스키마
+
+마이그레이션 SQL은 [`drizzle/`](drizzle)에, 테이블 정의는 `src/modules/notification/adapter/out/persistence/*.table.ts`에 있습니다.
+
+```
+alarms 1 ──── N deliveries          (알림 하나 = 수신자별 Delivery 여러 개, 작업 큐를 겸함)
+alarms 1 ──── 0..1 expansion_jobs   (대량 알림만, 수신자 확장 진행 상황)
+rate_limiters                       (모든 워커가 함께 쓰는 처리량 제한기 행)
+```
+
+| 테이블 | 키 | 담는 것 |
+| --- | --- | --- |
+| `alarms` | PK `id`(uuid, 앱에서 생성) | 제목 · 본문 · 종류(`BULK`/`URGENT`) · 긴급 수신자 목록 · 상태와 전이 시각(`dispatched_at` · `completed_at` · `cancelled_at`) |
+| `deliveries` | PK `id`(uuid) = 외부 API의 `clientRef`, FK `alarm_id`, UNIQUE `(alarm_id, recipient_id)` | 수신자 1명에 대한 발송 1건의 상태 · 시도 횟수 · lease · 재시도 · reconcile · 결과 |
+| `expansion_jobs` | PK이자 FK `alarm_id` (알림당 하나) | 사용자 목록 cursor · 진행 상태 · 확장 lease |
+| `rate_limiters` | PK `name` | GCRA의 다음 허가 시각 · 429로 정지된 시각 |
+
+### 상태 표현
+
+- 도메인에서 상태는 상태별로 필요한 값만 가진 판별 union입니다(예: `SENT`는 `messageId` · `sentAt` · `duplicateCount`, `RETRY_WAIT`는 `retryAt` · `retryCause`). DB에서는 `status` 열 하나와 상태별 열로 펼치고, **상태별로 반드시 있어야 하는 열을 CHECK 제약으로 강제**합니다. 예를 들어 `status = 'SENT'`인데 `message_id`가 없는 행은 DB가 거부합니다. 도메인 규칙을 거치지 않은 쓰기나 매퍼의 실수가 있어도 불가능한 상태 조합이 저장되지 않습니다.
+- `deliveries.id`를 `clientRef`로 보내므로, Delivery 행과 외부 발송 내역이 1:1로 연결됩니다. 응답을 받지 못한 건은 이 값으로 발송 내역을 조회해 확정합니다.
+- `priority_rank`는 `priority`에서 계산되는 열(긴급 0, 대량 1)입니다. claim 정렬과 인덱스를 같은 열로 맞추려고 둡니다.
+- 확장 작업은 `IN_PROGRESS`(cursor 필수) · `COMPLETED` · `STOPPED`(취소로 중단)이고, 다음 페이지 cursor와 확장 lease를 함께 저장해 어느 워커든 마지막으로 커밋한 페이지부터 이어받습니다.
+
+### 키 · 관계 · 인덱스의 이유
+
+| 대상 | 이유 |
+| --- | --- |
+| UNIQUE `(alarm_id, recipient_id)` | 같은 알림에서 같은 수신자의 Delivery는 하나뿐이어야 합니다. 확장이 도중에 끊겨 같은 페이지를 다시 읽어도 `ON CONFLICT DO NOTHING`으로 중복 생성되지 않습니다. 알림별 집계(상태별 개수, 미종결 개수)도 `alarm_id`가 앞 열인 이 인덱스를 쓸 수 있습니다. |
+| `deliveries_claimable_idx` `(priority_rank, created_at, id) WHERE status IN ('PENDING','RETRY_WAIT')` | claim 쿼리의 정렬(긴급 먼저 → 오래된 것 먼저)과 같은 순서의 부분 인덱스입니다. 종결된 행이 수십만 건 쌓여도 인덱스에는 대기 건만 남습니다. |
+| `deliveries_reconcilable_idx` `(reconcile_at, id) WHERE status = 'UNKNOWN'` | reconcile 대상(확인 시각이 지난 `UNKNOWN`)만 찾습니다. |
+| `deliveries_leased_idx` `(lease_expires_at, id) WHERE status = 'IN_FLIGHT'` | lease가 만료된 `IN_FLIGHT`(워커가 멈춘 건)만 찾습니다. |
+| `alarms_created_at_id_idx` `(created_at, id)` | 목록 조회의 cursor(`created_at`, `id`) 행 비교와 정렬에 씁니다. |
+| `expansion_jobs_claimable_idx` `(enqueued_at, alarm_id) WHERE status = 'IN_PROGRESS'` | 진행 중인 확장 작업 중 잡을 수 있는 것을 오래된 순으로 찾습니다. |
+| FK `alarm_id` (`ON DELETE NO ACTION`) | Delivery나 확장 작업이 남은 알림은 지울 수 없습니다. 발송 이력이 고아가 되거나 함께 사라지지 않게 합니다. |
+
+Delivery 10만 건에서 claim · reconcile · lease 복구 쿼리가 각각 위 부분 인덱스를 Index Scan으로 쓰는 것을 `EXPLAIN`으로 확인했습니다(읽은 buffer 1~4).
+
+### 변경 · 삭제 후의 정보 보존
+
+- 행을 지우는 경로가 없습니다. API에 삭제가 없고, 취소는 알림을 `CANCELLED`로, 대기 중인 Delivery를 `CANCELLED`로 바꿀 뿐 행은 남습니다. FK가 삭제도 막습니다.
+- 알림의 제목 · 본문 · 수신자는 생성 후 바꾸는 API가 없습니다. 발송된 내용과 저장된 내용이 어긋나지 않습니다.
+- 대량 알림의 수신자는 확장 시점의 사용자 목록으로 Delivery를 만들어 고정합니다. 이후 사용자 목록이 바뀌어도 이 알림의 대상은 바뀌지 않습니다.
+- 종결 상태는 결과를 남깁니다. `SENT`는 messageId · 실제 발송 시각 · 같은 `clientRef` 중복 건수, `FAILED`는 사유, `UNCONFIRMED`는 결과 불명이 시작된 시각, `CANCELLED`는 취소 시각을 보존하고, `attempts`는 요청 시작을 기록한 횟수를 누적합니다(발송 직전 lease가 부족해 보내지 않은 드문 경우도 한 번으로 셉니다).
+- 보존하지 않는 것도 있습니다. Delivery는 현재 상태 열을 덮어쓰므로, 한 건이 거쳐 간 중간 경과(예: 타임아웃으로 `UNKNOWN`이 된 뒤 reconcile로 `SENT`)와 시도별 응답은 남지 않습니다. 시도 이력이 필요하면 상태 전이마다 한 행을 추가하는 append-only 테이블을 둘 계획입니다([시간이 더 있다면](#시간이-더-있다면)).
+
+### 빈 DB에서의 재현
+
+- 스키마는 [`drizzle/`](drizzle)의 순서 있는 SQL 마이그레이션(`0000` ~ `0004`)만으로 만들어집니다. 시드 데이터가 필요 없고, 제한기 행은 첫 발송 허가 때 `INSERT … ON CONFLICT`로 생깁니다.
+- `docker compose up`은 빈 볼륨에서 `postgres` → 일회성 `migrate` → `api` · `worker` 순서로 기동합니다. 마이그레이션은 앱 기동과 분리되어 있어 api · worker를 여러 개 띄워도 동시에 실행되지 않습니다.
+- 빈 DB에 마이그레이션을 적용하면 테이블이 만들어지고 다시 실행해도 그대로인지를 통합 테스트로 확인하고, 모든 통합 · e2e 테스트도 빈 템플릿 DB에 마이그레이션을 적용한 뒤 실행합니다.
+
 ## 발송 처리 설계
 
 ### 상태 모델
