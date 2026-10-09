@@ -22,27 +22,27 @@ import {
 import { logFormatSchema, logLevelSchema } from '@/shared/logging/logging.schema';
 
 const DEFAULT_HOST: Host = hostSchema.parse('0.0.0.0');
-const DEFAULT_DRAIN: TimerDelayOrZeroMs = timerDelayOrZeroMsSchema.parse(5000);
-const DEFAULT_TIMEOUT: TimerDelayMs = timerDelayMsSchema.parse(25000);
+const DEFAULT_DRAIN: TimerDelayOrZeroMs = timerDelayOrZeroMsSchema.parse(5_000);
+const DEFAULT_TIMEOUT: TimerDelayMs = timerDelayMsSchema.parse(25_000);
 const DEFAULT_DATABASE_POOL_MAX: PositiveInteger = positiveIntegerSchema.parse(20);
 const DEFAULT_MOCK_API_URL: HttpUrl = httpUrlSchema.parse('http://localhost:4000');
-const DEFAULT_MAX_REQUEST: PositiveMilliseconds = positiveMillisecondsSchema.parse(5000);
-const DEFAULT_LEASE: PositiveMilliseconds = positiveMillisecondsSchema.parse(30000);
-const DEFAULT_RECONCILE_DELAY: PositiveMilliseconds = positiveMillisecondsSchema.parse(35000);
+const DEFAULT_MAX_REQUEST: PositiveMilliseconds = positiveMillisecondsSchema.parse(5_000);
+const DEFAULT_LEASE: PositiveMilliseconds = positiveMillisecondsSchema.parse(30_000);
+const DEFAULT_RECONCILE_DELAY: PositiveMilliseconds = positiveMillisecondsSchema.parse(35_000);
 const DEFAULT_RETRY_MAX_ATTEMPTS: PositiveInteger = positiveIntegerSchema.parse(5);
-const DEFAULT_RETRY_BASE_DELAY: PositiveMilliseconds = positiveMillisecondsSchema.parse(1000);
-const DEFAULT_RETRY_MAX_DELAY: PositiveMilliseconds = positiveMillisecondsSchema.parse(60000);
+const DEFAULT_RETRY_BASE_DELAY: PositiveMilliseconds = positiveMillisecondsSchema.parse(1_000);
+const DEFAULT_RETRY_MAX_DELAY: PositiveMilliseconds = positiveMillisecondsSchema.parse(60_000);
 const DEFAULT_LOOKUP_RETRY_BASE_DELAY: PositiveMilliseconds =
-  positiveMillisecondsSchema.parse(5000);
+  positiveMillisecondsSchema.parse(5_000);
 const DEFAULT_LOOKUP_RETRY_MAX_DELAY: PositiveMilliseconds =
-  positiveMillisecondsSchema.parse(60000);
-const DEFAULT_UNCONFIRMED_AFTER: PositiveMilliseconds = positiveMillisecondsSchema.parse(3600000);
-const DEFAULT_USER_PAGE_LIMIT: PositiveInteger = positiveIntegerSchema.parse(1000);
+  positiveMillisecondsSchema.parse(60_000);
+const DEFAULT_UNCONFIRMED_AFTER: PositiveMilliseconds = positiveMillisecondsSchema.parse(3_600_000);
+const DEFAULT_USER_PAGE_LIMIT: PositiveInteger = positiveIntegerSchema.parse(1_000);
 const DEFAULT_RATE_LIMIT_INTERVAL: PositiveMilliseconds = positiveMillisecondsSchema.parse(20);
 const DEFAULT_DISPATCH_CONCURRENCY: PositiveInteger = positiveIntegerSchema.parse(8);
 const DEFAULT_WORKER_POLL_INTERVAL: TimerDelayMs = timerDelayMsSchema.parse(100);
-const DEFAULT_WORKER_ERROR_DELAY: TimerDelayMs = timerDelayMsSchema.parse(1000);
-const DEFAULT_COMPLETION_CHECK_INTERVAL: TimerDelayMs = timerDelayMsSchema.parse(1000);
+const DEFAULT_WORKER_ERROR_DELAY: TimerDelayMs = timerDelayMsSchema.parse(1_000);
+const DEFAULT_COMPLETION_CHECK_INTERVAL: TimerDelayMs = timerDelayMsSchema.parse(1_000);
 
 export const createEnvSchema = (defaultPort: Port): EnvSchema =>
   z

@@ -516,7 +516,7 @@ describe('Delivery', () => {
   it('DLV-06 실패와 재시도를 반복하면 429는 횟수에 넣지 않고, 최대 시도 횟수에서 정확히 FAILED가 된다', () => {
     const policy: RetryPolicy = retryPolicy(3);
     const steps: ReadonlyArray<RetryStep> = ['TRANSIENT', 'RATE_LIMITED', 'TRANSIENT', 'TRANSIENT'];
-    const history: string[] = [];
+    const history: Array<string> = [];
     let current: Delivery = pending();
 
     steps.forEach((step: RetryStep, index: number): void => {

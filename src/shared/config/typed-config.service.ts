@@ -6,7 +6,7 @@ import { Env } from '@/shared/config/env.type';
 export class TypedConfigService {
   constructor(private readonly config: ConfigService<Env, true>) {}
 
-  public get<K extends keyof Env>(key: K): Env[K] {
+  get<TKey extends keyof Env>(key: TKey): Env[TKey] {
     return this.config.get(key, { infer: true });
   }
 }

@@ -81,7 +81,7 @@ export class ProblemDetailsFilter implements ExceptionFilter<ThrownValue> {
   ): ProblemDetails {
     return {
       type: 'about:blank',
-      title: STATUS_CODES[status] ?? 'Unknown Status',
+      title: ProblemDetailsFilter.titleOf(status),
       status,
       detail,
       instance,
@@ -90,8 +90,13 @@ export class ProblemDetailsFilter implements ExceptionFilter<ThrownValue> {
     };
   }
 
+  private static titleOf(status: number): string {
+    const reasonPhrase: (typeof STATUS_CODES)[number] = STATUS_CODES[status];
+    return typeof reasonPhrase === 'string' ? reasonPhrase : 'Unknown Status';
+  }
+
   private static codeOf(status: number): string {
     const name: string = HttpStatus[status];
-    return name ?? `HTTP_${status}`;
+    return typeof name === 'string' ? name : `HTTP_${status}`;
   }
 }

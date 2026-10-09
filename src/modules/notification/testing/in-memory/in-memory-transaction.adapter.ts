@@ -7,19 +7,19 @@ import { InMemoryRepositories } from '@/modules/notification/testing/in-memory/i
 import { Rollback } from '@/modules/notification/testing/in-memory/rollback.type';
 
 export class InMemoryTransactionAdapter implements TransactionPort {
-  private static readonly ignoreOutcome: () => void = (): void => {};
-
-  constructor(private readonly repositories: InMemoryRepositories) {}
+  private static readonly IGNORE_OUTCOME: () => void = (): void => {};
 
   private queue: Promise<void> = Promise.resolve();
+
+  constructor(private readonly repositories: InMemoryRepositories) {}
 
   run<TResult>(work: TransactionWork<TResult>): Promise<TResult> {
     const result: Promise<TResult> = this.queue.then((): Promise<TResult> =>
       this.runWithRollback(work),
     );
     this.queue = result.then(
-      InMemoryTransactionAdapter.ignoreOutcome,
-      InMemoryTransactionAdapter.ignoreOutcome,
+      InMemoryTransactionAdapter.IGNORE_OUTCOME,
+      InMemoryTransactionAdapter.IGNORE_OUTCOME,
     );
     return result;
   }
