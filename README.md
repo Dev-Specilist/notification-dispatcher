@@ -86,6 +86,34 @@
 - 성공과 실패는 예외 대신 `kind`로 구분하는 discriminated union으로 표현합니다. 외부 발송 결과(`SendOutcome = Accepted | PermanentFailure | TransientFailure | RateLimited | Unknown`)는 발송 port의 계약이므로 `port/out`에 둡니다.
 - 트랜잭션은 필요한 일관성으로 정합니다. 여러 변경이 함께 성공해야 하면 `TransactionPort`가 한 트랜잭션 안의 저장소를 넘겨줍니다. 알림 상태와 Delivery 집계처럼 같은 시점의 값이 필요한 조회는 `readSnapshot`(PostgreSQL `REPEATABLE READ`, `READ ONLY`)으로 읽어, 두 조회 사이에 워커가 커밋해도 서로 어긋난 값이 섞이지 않게 합니다. `readSnapshot`은 조회용 port(`AlarmReader`, `DeliveryProgress`)만 넘겨서 스냅샷 안에서의 쓰기를 타입 단계에서 막습니다. `TransactionPort`는 변경 추적이 없는 트랜잭션 실행기로, Fowler의 Unit of Work와는 범위가 다릅니다.
 
+### 호출 흐름
+
+API와 워커는 같은 유스케이스 계약(`port/in`)을 통해 같은 도메인 규칙과 저장소를 씁니다. 트랜잭션 경계는 유스케이스가 정하고, 외부 HTTP 호출은 항상 트랜잭션 밖에서 합니다.
+
+| 진입점 | 유스케이스 | 한 트랜잭션에서 하는 일 | 트랜잭션 밖에서 하는 일 |
+| --- | --- | --- | --- |
+| `POST /alarms` | CreateAlarm | 알림 생성(`DRAFT`) | - |
+| `POST /alarms/:id/dispatch` | StartDispatch | 알림 잠금 → `DISPATCHING`, 긴급이면 수신자별 Delivery 생성, 대량이면 확장 작업 등록 | - |
+| `POST /alarms/:id/cancel` | CancelAlarm | 알림 잠금 → `CANCELLED`, 대기 중인 Delivery 일괄 `CANCELLED` (확장 작업은 다음 페이지를 저장할 때 알림 상태를 보고 스스로 멈춤) | - |
+| `GET /alarms/:id` | GetAlarm | 알림과 상태별 Delivery 수를 같은 스냅샷에서 조회 | - |
+| 워커 확장 루프 | ExpandNextPage | ① 확장 작업 하나를 lease로 claim ② 알림이 아직 발송 중인지 확인 → Delivery 생성 → cursor 저장 · lease 해제 | ①과 ② 사이에 mock 사용자 API 한 페이지 조회 |
+| 워커 발송 루프 ×N | SendNextDelivery | ① 우선순위가 가장 높은 1건 claim(새 leaseToken) · 요청 시작 기록 ② leaseToken이 그대로일 때만 결과 저장 | 처리량 허가 획득(①보다 먼저), 남은 lease 재확인, mock 발송 요청 |
+| 워커 reconcile 루프 | ReconcileNextDelivery | 확인 시각이 지난 `UNKNOWN` 1건을 골라 조회 결과로 확정(버전 비교) | mock 발송 내역 조회 |
+| 워커 lease 복구 루프 | RecoverExpiredLease | lease가 만료된 `IN_FLIGHT` 1건을 `UNKNOWN`으로 | - |
+| 워커 완료 확인 루프 | CompleteSettledAlarms | 발송 중인 알림 한 페이지를 훑으며 알림마다 잠금 → 확장 완료 · 미종결 0건이면 `COMPLETED` | - |
+
+### 변경 영향 범위
+
+| 바꾸고 싶은 것 | 고치는 곳 | 그대로인 곳 |
+| --- | --- | --- |
+| 외부 발송 서비스(예: FCM, SENS) | `adapter/out/external-api`에 `MessageSenderPort` · `MessageLookupPort` 구현 추가, 워커 모듈 바인딩 | domain · application · DB |
+| 처리량 한도 · lease · 재시도 · reconcile 시간 | env(`RATE_LIMIT_INTERVAL_MS`, `DISPATCH_LEASE_MS`, `RETRY_*`, `RECONCILE_DELAY_MS` 등). 기동 시 서로 맞지 않는 조합은 거부 | 코드 |
+| 워커 대수 · 워커당 동시 발송 수 | `docker compose up --scale worker=N`, `DISPATCH_CONCURRENCY` | 코드 · 스키마 |
+| 우선순위 규칙 | `priority_rank` 생성식과 claim 정렬(같은 열 하나) | 발송 · 재시도 · reconcile 로직 |
+| 저장소 기술 | `adapter/out/persistence`, 같은 계약 테스트(`testing/contract/`)로 검증 | domain · application · 다른 adapter |
+| HTTP 응답 모양 | presenter와 응답 타입 | 유스케이스 · 도메인 |
+| 상태 전이 규칙 | `Alarm` · `Delivery` 엔티티 하나 | 전이를 부르는 유스케이스는 결과 union만 다룸 |
+
 ### 의도한 타협
 
 | 타협 | 원칙 | 이유 |
@@ -250,6 +278,26 @@ Delivery   PENDING ─claim(leaseToken)─▶ IN_FLIGHT ─202──────
 
 알림 완료 판정은 Alarm이 Delivery를 직접 읽지 않고, application의 완료 판정 유스케이스가 "확장 완료 여부"와 "미종결 Delivery 수"를 조회해 Alarm에 넘깁니다. 워커는 이 판정을 결과가 확정될 때마다 호출하지 않고, 발송 중인 알림을 100개씩 페이지로 훑으며 호출합니다. 다음 페이지가 있으면 바로 이어서 확인하고, 끝까지 확인하면 `COMPLETION_CHECK_INTERVAL_MS`(기본 1초)만큼 쉰 뒤 처음부터 다시 확인합니다. 결과마다 호출하면 수신자 10만 명인 알림 하나에서 미종결 건수 집계가 10만 번 실행되기 때문입니다. 대신 마지막 결과가 확정된 뒤 `COMPLETED`가 되기까지 한 바퀴 순회 시간과 확인 간격만큼 늦어질 수 있습니다. 한 번에 한 페이지만 처리하므로 종료할 때도 진행 중인 페이지까지만 기다리고, 알림 하나의 판정이 실패해도 경고 로그를 남기고 다음 알림을 확인합니다.
 
+### 워커 실행과 종료
+
+워커 프로세스 하나는 폴링 루프 여러 개를 돌립니다. 각 루프는 할 일을 처리했으면 바로 다시, 할 일이 없으면 `WORKER_POLL_INTERVAL_MS`(기본 100ms) 뒤에, 예외가 나면 로그를 남기고 `WORKER_ERROR_DELAY_MS`(기본 1초) 뒤에 다시 실행합니다.
+
+| 루프 | 개수 | 한 번에 하는 일 |
+| --- | --- | --- |
+| 확장 | 1 | 확장 작업 한 페이지(사용자 1,000명) |
+| 발송 | `DISPATCH_CONCURRENCY`(기본 8) | 허가 1개 → Delivery 1건 claim → 발송 → 결과 저장 |
+| reconcile | 1 | `UNKNOWN` 1건 확정 |
+| lease 복구 | 1 | 만료된 lease 1건 |
+| 완료 확인 | 1 | 발송 중인 알림 한 페이지(100개), 끝까지 확인하면 `COMPLETION_CHECK_INTERVAL_MS`(기본 1초) 쉼 |
+
+종료는 Nest의 lifecycle 단계 순서를 그대로 씁니다. 같은 단계 안에서는 모듈 import 순서를 따르므로, 순서가 중요한 일은 서로 다른 단계에 둡니다.
+
+1. 종료 신호를 받는 즉시 readiness를 내리고, 제한 시간(`SHUTDOWN_DRAIN_MS` + `SHUTDOWN_TIMEOUT_MS`)을 재는 감시 타이머를 시작합니다.
+2. `onModuleDestroy`: 모든 루프에 정지를 알려 새 claim을 멈추고, 진행 중인 발송 요청과 결과 저장이 끝날 때까지 기다립니다.
+3. `beforeApplicationShutdown`: drain 시간만큼 기다립니다.
+4. `onApplicationShutdown`: DB 연결을 닫고, 프로세스는 exit 0으로 끝납니다.
+5. 제한 시간 안에 끝나지 않으면 exit 1로 강제 종료합니다. 결과를 저장하지 못한 Delivery는 lease를 가진 채 남고, lease가 만료되면 다른 워커가 `UNKNOWN`으로 복구해 발송 내역 조회로 확정합니다.
+
 ### 중복과 누락을 막는 방법
 
 | 상황 | 처리 |
@@ -257,12 +305,14 @@ Delivery   PENDING ─claim(leaseToken)─▶ IN_FLIGHT ─202──────
 | 같은 수신자 두 번 생성 | `deliveries (alarm_id, recipient_id)` unique 제약 |
 | 워커 두 대가 같은 Delivery를 가져감 | `FOR UPDATE SKIP LOCKED` + lease |
 | lease를 잃은 워커의 늦은 결과 | claim마다 새 `leaseToken`을 발급하고, 결과는 토큰과 상태가 일치할 때만 저장 (fencing) |
-| lease가 거의 끝난 상태에서 새 요청 | 남은 lease가 HTTP 최대 실행 시간보다 짧으면 요청을 시작하지 않음 |
+| lease가 거의 끝난 상태에서 새 요청 | 남은 lease가 HTTP 최대 실행 시간보다 짧으면 요청을 시작하지 않음. claim 커밋이 늦어질 수 있으므로 요청 직전에 한 번 더 확인 |
 | 500/503 | 외부 API가 "발송되지 않음"을 보장하므로 백오프 후 재전송 |
 | 응답 타임아웃 · 연결 오류 · lease 만료 | **재전송하지 않고** `UNKNOWN`으로 둔 뒤, reconcile 가능 시각(마지막 요청 시작 또는 lease 만료 + `RECONCILE_DELAY_MS`) 이후 `GET /v1/messages?clientRef=`로 확인. 내역이 있으면 `SENT`, 없으면 최대 시도 횟수 안에서 재전송 |
 | 발송 내역 조회 실패 | 빈 내역으로 보지 않고 `UNKNOWN` 유지, 백오프 후 다시 조회 |
 | 확인 기간이 지나도 확정 못 함 | `UNCONFIRMED`로 종결. 실제로 나갔을 수 있으므로 `FAILED`와 구분해 집계하고 운영 확인 대상으로 둠 |
-| 확장 도중 워커 종료 | 페이지마다 Delivery 생성과 cursor 저장을 한 트랜잭션으로 커밋하고 이어서 읽음. unique 제약으로 중복 생성 방지 |
+| 확장 도중 워커 종료 | 페이지마다 Delivery 생성과 cursor 저장을 한 트랜잭션으로 커밋하고, 확장 작업의 lease가 만료되면 다른 워커가 저장된 cursor부터 이어서 읽음. unique 제약으로 중복 생성 방지 |
+| 발송 중 워커 강제 종료 | 그 워커가 쥔 Delivery는 lease 만료 후 `UNKNOWN`으로 복구되고 발송 내역 조회로 확정(재전송 없음) |
+| 발송 중 취소 | 대기 중인 Delivery를 한 번에 `CANCELLED`로 바꾸고, claim할 때도 알림 상태를 다시 확인. 이미 나간 요청은 결과대로 `SENT` |
 
 `clientRef`에는 Delivery id를 씁니다. 외부 API는 중복을 막아주지 않지만 발송 내역을 `clientRef`로 조회할 수 있으므로, 보냈는지 모르는 건은 조회로 확정한 다음에만 재전송합니다.
 
