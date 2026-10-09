@@ -63,5 +63,83 @@
       }
     ],
     "vitest/warn-todo": "off"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["src/modules/*/domain/**/*.ts"],
+      "excludeFiles": ["**/*.spec.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@nestjs/*",
+                  "zod",
+                  "zod/*",
+                  "drizzle-orm",
+                  "drizzle-orm/*",
+                  "pg",
+                  "@/shared/config/**",
+                  "@/shared/http/**",
+                  "@/shared/database/**",
+                  "@/shared/logging/**",
+                  "@/modules/*/application/**",
+                  "@/modules/*/adapter/**"
+                ],
+                "message": "domain은 프레임워크·application·adapter에 의존하지 않는다"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/modules/*/application/**/*.ts"],
+      "excludeFiles": ["**/*.spec.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@nestjs/*",
+                  "zod",
+                  "zod/*",
+                  "drizzle-orm",
+                  "drizzle-orm/*",
+                  "pg",
+                  "@/shared/config/**",
+                  "@/shared/http/**",
+                  "@/shared/database/**",
+                  "@/shared/logging/**",
+                  "@/modules/*/adapter/**"
+                ],
+                "message": "application은 프레임워크·adapter에 의존하지 않는다"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/modules/*/adapter/driving/**/*.ts"],
+      "excludeFiles": ["**/*.spec.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/modules/*/domain/**", "@/modules/*/application/service/**"],
+                "message": "driving adapter는 driving port와 그 타입에만 의존한다"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }
