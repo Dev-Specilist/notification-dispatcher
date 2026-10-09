@@ -41,12 +41,14 @@ API 서버(`api`)가 알림을 만들고 발송을 시작·취소하면, 별도 
 ### 1-1. Docker Compose
 
 ```sh
-docker compose up --build                     # 포그라운드: 로그를 보며 실행, Ctrl+C로 종료
-docker compose up --build --scale worker=3    # 워커 3대
-docker compose up -d --build                  # 백그라운드 실행
+docker compose up                             # 첫 실행: 이미지 빌드 → 마이그레이션 → api · worker 기동, Ctrl+C로 종료
+docker compose up --scale worker=3            # 워커 3대
+docker compose up -d                          # 백그라운드 실행
+docker compose up --build                     # 코드를 바꾼 뒤 이미지를 다시 빌드해 실행
 docker compose down                           # 종료 (데이터까지 지우려면 down -v)
 ```
 
+- **`docker compose up` 한 번으로 실행됩니다.** 이미지가 없으면 compose가 먼저 빌드하므로 처음에는 `--build`가 필요 없습니다. `--build`는 이미 빌드된 이미지가 있을 때 코드 변경을 반영하려고 다시 빌드하는 옵션입니다.
 - **서비스는 계속 떠 있습니다.** 빌드 단계는 타입 검사와 SWC 빌드만 하고 테스트는 돌리지 않습니다(테스트는 [1-3](#1-3-테스트)). 일회성인 `migrate`만 스키마를 적용하고 끝나며, `postgres` · `mock` · `api` · `worker`는 멈출 때까지 실행됩니다.
 - **`Ctrl+C`나 `docker compose down`은 graceful shutdown입니다.** 워커는 새 claim을 멈추고 진행 중인 발송 결과를 저장한 뒤 DB를 닫고 exit 0으로 끝납니다. compose는 최대 35초(`stop_grace_period`)까지 기다립니다.
 - 기동 순서는 `postgres` healthy → 일회성 `migrate` 성공 → `api` · `worker`입니다. `worker`는 `mock`이 healthy가 될 때까지도 기다립니다.
@@ -151,8 +153,8 @@ env는 기동 시 zod로 검증하고, 값이 잘못되거나 서로 맞지 않�
 #### 부하 테스트 (k6, 선택)
 
 ```sh
-docker compose up -d --build                     # 워커 1대
-docker compose up -d --build --scale worker=3    # 워커 3대
+docker compose up -d                             # 워커 1대
+docker compose up -d --scale worker=3            # 워커 3대
 pnpm load:test                                   # 기본 RATE=50 (요청/초), DURATION=60s, URGENT_START_AFTER=20s
 ```
 
