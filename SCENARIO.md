@@ -105,6 +105,7 @@ Delivery
 | DLV-21 | 확인 기간(`UNCONFIRMED_AFTER_MS`)이 지난 `UNKNOWN` Delivery | reconcile 대상을 고른다 | 재전송하지 않고 `UNCONFIRMED`로 종결된다 |
 | DLV-22 | `IN_FLIGHT` Delivery | 발송 API에 연결 자체를 하지 못한다 | `RETRY_WAIT`(`UNREACHABLE`)가 되고 대기 시간 뒤로 미뤄지며 시도 횟수는 되돌린다 |
 | DLV-23 | `UNKNOWN` Delivery | reconcile 대상으로 예약한다 | reconcile 가능 시각이 지금 + lease로 미뤄지고 결과 불명 시작 시각과 조회 실패 횟수는 유지된다 |
+| DLV-24 | 요청 시작을 기록했지만 실제로 보내지 않은 `IN_FLIGHT` Delivery | 보내지 않은 요청을 거둬들인다 | 시도 횟수를 요청 시작 전으로 되돌리고 lease를 반납해 `PENDING`으로 돌아간다 (같은 leaseToken으로 시작한 요청만 거둘 수 있다) |
 
 ## UC · 유스케이스
 
@@ -132,6 +133,7 @@ Delivery
 | UC-20 | 발송 API 연결 실패 | 발송 유스케이스 | 공유 처리량 제한기에 대기 시간만큼 정지가 걸려 모든 워커가 함께 멈추고, 해당 건은 시도 횟수를 쓰지 않고 `RETRY_WAIT`가 된다 (장애가 길어도 대기 건이 소모되거나 `UNKNOWN`으로 넘어가지 않는다) |
 | UC-21 | 발송 허가를 기다리는 사이 워커 종료가 요청됐다 | 발송 유스케이스 | 허가를 얻어도 새 Delivery를 claim하지 않고 멈춘다 (이미 시작한 요청의 결과 저장은 계속한다) |
 | UC-22 | 결과 불명 Delivery 여러 건 | 두 워커가 동시에 reconcile한다 | 한 워커가 조회하는 동안 다른 워커는 같은 건을 고르지 않고 다른 건을 조회한다 (조회하던 워커가 멈추면 lease가 지난 뒤 다른 워커가 다시 조회한다) |
+| UC-23 | claim 커밋이 늦어져 보내기 직전 남은 lease가 HTTP 최대 실행 시간보다 짧다 | 발송 유스케이스 | 요청을 보내지 않고 leaseToken이 그대로일 때만 lease를 반납해 시도 횟수를 쓰지 않은 채 다시 발송 가능한 `PENDING`으로 되돌린다 (그 사이 다른 워커가 이어받았으면 저장하지 않는다) |
 
 ## CFG · 환경 설정 검증
 

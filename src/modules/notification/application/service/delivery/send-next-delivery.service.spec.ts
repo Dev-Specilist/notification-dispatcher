@@ -65,6 +65,10 @@ interface Fixture {
   readonly newWorker: (permit: SendPermitPort) => SendNextDeliveryService;
 }
 
+interface SlowClaimCommitFixture extends Fixture {
+  readonly slowTransaction: SlowClaimCommitTransaction;
+}
+
 interface FixtureOptions {
   readonly clock: AdjustableClock;
   readonly settings: FixedDispatchSettings;
@@ -477,6 +481,21 @@ const statuses = async (
     },
   );
 
+const slowClaimCommitFixture = async (delivery: Delivery): Promise<SlowClaimCommitFixture> => {
+  const createdTransactions: Array<SlowClaimCommitTransaction> = [];
+  const builtFixture: Fixture = await fixture([delivery], {
+    createTransaction: (repositories: InMemoryRepositories): InMemoryTransactionAdapter => {
+      const slowTransaction: SlowClaimCommitTransaction = new SlowClaimCommitTransaction(
+        repositories,
+      );
+      createdTransactions.push(slowTransaction);
+      return slowTransaction;
+    },
+  });
+  const [slowTransaction]: ReadonlyArray<SlowClaimCommitTransaction> = createdTransactions;
+  return { ...builtFixture, slowTransaction };
+};
+
 const storedState = async (
   deliveryRepository: InMemoryDeliveryRepositoryAdapter,
 ): Promise<DeliverySnapshot['state']> => {
@@ -691,35 +710,80 @@ describe('SendNextDeliveryService', () => {
     });
   });
 
-  it('UC-09 claim 커밋이 늦어져 보내기 직전 남은 lease가 최대 요청 시간보다 짧으면 요청을 보내지 않고 lease 만료 후 복구에 맡긴다', async (): Promise<void> => {
-    const slowCommit: Array<SlowClaimCommitTransaction> = [];
-    const { deliveryRepository, sender, clock, service }: Fixture = await fixture(
-      [pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO)],
-      {
-        createTransaction: (repositories: InMemoryRepositories): InMemoryTransactionAdapter => {
-          const transaction: SlowClaimCommitTransaction = new SlowClaimCommitTransaction(
-            repositories,
-          );
-          slowCommit.push(transaction);
-          return transaction;
-        },
-      },
-    );
-    const [transaction]: ReadonlyArray<SlowClaimCommitTransaction> = slowCommit;
+  it('UC-23 claim 커밋이 늦어져 보내기 직전 남은 lease가 HTTP 최대 실행 시간보다 짧다 / 발송 유스케이스 → 요청을 보내지 않고 leaseToken이 그대로일 때만 lease를 반납해 시도 횟수를 쓰지 않은 채 다시 발송 가능한 PENDING으로 되돌린다', async (): Promise<void> => {
+    const { deliveryRepository, sender, clock, service, slowTransaction }: SlowClaimCommitFixture =
+      await slowClaimCommitFixture(pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO));
 
     const attempt: Promise<SendAttempt> = service.execute();
-    await transaction.committing.opened;
+    await slowTransaction.committing.opened;
     clock.advanceBy(60_000 - 10_000 + 1);
-    transaction.commitFinished.open();
+    slowTransaction.commitFinished.open();
+
+    expect(await attempt).toEqual({ kind: 'released', deliveryId: deliveryId(1) });
+    expect(sender.sent).toEqual([]);
+    const [stored]: ReadonlyArray<Delivery> = await deliveryRepository.findByAlarmId(
+      alarmId(BULK_ALARM_ID),
+    );
+    expect(stored.snapshot()).toMatchObject({ attempts: 0, state: { status: 'PENDING' } });
+  });
+
+  it('UC-23 재시도 중이던 Delivery도 보내지 못한 요청은 시도 횟수에 넣지 않고, 다음 실행에서 다시 claim해 보낸다', async (): Promise<void> => {
+    const retrying: Delivery = Delivery.reconstitute({
+      ...pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO).snapshot(),
+      attempts: 1,
+      state: { status: 'RETRY_WAIT', retryAt: at(DISPATCHED_ISO), cause: 'TRANSIENT_FAILURE' },
+    });
+    const { deliveryRepository, sender, clock, service, slowTransaction }: SlowClaimCommitFixture =
+      await slowClaimCommitFixture(retrying);
+
+    const attempt: Promise<SendAttempt> = service.execute();
+    await slowTransaction.committing.opened;
+    clock.advanceBy(60_000 - 10_000 + 1);
+    slowTransaction.commitFinished.open();
+
+    expect(await attempt).toEqual({ kind: 'released', deliveryId: deliveryId(1) });
+    const [abandoned]: ReadonlyArray<Delivery> = await deliveryRepository.findByAlarmId(
+      alarmId(BULK_ALARM_ID),
+    );
+    expect(abandoned.snapshot()).toMatchObject({ attempts: 1, state: { status: 'PENDING' } });
+
+    expect(await service.execute()).toEqual({
+      kind: 'recorded',
+      deliveryId: deliveryId(1),
+      outcome: 'accepted',
+    });
+    expect(sender.sent).toHaveLength(1);
+    const [delivered]: ReadonlyArray<Delivery> = await deliveryRepository.findByAlarmId(
+      alarmId(BULK_ALARM_ID),
+    );
+    expect(delivered.snapshot()).toMatchObject({ attempts: 2, state: { status: 'SENT' } });
+  });
+
+  it('UC-23 보내지 못한 요청을 거두기 전에 다른 워커가 같은 Delivery를 이어받았으면 반납을 저장하지 않는다', async (): Promise<void> => {
+    const { deliveryRepository, sender, clock, service, slowTransaction }: SlowClaimCommitFixture =
+      await slowClaimCommitFixture(pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO));
+
+    const attempt: Promise<SendAttempt> = service.execute();
+    await slowTransaction.committing.opened;
+    clock.advanceBy(60_000 - 10_000 + 1);
+    const reclaimed: Delivery = transitionedDelivery(
+      pendingDelivery(1, BULK_ALARM_ID, 'BULK', CREATED_ISO).claim(
+        leaseToken(PREVIOUS_TOKEN),
+        clock.now(),
+        durationMs(60_000),
+      ),
+    );
+    await deliveryRepository.saveAll([reclaimed]);
+    slowTransaction.commitFinished.open();
 
     expect(await attempt).toEqual({ kind: 'lease-too-short', deliveryId: deliveryId(1) });
     expect(sender.sent).toEqual([]);
     const [stored]: ReadonlyArray<Delivery> = await deliveryRepository.findByAlarmId(
       alarmId(BULK_ALARM_ID),
     );
-    expect(stored.snapshot().state).toMatchObject({
-      status: 'IN_FLIGHT',
-      request: { kind: 'STARTED' },
+    expect(stored.snapshot()).toMatchObject({
+      attempts: 0,
+      state: { status: 'IN_FLIGHT', lease: { token: PREVIOUS_TOKEN } },
     });
   });
 

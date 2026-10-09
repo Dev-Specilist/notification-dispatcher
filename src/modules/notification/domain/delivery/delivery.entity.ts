@@ -114,6 +114,21 @@ export class Delivery {
     });
   }
 
+  abandonUnsentRequest(token: LeaseToken): DeliveryTransition {
+    const check: StartedCheck = this.checkStartedRequest(token);
+    if (check.kind === 'rejected') {
+      return check;
+    }
+    return {
+      kind: 'released',
+      delivery: new Delivery({
+        ...this.snapshot(),
+        attempts: Math.max(0, this.props.attempts - 1),
+        state: { status: 'PENDING' },
+      }),
+    };
+  }
+
   recordAccepted(token: LeaseToken, messageId: MessageId, now: Readonly<Date>): DeliveryTransition {
     const check: StartedCheck = this.checkStartedRequest(token);
     if (check.kind === 'rejected') {

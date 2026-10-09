@@ -71,7 +71,7 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
     }
     const { alarmId, recipientId, id }: DeliverySnapshot = step.delivery.snapshot();
     if (!step.delivery.hasLeaseTimeFor(this.clock.now(), this.settings.maxRequestMs)) {
-      return { kind: 'lease-too-short', deliveryId: id };
+      return this.abandonUnsent(step.delivery, token);
     }
     const outcome: SendOutcome = await this.messageSender.send({
       alarmId,
@@ -118,6 +118,21 @@ export class SendNextDeliveryService implements SendNextDeliveryUseCase {
         const inFlight: Delivery = SendNextDeliveryService.transitioned(started);
         await deliveryRepository.saveAll([inFlight]);
         return { kind: 'ready', delivery: inFlight, body: alarm.alarm.snapshot().body };
+      },
+    );
+  }
+
+  private abandonUnsent(delivery: Delivery, token: LeaseToken): Promise<SendAttempt> {
+    const abandoned: Delivery = SendNextDeliveryService.transitioned(
+      delivery.abandonUnsentRequest(token),
+    );
+    const { id: deliveryId }: DeliverySnapshot = delivery.snapshot();
+    return this.transaction.run(
+      async ({ deliveryRepository }: SendNextDeliveryRepositories): Promise<SendAttempt> => {
+        const saved: LeasedSave = await deliveryRepository.saveLeased(abandoned, token);
+        return saved.kind === 'saved'
+          ? { kind: 'released', deliveryId }
+          : { kind: 'lease-too-short', deliveryId };
       },
     );
   }

@@ -313,6 +313,66 @@ describe('Delivery', () => {
     expect(delivery.snapshot()).toMatchObject({ attempts: 0, state: { status: 'PENDING' } });
   });
 
+  it('DLV-24 요청 시작을 기록했지만 실제로 보내지 않은 IN_FLIGHT Delivery / 보내지 않은 요청을 거둬들인다 → 시도 횟수를 요청 시작 전으로 되돌리고 lease를 반납해 PENDING으로 돌아간다', (): void => {
+    const delivery: Delivery = released(started().abandonUnsentRequest(TOKEN_A()));
+
+    expect(delivery.snapshot()).toMatchObject({ attempts: 0, state: { status: 'PENDING' } });
+    expect(delivery.isClaimableAt(at(SETTLED_ISO))).toBe(true);
+  });
+
+  it('DLV-24 재시도 중이던 Delivery도 보내지 않은 요청을 거두면 그 전까지의 시도 횟수를 유지한다', (): void => {
+    const retryClaimedAt: Date = at(LEASE_EXPIRED_ISO);
+    const retryClaimed: Delivery = transitioned(
+      retryWaiting().claim(TOKEN_B(), retryClaimedAt, LEASE_MS),
+    );
+    const retryStarted: Delivery = transitioned(
+      retryClaimed.startRequest(TOKEN_B(), retryClaimedAt, MAX_REQUEST_MS),
+    );
+
+    const delivery: Delivery = released(retryStarted.abandonUnsentRequest(TOKEN_B()));
+
+    expect(retryStarted.snapshot().attempts).toBe(2);
+    expect(delivery.snapshot()).toMatchObject({ attempts: 1, state: { status: 'PENDING' } });
+  });
+
+  it('DLV-24 다른 leaseToken이거나 요청을 시작하지 않았거나 IN_FLIGHT가 아니면 요청을 거둘 수 없다', (): void => {
+    expect(started().abandonUnsentRequest(TOKEN_B())).toEqual({
+      kind: 'rejected',
+      reason: 'LEASE_MISMATCH',
+    });
+    expect(claimed().abandonUnsentRequest(TOKEN_A())).toEqual({
+      kind: 'rejected',
+      reason: 'REQUEST_NOT_STARTED',
+    });
+    expect(pending().abandonUnsentRequest(TOKEN_A())).toEqual({
+      kind: 'rejected',
+      reason: 'NOT_IN_FLIGHT',
+    });
+    expect(unknownAfterTimeout().abandonUnsentRequest(TOKEN_A())).toEqual({
+      kind: 'rejected',
+      reason: 'NOT_IN_FLIGHT',
+    });
+  });
+
+  it.each<StatusBuildCase>([
+    ['SENT', (): Delivery => sent()],
+    ['FAILED', (): Delivery => failed()],
+    ['UNCONFIRMED', (): Delivery => unconfirmed()],
+    ['CANCELLED', (): Delivery => cancelled()],
+  ])(
+    'DLV-24 종결된 %s Delivery는 요청을 거둘 수 없고 상태가 바뀌지 않는다',
+    (_status: string, build: () => Delivery): void => {
+      const delivery: Delivery = build();
+      const before: DeliverySnapshot = delivery.snapshot();
+
+      expect(delivery.abandonUnsentRequest(TOKEN_A())).toEqual({
+        kind: 'rejected',
+        reason: 'ALREADY_SETTLED',
+      });
+      expect(delivery.snapshot()).toEqual(before);
+    },
+  );
+
   it.each<StatusBuildCase>([
     ['SENT', (): Delivery => sent()],
     ['FAILED', (): Delivery => failed()],
