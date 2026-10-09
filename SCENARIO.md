@@ -8,11 +8,11 @@
 | --- | --- | --- |
 | `ALM` | 알림 도메인 규칙 | `src/modules/notification/domain/alarm/*.spec.ts` |
 | `DLV` | 수신자별 발송(Delivery) 도메인 규칙 | `src/modules/notification/domain/delivery/*.spec.ts` |
-| `UC` | 유스케이스 (포트는 in-memory fake) | `src/modules/notification/application/service/*.spec.ts` |
+| `UC` | 유스케이스 | `src/modules/notification/application/service/<개념>/*.spec.ts` (포트는 `testing/in-memory` fake) |
 | `CFG` | 종료 타이머 설정 | `src/shared/config/env.schema.spec.ts` |
-| `WRK` | 워커 실행 · 종료 | `src/modules/notification/adapter/in/worker/*.spec.ts` |
-| `DB` | 저장소 · 동시성 (Testcontainers PostgreSQL) | `src/modules/notification/adapter/out/persistence/*.int-spec.ts` · `src/modules/notification/testing/contract/*.contract.ts` |
-| `EXT` | 외부 API adapter (Testcontainers mock 서버) | `src/modules/notification/adapter/out/external-api/*.int-spec.ts` |
+| `WRK` | 워커 실행 · 종료 | `src/modules/notification/adapter/driving/worker/*.spec.ts` |
+| `DB` | 저장소 · 동시성 (Testcontainers PostgreSQL) | `src/modules/notification/adapter/driven/persistence/**/*.int-spec.ts` · `src/modules/notification/testing/contract/*.contract.ts` |
+| `EXT` | 외부 API adapter (Testcontainers mock 서버) | `src/modules/notification/adapter/driven/mock-api/**/*.int-spec.ts` |
 | `API` | REST API 계약 | `test/alarm.e2e-spec.ts` |
 | `E2E` | api + worker + mock 전체 흐름 | `test/dispatch-flow.e2e-spec.ts` |
 
