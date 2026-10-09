@@ -35,12 +35,10 @@ import { ShutdownSignalPort } from '@/modules/notification/application/port/driv
 import { WorkerShutdownSignalAdapter } from '@/modules/notification/adapter/driven/process-state/worker-shutdown-signal.adapter';
 import { TypedConfigService } from '@/shared/config/typed-config.service';
 
-const WORKER_SETTINGS: string = 'WorkerSettings';
-
 @Module({
   providers: [
     {
-      provide: WORKER_SETTINGS,
+      provide: WorkerSettings,
       inject: [TypedConfigService],
       useFactory: (config: TypedConfigService): WorkerSettings =>
         WorkerSettingsFactory.fromConfig(config),
@@ -61,7 +59,7 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
     },
     {
       provide: SendPermitPort,
-      inject: [Pool, WORKER_SETTINGS],
+      inject: [Pool, WorkerSettings],
       useFactory: (pool: Pool, { rateLimiter }: WorkerSettings): SendPermitPort =>
         new PostgresRateLimiterAdapter(
           NotificationDatabaseFactory.create(pool),
@@ -71,7 +69,7 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
     },
     {
       provide: MessageSenderPort,
-      inject: [WORKER_SETTINGS, WorkerShutdownSignalAdapter],
+      inject: [WorkerSettings, WorkerShutdownSignalAdapter],
       useFactory: (
         { mockApi }: WorkerSettings,
         { outgoingRequestAbortSignal }: WorkerShutdownSignalAdapter,
@@ -79,7 +77,7 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
     },
     {
       provide: MessageLookupPort,
-      inject: [WORKER_SETTINGS, WorkerShutdownSignalAdapter],
+      inject: [WorkerSettings, WorkerShutdownSignalAdapter],
       useFactory: (
         { mockApi }: WorkerSettings,
         { outgoingRequestAbortSignal }: WorkerShutdownSignalAdapter,
@@ -87,7 +85,7 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
     },
     {
       provide: RecipientDirectoryPort,
-      inject: [WORKER_SETTINGS, WorkerShutdownSignalAdapter],
+      inject: [WorkerSettings, WorkerShutdownSignalAdapter],
       useFactory: (
         { recipientDirectory }: WorkerSettings,
         { outgoingRequestAbortSignal }: WorkerShutdownSignalAdapter,
@@ -96,13 +94,7 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
     },
     {
       provide: ExpandNextPageUseCase,
-      inject: [
-        TransactionPort,
-        RecipientDirectoryPort,
-        IdGeneratorPort,
-        WORKER_SETTINGS,
-        ClockPort,
-      ],
+      inject: [TransactionPort, RecipientDirectoryPort, IdGeneratorPort, WorkerSettings, ClockPort],
       useFactory: (
         transaction: TransactionPort,
         recipientDirectory: RecipientDirectoryPort,
@@ -126,7 +118,7 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
         MessageSenderPort,
         IdGeneratorPort,
         ClockPort,
-        WORKER_SETTINGS,
+        WorkerSettings,
         JitterSourcePort,
         ShutdownSignalPort,
       ],
@@ -153,7 +145,7 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
     },
     {
       provide: ReconcileNextDeliveryUseCase,
-      inject: [TransactionPort, MessageLookupPort, ClockPort, WORKER_SETTINGS, JitterSourcePort],
+      inject: [TransactionPort, MessageLookupPort, ClockPort, WorkerSettings, JitterSourcePort],
       useFactory: (
         transaction: TransactionPort,
         messageLookup: MessageLookupPort,
@@ -171,7 +163,7 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
     },
     {
       provide: RecoverExpiredLeaseUseCase,
-      inject: [TransactionPort, ClockPort, WORKER_SETTINGS],
+      inject: [TransactionPort, ClockPort, WorkerSettings],
       useFactory: (
         transaction: TransactionPort,
         clock: ClockPort,

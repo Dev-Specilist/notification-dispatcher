@@ -32,9 +32,9 @@ export interface DeliverySettingsValues {
   readonly unconfirmedAfterMs: DurationMs;
 }
 
-export interface WorkerSettings {
-  readonly deliverySettings: DeliverySettingsValues;
-  readonly mockApi: MockApiSettings;
-  readonly recipientDirectory: RecipientDirectorySettings;
-  readonly rateLimiter: RateLimiterSettings;
+export abstract class WorkerSettings {
+  abstract readonly deliverySettings: DeliverySettingsValues;
+  abstract readonly mockApi: MockApiSettings;
+  abstract readonly recipientDirectory: RecipientDirectorySettings;
+  abstract readonly rateLimiter: RateLimiterSettings;
 }
