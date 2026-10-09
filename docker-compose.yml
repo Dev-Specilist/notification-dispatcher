@@ -68,6 +68,7 @@ services:
       API_URL: http://api:3000
       RATE: ${RATE:-50}
       DURATION: ${DURATION:-60s}
+      URGENT_START_AFTER: ${URGENT_START_AFTER:-20s}
     volumes:
       - ./load:/load:ro
     command: run /load/alarm-api.load.ts

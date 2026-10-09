@@ -1,13 +1,20 @@
-import { check, fail } from 'k6';
+import { check, fail, sleep } from 'k6';
 import type { JSONValue } from 'k6';
 import exec from 'k6/execution';
 import http from 'k6/http';
 import type { Params, Response } from 'k6/http';
-import { Gauge } from 'k6/metrics';
+import { Gauge, Trend } from 'k6/metrics';
 import type { Options } from 'k6/options';
 
 type AlarmEndpoint =
-  'create-alarm' | 'start-dispatch' | 'get-alarm' | 'list-alarms' | 'cancel-alarm';
+  | 'create-alarm'
+  | 'start-dispatch'
+  | 'get-alarm'
+  | 'list-alarms'
+  | 'cancel-alarm'
+  | 'urgent-progress';
+
+type NotYetRequestedStatus = 'PENDING' | 'IN_FLIGHT';
 
 interface DispatchSnapshot {
   readonly alarmStatus: string;
@@ -38,6 +45,13 @@ const apiUrl: string = LoadEnv.text('API_URL', 'http://localhost:3000');
 const requestsPerSecond: number = LoadEnv.positiveInteger('RATE', 50);
 const testDuration: string = LoadEnv.text('DURATION', '60s');
 
+const URGENT_RECIPIENT_COUNT: number = 100;
+const URGENT_START_AFTER: string = LoadEnv.text('URGENT_START_AFTER', '20s');
+const URGENT_POLL_INTERVAL_SECONDS: number = 0.2;
+const URGENT_REQUEST_LIMIT_MS: number = 30_000;
+const NOT_YET_REQUESTED_STATUSES: ReadonlyArray<NotYetRequestedStatus> = ['PENDING', 'IN_FLIGHT'];
+
+const urgentAllRequestedTrend: Trend = new Trend('urgent_all_requested_ms', true);
 const sentDeliveriesGauge: Gauge = new Gauge('dispatch_sent_deliveries');
 const sentPerSecondGauge: Gauge = new Gauge('dispatch_sent_per_second');
 
@@ -52,6 +66,14 @@ export const options: Options = {
       preAllocatedVUs: requestsPerSecond,
       maxVUs: requestsPerSecond * 2,
     },
+    urgent_latency: {
+      executor: 'per-vu-iterations',
+      vus: 1,
+      iterations: 1,
+      startTime: URGENT_START_AFTER,
+      maxDuration: '60s',
+      exec: 'urgentLatency',
+    },
   },
   thresholds: {
     http_req_failed: ['rate<0.01'],
@@ -60,6 +82,7 @@ export const options: Options = {
     'http_req_duration{endpoint:list-alarms}': ['p(95)<200'],
     checks: ['rate>0.99'],
     dispatch_sent_per_second: ['value>0'],
+    urgent_all_requested_ms: [`max<${URGENT_REQUEST_LIMIT_MS}`],
   },
 };
 
@@ -92,6 +115,34 @@ class AlarmApi {
       return fail(`응답의 ${path}가 숫자가 아닙니다`);
     }
     return selectedValue;
+  }
+
+  static createUrgentAlarm(recipientIds: ReadonlyArray<string>): string {
+    const createResponse: Response = http.post(
+      `${apiUrl}/alarms`,
+      JSON.stringify({
+        title: 'k6 긴급 알림',
+        body: '대량 발송 중 긴급 알림 지연 측정',
+        kind: 'URGENT',
+        recipientIds,
+      }),
+      AlarmApi.params('create-alarm'),
+    );
+    AlarmApi.expectStatus(createResponse, 201, 'POST /alarms (URGENT)');
+    return AlarmApi.stringAt(createResponse, 'id');
+  }
+
+  static notYetRequestedCount(alarmId: string): number {
+    const alarmResponse: Response = http.get(
+      `${apiUrl}/alarms/${alarmId}`,
+      AlarmApi.params('urgent-progress'),
+    );
+    AlarmApi.expectStatus(alarmResponse, 200, 'GET /alarms/:id (URGENT)');
+    return NOT_YET_REQUESTED_STATUSES.reduce(
+      (waitingTotal: number, status: NotYetRequestedStatus): number =>
+        waitingTotal + AlarmApi.numberAt(alarmResponse, `deliveries.byStatus.${status}`),
+      0,
+    );
   }
 
   static createBulkAlarm(): string {
@@ -163,6 +214,31 @@ export default function (data: Readonly<LoadTestData>): void {
   check(listResponse.status, {
     'GET /alarms?limit=20 200': (status: number): boolean => status === 200,
   });
+}
+
+export function urgentLatency(): void {
+  const recipientIds: Array<string> = [];
+  for (
+    let recipientNumber: number = 1;
+    recipientNumber <= URGENT_RECIPIENT_COUNT;
+    recipientNumber += 1
+  ) {
+    recipientIds.push(`u_${String(recipientNumber).padStart(6, '0')}`);
+  }
+  const urgentAlarmId: string = AlarmApi.createUrgentAlarm(recipientIds);
+  const dispatchStartedAtMs: number = Date.now();
+  AlarmApi.startDispatch(urgentAlarmId);
+  while (Date.now() - dispatchStartedAtMs < URGENT_REQUEST_LIMIT_MS) {
+    if (AlarmApi.notYetRequestedCount(urgentAlarmId) === 0) {
+      urgentAllRequestedTrend.add(Date.now() - dispatchStartedAtMs);
+      return;
+    }
+    sleep(URGENT_POLL_INTERVAL_SECONDS);
+  }
+  urgentAllRequestedTrend.add(Date.now() - dispatchStartedAtMs);
+  fail(
+    `긴급 알림 ${URGENT_RECIPIENT_COUNT}건의 첫 요청이 ${URGENT_REQUEST_LIMIT_MS}ms 안에 모두 나가지 않았습니다`,
+  );
 }
 
 export function teardown(data: Readonly<LoadTestData>): void {
