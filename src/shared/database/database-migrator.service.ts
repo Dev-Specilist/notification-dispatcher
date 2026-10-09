@@ -14,11 +14,7 @@ export class DatabaseMigrator {
 
   async migrate(): Promise<void> {
     const migrationsFolder: string = join(process.cwd(), DatabaseMigrator.MIGRATIONS_FOLDER);
-    try {
-      await migrate(drizzle({ client: this.pool }), { migrationsFolder });
-      this.logger.log(`migrations in ${migrationsFolder} are applied`);
-    } finally {
-      await this.pool.end();
-    }
+    await migrate(drizzle({ client: this.pool }), { migrationsFolder });
+    this.logger.log(`migrations in ${migrationsFolder} are applied`);
   }
 }

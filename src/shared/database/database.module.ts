@@ -1,6 +1,7 @@
 import { Global, Logger, Module } from '@nestjs/common';
 import { Pool } from 'pg';
 import { TypedConfigService } from '@/shared/config/typed-config.service';
+import { DatabaseShutdown } from '@/shared/database/database-shutdown.service';
 
 @Global()
 @Module({
@@ -10,8 +11,9 @@ import { TypedConfigService } from '@/shared/config/typed-config.service';
       inject: [TypedConfigService],
       useFactory: (config: TypedConfigService): Pool => DatabaseModule.createPool(config),
     },
+    DatabaseShutdown,
   ],
-  exports: [Pool],
+  exports: [Pool, DatabaseShutdown],
 })
 export class DatabaseModule {
   private static readonly CONNECTION_TIMEOUT_MS: number = 5_000;

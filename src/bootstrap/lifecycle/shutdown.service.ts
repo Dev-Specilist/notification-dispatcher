@@ -6,10 +6,10 @@ import {
   OnApplicationShutdown,
   OnModuleDestroy,
 } from '@nestjs/common';
-import { Pool } from 'pg';
 import { ReadinessPort } from '@/modules/health/application/port/driven/for-tracking-readiness/readiness.port';
 import { TimerDelayOrZeroMs } from '@/shared/config/primitive.type';
 import { TypedConfigService } from '@/shared/config/typed-config.service';
+import { DatabaseShutdown } from '@/shared/database/database-shutdown.service';
 
 type SignalListener = (signal: NodeJS.Signals) => void;
 
@@ -32,7 +32,7 @@ export class ShutdownService
   constructor(
     private readonly readiness: ReadinessPort,
     private readonly config: TypedConfigService,
-    private readonly pool: Pool,
+    private readonly databaseShutdown: DatabaseShutdown,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -58,20 +58,16 @@ export class ShutdownService
     });
   }
 
-  async onApplicationShutdown(): Promise<void> {
+  onApplicationShutdown(): void {
     ShutdownService.SIGNALS.forEach((signal: NodeJS.Signals): void => {
       process.removeListener(signal, this.onSignal);
     });
-    await this.closeDatabase();
-    this.watchdogs.forEach((watchdog: NodeJS.Timeout): void => clearTimeout(watchdog));
-    this.watchdogs.clear();
+    void this.databaseShutdown.whenPoolClosed().then((): void => this.clearWatchdogs());
   }
 
-  private async closeDatabase(): Promise<void> {
-    if (this.pool.ending) {
-      return;
-    }
-    await this.pool.end();
+  private clearWatchdogs(): void {
+    this.watchdogs.forEach((watchdog: NodeJS.Timeout): void => clearTimeout(watchdog));
+    this.watchdogs.clear();
   }
 
   private stopAcceptingTraffic(reason: string): void {

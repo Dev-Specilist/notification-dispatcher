@@ -464,7 +464,7 @@ Delivery  PENDING ─claim─▶ IN_FLIGHT ─202──────────�
   1. 종료 신호를 받는 즉시 readiness를 내리고, 제한 시간(`SHUTDOWN_DRAIN_MS` + `SHUTDOWN_TIMEOUT_MS`)을 재는 감시 타이머를 시작합니다.
   2. `onModuleDestroy`: 워커는 종료 플래그를 먼저 세운 뒤 루프를 멈춥니다. 발송 유스케이스는 허가를 얻은 직후 이 플래그를 확인해 새 발송 건을 claim하지 않고, 진행 중인 요청과 결과 저장을 기다립니다. `SHUTDOWN_TIMEOUT_MS`의 절반이 지나도 루프가 멈추지 않으면 진행 중인 외부 HTTP 요청을 abort합니다. 중단된 발송은 발송됐을 수 있으므로 결과 불명(`UNKNOWN`)으로 저장해 재전송하지 않고 reconcile로 확정하고, 발송 내역 조회와 사용자 조회는 실패로 처리해 다음에 다시 시도합니다. 나머지 절반은 결과 저장과 DB 종료에 씁니다. 기본값에서는 요청 제한 시간(`DISPATCH_MAX_REQUEST_MS`, 5초)이 먼저 끝나 abort가 일어나지 않고, 제한 시간을 요청 제한 시간보다 짧게 둔 배포에서 동작합니다. 별도 설정 없이 제한 시간에서 나눠 두 값이 어긋나지 않게 했습니다.
   3. `beforeApplicationShutdown`: drain 시간만큼 기다려 로드밸런서가 트래픽을 끊을 시간을 줍니다.
-  4. `onApplicationShutdown`: DB 연결을 닫고 exit 0으로 끝납니다.
+  4. `onApplicationShutdown`: Pool을 만든 `DatabaseModule`이 DB 연결을 닫고 exit 0으로 끝납니다. 전역 모듈의 hook은 이 단계의 마지막에 실행되므로 다른 모듈의 종료 작업이 모두 끝난 뒤에 닫힙니다. 감시 타이머는 Pool이 닫힌 뒤에 해제해, 반납되지 않은 연결 때문에 Pool 종료가 끝나지 않아도 강제 종료가 동작합니다.
   5. 요청을 중단한 뒤에도 제한 시간 안에 끝나지 않으면 exit 1로 강제 종료합니다. 결과를 저장하지 못한 건은 lease를 가진 채 남고, lease 만료 후 다른 워커가 `UNKNOWN`으로 복구해 조회로 확정합니다. 끝나지 않는 작업 때문에 종료가 늘어지지 않게 하는 대신, 그 건의 확정이 늦어집니다.
 - compose의 `stop_grace_period`(35초)는 drain + 제한 시간(30초)보다 깁니다. 종료 타이머 값과 그 합은 Node 타이머 상한(2,147,483,647ms) 이하로 검증합니다. 상한을 넘으면 Node가 1ms로 실행해 기동 직후 강제 종료되기 때문입니다.
 
@@ -524,8 +524,7 @@ Delivery  PENDING ─claim─▶ IN_FLIGHT ─202──────────�
 - **수신자 목록 조회 실패 시 확장 lease 즉시 해제:** 지금은 lease 만료(30초) 뒤에 다시 시도됩니다.
 - **쿼리 실행 시간 제한:** 연결 대기 제한(5초)만 있어, `statement_timeout` · `lock_timeout`을 근거와 함께 정하고 통합 테스트로 확인하겠습니다.
 - **완료 확인 중복 줄이기:** 워커가 많아지면 advisory lock으로 한 워커만 확인하게 하겠습니다.
-- **Pool 종료 책임을 `DatabaseModule`로:** 지금은 종료 조율이 Pool을 직접 닫습니다. Pool을 만든 모듈이 닫게 하되 drain 뒤 순서가 유지되는지 확인이 필요합니다.
-- **테스트 공용 helper 정리와 `noUncheckedIndexedAccess` 도입:** 결과 discriminated union 좁히기 · Gate · 고정 시계 fixture를 모으고, 배열 인덱스 접근의 빈 배열 경로를 컴파일러가 잡게 하겠습니다.
+- **`noUncheckedIndexedAccess` 도입과 고정 시계 fixture 공용화:** 결과 discriminated union 좁히기와 Gate는 공용 테스트 helper로 모았습니다. 남은 것은 테스트마다 조금씩 다른 고정 시계 fixture의 공용화와, 배열 인덱스 접근의 빈 배열 경로를 컴파일러가 잡게 하는 설정입니다.
 - **10만 건 부하 측정(k6):** 대량 발송 중 조회 응답 시간과 워커당 동시 발송 수의 적정값을 측정으로 정하겠습니다.
 
 **AI 도구 사용:** 설계 결정과 코드 검토는 직접 수행했으며, 구현 · 리팩터링 · 리뷰에 Claude와 ChatGPT를 활용했습니다.

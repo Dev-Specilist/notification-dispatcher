@@ -33,6 +33,7 @@ import { portSchema } from '@/shared/config/primitive.schema';
 import { WorkerShutdownSignalAdapter } from '@/modules/notification/adapter/driven/process-state/worker-shutdown-signal.adapter';
 import { createGate, Gate } from '@/shared/testing/gate.factory';
 import { TypedConfigModule } from '@/shared/config/typed-config.module';
+import { DatabaseShutdown } from '@/shared/database/database-shutdown.service';
 
 interface ExecutionCounts {
   readonly expansions: number;
@@ -226,6 +227,7 @@ describe('DispatchWorker', () => {
       },
       { provide: ReadinessPort, useClass: InMemoryReadinessAdapter },
       { provide: Pool, useValue: new Pool({ connectionString: UNCONNECTED_DATABASE_URL }) },
+      DatabaseShutdown,
       ShutdownService,
     ],
   });

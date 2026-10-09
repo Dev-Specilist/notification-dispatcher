@@ -49,7 +49,6 @@ describe('DatabaseModule', () => {
 
   afterEach(async (): Promise<void> => {
     await moduleRef.close();
-    await pool.end();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
@@ -60,9 +59,14 @@ describe('DatabaseModule', () => {
     expect(result.rows).toEqual([{ answer: 1 }]);
   });
 
+  it('종료 단계에서 DB Pool을 닫는다', async (): Promise<void> => {
+    await moduleRef.close();
+
+    expect(pool.ended).toBe(true);
+  });
+
   it('DATABASE_POOL_MAX만큼만 연결을 열고 그 이상의 요청은 연결이 반환될 때까지 기다리게 한다', async (): Promise<void> => {
     await moduleRef.close();
-    await pool.end();
     vi.stubEnv('DATABASE_POOL_MAX', '2');
     moduleRef = await Test.createTestingModule({
       imports: [TypedConfigModule.forRoot(createEnvSchema(portSchema.parse(3000))), DatabaseModule],

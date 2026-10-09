@@ -8,6 +8,8 @@ import { InMemoryReadinessAdapter } from '@/modules/health/adapter/driven/proces
 import { createEnvSchema } from '@/shared/config/env.schema';
 import { portSchema } from '@/shared/config/primitive.schema';
 import { TypedConfigModule } from '@/shared/config/typed-config.module';
+import { DatabaseShutdown } from '@/shared/database/database-shutdown.service';
+import { DatabaseModule } from '@/shared/database/database.module';
 
 type ExitSpy = MockInstance<typeof process.exit>;
 
@@ -19,8 +21,6 @@ class ExitCalled extends Error {}
 
 const NEVER: () => void = (): void => {};
 
-const UNCONNECTED_DATABASE_URL: string = 'postgres://app:secret@localhost:5432/notification';
-
 const DRAIN_MS: number = 30;
 const TIMEOUT_MS: number = 1000;
 
@@ -30,21 +30,19 @@ describe('ShutdownService', () => {
   let shutdown: ShutdownService;
   let exit: ExitSpy;
   let pool: Pool;
+  let databaseShutdown: DatabaseShutdown;
 
   beforeEach(async (): Promise<void> => {
     vi.stubEnv('SHUTDOWN_DRAIN_MS', String(DRAIN_MS));
     vi.stubEnv('SHUTDOWN_TIMEOUT_MS', String(TIMEOUT_MS));
     vi.stubEnv('DATABASE_URL', 'postgres://app:secret@localhost:5432/notification');
     moduleRef = await Test.createTestingModule({
-      imports: [TypedConfigModule.forRoot(createEnvSchema(portSchema.parse(3000)))],
-      providers: [
-        { provide: ReadinessPort, useClass: InMemoryReadinessAdapter },
-        { provide: Pool, useValue: new Pool({ connectionString: UNCONNECTED_DATABASE_URL }) },
-        ShutdownService,
-      ],
+      imports: [TypedConfigModule.forRoot(createEnvSchema(portSchema.parse(3000))), DatabaseModule],
+      providers: [{ provide: ReadinessPort, useClass: InMemoryReadinessAdapter }, ShutdownService],
     }).compile();
     readiness = moduleRef.get(ReadinessPort);
     pool = moduleRef.get(Pool);
+    databaseShutdown = moduleRef.get(DatabaseShutdown);
     shutdown = moduleRef.get(ShutdownService);
     exit = vi.spyOn(process, 'exit').mockImplementation((): never => {
       throw new ExitCalled();
@@ -112,7 +110,8 @@ describe('ShutdownService', () => {
 
   it('정상 종료가 끝나면 제한 시간이 지나도 강제 종료하지 않는다', async (): Promise<void> => {
     shutdown.handleSignal('SIGTERM');
-    await shutdown.onApplicationShutdown();
+    shutdown.onApplicationShutdown();
+    await databaseShutdown.onApplicationShutdown();
 
     vi.advanceTimersByTime(DRAIN_MS + TIMEOUT_MS);
 
@@ -135,14 +134,8 @@ describe('ShutdownService', () => {
     shutdown.onApplicationBootstrap();
     expect(process.listenerCount('SIGTERM')).toBe(before + 1);
 
-    await shutdown.onApplicationShutdown();
+    shutdown.onApplicationShutdown();
     expect(process.listenerCount('SIGTERM')).toBe(before);
-  });
-
-  it('종료 단계에서 DB Pool을 닫는다', async (): Promise<void> => {
-    await shutdown.onApplicationShutdown();
-
-    expect(pool.ended).toBe(true);
   });
 
   it('DB Pool 종료가 끝나지 않으면 워치독을 유지해 기한이 지나면 exit(1)로 강제 종료한다', async (): Promise<void> => {
@@ -154,7 +147,8 @@ describe('ShutdownService', () => {
       .mockImplementation((): Promise<void> => new Promise<void>(NEVER));
     shutdown.handleSignal('SIGTERM');
 
-    void shutdown.onApplicationShutdown();
+    shutdown.onApplicationShutdown();
+    void databaseShutdown.onApplicationShutdown();
     await vi.advanceTimersByTimeAsync(DRAIN_MS + TIMEOUT_MS - 1);
     expect(exit).not.toHaveBeenCalled();
 
