@@ -1,11 +1,15 @@
-import { RetryPolicy } from '@/modules/notification/domain/delivery/retry-policy';
+import {
+  DispatchSettings,
+  LeaseRecoverySettings,
+  ReconcileSettings,
+} from '@/modules/notification/application/service/delivery/delivery-settings.type';
+import { ExpansionSettings } from '@/modules/notification/application/service/expansion/expansion-settings.type';
 import {
   MockApiSettings,
   RecipientDirectorySettings,
 } from '@/modules/notification/adapter/driven/mock-api/mock-api.type';
 import { RateLimiterSettings } from '@/modules/notification/adapter/driven/persistence/rate-limiter/postgres-rate-limiter.type';
 import { Env } from '@/shared/config/env.type';
-import { DurationMs } from '@/shared/domain/duration.type';
 
 export type WorkerEnv = Pick<
   Env,
@@ -23,15 +27,10 @@ export type WorkerEnv = Pick<
   | 'RATE_LIMIT_INTERVAL_MS'
 >;
 
-export interface DeliverySettingsValues {
-  readonly leaseMs: DurationMs;
-  readonly maxRequestMs: DurationMs;
-  readonly reconcileDelayMs: DurationMs;
-  readonly maxPermitAgeMs: DurationMs;
-  readonly retryPolicy: RetryPolicy;
-  readonly lookupRetryPolicy: RetryPolicy;
-  readonly unconfirmedAfterMs: DurationMs;
-}
+export type DeliverySettingsValues = DispatchSettings &
+  ReconcileSettings &
+  LeaseRecoverySettings &
+  ExpansionSettings;
 
 export abstract class WorkerSettings {
   abstract readonly deliverySettings: DeliverySettingsValues;
