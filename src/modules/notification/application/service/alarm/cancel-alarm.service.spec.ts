@@ -20,14 +20,14 @@ import {
 } from '@/modules/notification/domain/delivery/delivery.type';
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
-import { AlarmLookup } from '@/modules/notification/application/port/out/alarm-repository.type';
-import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
+import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
+import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
 import { CancelAlarmResult } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
 import { CancelAlarmService } from '@/modules/notification/application/service/alarm/cancel-alarm.service';
-import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-alarm-repository.adapter';
-import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-delivery-repository.adapter';
-import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-expansion-job-repository.adapter';
-import { InMemoryTransactionAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-transaction.adapter';
+import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-alarm-repository.adapter';
+import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-delivery-repository.adapter';
+import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-expansion-job-repository.adapter';
+import { InMemoryTransactionAdapter } from '@/modules/notification/testing/in-memory/in-memory-transaction.adapter';
 import { UnusedTransaction } from '@/modules/notification/testing/unused-transaction';
 
 type DeliveryBuilder = (index: number) => Delivery;

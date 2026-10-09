@@ -1,8 +1,8 @@
-import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
+import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
 import {
   SnapshotWork,
   TransactionWork,
-} from '@/modules/notification/application/port/out/transaction.type';
+} from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 
 export class SnapshotOnlyTransaction implements TransactionPort {
   constructor(private readonly snapshotSource: TransactionPort) {}

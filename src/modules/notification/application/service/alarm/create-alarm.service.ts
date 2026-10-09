@@ -1,9 +1,9 @@
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmCreation } from '@/modules/notification/domain/alarm/alarm.type';
-import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
-import { AlarmIdGeneratorPort } from '@/modules/notification/application/port/out/alarm-id-generator.port';
-import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
+import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
+import { AlarmIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/alarm-id-generator.port';
+import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
+import { TransactionRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import {
   CreateAlarmCommand,
   CreateAlarmResult,

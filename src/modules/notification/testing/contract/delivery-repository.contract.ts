@@ -24,14 +24,14 @@ import { RetryPolicy } from '@/modules/notification/domain/delivery/retry-policy
 import { RetryPolicyCreation } from '@/modules/notification/domain/delivery/retry-policy.type';
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
-import { AlarmRepositoryPort } from '@/modules/notification/application/port/out/alarm-repository.port';
-import { DeliveryCreationPort } from '@/modules/notification/application/port/out/delivery-creation.port';
-import { DispatchQueuePort } from '@/modules/notification/application/port/out/dispatch-queue.port';
-import { LeaseRecoveryQueuePort } from '@/modules/notification/application/port/out/lease-recovery-queue.port';
-import { ReconcileQueuePort } from '@/modules/notification/application/port/out/reconcile-queue.port';
-import { DeliveryCancellationPort } from '@/modules/notification/application/port/out/delivery-cancellation.port';
-import { DeliveryProgressPort } from '@/modules/notification/application/port/out/delivery-progress.port';
-import { DeliveryCandidate } from '@/modules/notification/application/port/out/delivery-repository.type';
+import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
+import { DeliveryCreationPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-creation.port';
+import { DispatchQueuePort } from '@/modules/notification/application/port/driven/for-storing-deliveries/dispatch-queue.port';
+import { LeaseRecoveryQueuePort } from '@/modules/notification/application/port/driven/for-storing-deliveries/lease-recovery-queue.port';
+import { ReconcileQueuePort } from '@/modules/notification/application/port/driven/for-storing-deliveries/reconcile-queue.port';
+import { DeliveryCancellationPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-cancellation.port';
+import { DeliveryProgressPort } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-progress.port';
+import { DeliveryCandidate } from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.type';
 
 interface DeliveryInspection {
   findByAlarmId(alarmId: AlarmId): Promise<ReadonlyArray<Delivery>>;

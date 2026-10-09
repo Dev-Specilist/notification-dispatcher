@@ -1,16 +1,16 @@
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { AlarmSnapshot } from '@/modules/notification/domain/alarm/alarm.type';
-import { AlarmRepositoryPredicates } from '@/modules/notification/application/port/out/alarm-repository.predicate';
+import { AlarmRepositoryPredicates } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.predicate';
 import {
   AlarmPage,
   AlarmPageNext,
   AlarmPageStart,
   AlarmPosition,
   PageSize,
-} from '@/modules/notification/application/port/out/alarm-repository.type';
-import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
-import { SnapshotRepositories } from '@/modules/notification/application/port/out/transaction.type';
+} from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
+import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
+import { SnapshotRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import { CompleteAlarmResult } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
 import { CompleteAlarmIfSettledUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-alarm-if-settled.use-case';
 import {

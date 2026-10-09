@@ -1,9 +1,9 @@
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
 import { DeliveryStatusCounts } from '@/modules/notification/domain/delivery/delivery.type';
-import { AlarmLookup } from '@/modules/notification/application/port/out/alarm-repository.type';
-import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
-import { SnapshotRepositories } from '@/modules/notification/application/port/out/transaction.type';
+import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
+import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
+import { SnapshotRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import { AlarmResult } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
 import { GetAlarmQuery } from '@/modules/notification/application/port/driving/for-managing-alarms/get-alarm.type';
 import { GetAlarmUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/get-alarm.use-case';

@@ -6,12 +6,12 @@ import {
   CompletionEvidence,
   DeliveryCount,
 } from '@/modules/notification/domain/alarm/alarm.type';
-import { AlarmLookup } from '@/modules/notification/application/port/out/alarm-repository.type';
-import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
-import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/out/expansion-job-repository.port';
-import { ExpansionJobLookup } from '@/modules/notification/application/port/out/expansion-job-repository.type';
-import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
+import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
+import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
+import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.port';
+import { ExpansionJobLookup } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
+import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
+import { TransactionRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import { AlarmCommand } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-command.type';
 import { CompleteAlarmResult } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
 import { CompleteAlarmIfSettledUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-alarm-if-settled.use-case';

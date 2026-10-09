@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { Pool } from 'pg';
-import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
-import { AlarmIdGeneratorPort } from '@/modules/notification/application/port/out/alarm-id-generator.port';
-import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/out/delivery-id-generator.port';
-import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
+import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
+import { AlarmIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/alarm-id-generator.port';
+import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/delivery-id-generator.port';
+import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
 import { CancelAlarmUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/cancel-alarm.use-case';
 import { CreateAlarmUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/create-alarm.use-case';
 import { GetAlarmUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/get-alarm.use-case';
@@ -14,11 +14,11 @@ import { CreateAlarmService } from '@/modules/notification/application/service/a
 import { GetAlarmService } from '@/modules/notification/application/service/alarm/get-alarm.service';
 import { ListAlarmsService } from '@/modules/notification/application/service/alarm/list-alarms.service';
 import { StartDispatchService } from '@/modules/notification/application/service/alarm/start-dispatch.service';
-import { DrizzleTransactionAdapter } from '@/modules/notification/adapter/out/persistence/drizzle-transaction.adapter';
-import { RandomIdGeneratorAdapter } from '@/modules/notification/adapter/out/system/random-id-generator.adapter';
-import { SystemClockAdapter } from '@/modules/notification/adapter/out/system/system-clock.adapter';
-import { NotificationDatabaseFactory } from '@/modules/notification/adapter/out/persistence/notification-database.factory';
-import { AlarmController } from '@/modules/notification/adapter/in/web/alarm.controller';
+import { DrizzleTransactionAdapter } from '@/modules/notification/adapter/driven/persistence/drizzle-transaction.adapter';
+import { RandomIdGeneratorAdapter } from '@/modules/notification/adapter/driven/system/random-id-generator.adapter';
+import { SystemClockAdapter } from '@/modules/notification/adapter/driven/system/system-clock.adapter';
+import { NotificationDatabaseFactory } from '@/modules/notification/adapter/driven/persistence/notification-database.factory';
+import { AlarmController } from '@/modules/notification/adapter/driving/web/alarm.controller';
 
 @Module({
   controllers: [AlarmController],

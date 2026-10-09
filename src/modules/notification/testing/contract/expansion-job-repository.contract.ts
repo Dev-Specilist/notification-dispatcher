@@ -3,14 +3,14 @@ import { expect, it } from 'vitest';
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { AlarmCreation, AlarmId } from '@/modules/notification/domain/alarm/alarm.type';
-import { AlarmRepositoryPort } from '@/modules/notification/application/port/out/alarm-repository.port';
-import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/out/expansion-job-repository.port';
-import { ExpansionQueuePort } from '@/modules/notification/application/port/out/expansion-queue.port';
+import { AlarmRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.port';
+import { ExpansionJobRepositoryPort } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.port';
+import { ExpansionQueuePort } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-queue.port';
 import {
   ExpansionClaim,
   ExpansionJobLookup,
   ExpansionProgress,
-} from '@/modules/notification/application/port/out/expansion-job-repository.type';
+} from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
 
 type ContractExpansionJobRepository = ExpansionJobRepositoryPort & ExpansionQueuePort;
 

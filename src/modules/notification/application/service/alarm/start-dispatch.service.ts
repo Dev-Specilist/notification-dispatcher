@@ -6,11 +6,11 @@ import {
   RecipientId,
 } from '@/modules/notification/domain/alarm/alarm.type';
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
-import { AlarmLookup } from '@/modules/notification/application/port/out/alarm-repository.type';
-import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
-import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/out/delivery-id-generator.port';
-import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
+import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
+import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
+import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/delivery-id-generator.port';
+import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
+import { TransactionRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import { AlarmCommand } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-command.type';
 import { StartDispatchResult } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-result.type';
 import { StartDispatchUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/start-dispatch.use-case';

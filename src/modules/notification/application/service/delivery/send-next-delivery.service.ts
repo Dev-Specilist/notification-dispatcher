@@ -1,28 +1,28 @@
 import {
   AlarmFound,
   AlarmLookup,
-} from '@/modules/notification/application/port/out/alarm-repository.type';
+} from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
 import {
   DeliverySnapshot,
   DeliveryTransition,
   LeaseToken,
 } from '@/modules/notification/domain/delivery/delivery.type';
-import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
+import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
 import {
   CandidateFound,
   DeliveryCandidate,
   LeasedSave,
-} from '@/modules/notification/application/port/out/delivery-repository.type';
-import { DispatchSettingsPort } from '@/modules/notification/application/port/out/dispatch-settings.port';
-import { JitterSourcePort } from '@/modules/notification/application/port/out/jitter-source.port';
-import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/out/lease-token-generator.port';
-import { MessageSenderPort } from '@/modules/notification/application/port/out/message-sender.port';
-import { SendOutcome } from '@/modules/notification/application/port/out/message-sender.type';
-import { SendPermitPort } from '@/modules/notification/application/port/out/send-permit.port';
-import { SendPermit } from '@/modules/notification/application/port/out/send-permit.type';
-import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
+} from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.type';
+import { DispatchSettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/dispatch-settings.port';
+import { JitterSourcePort } from '@/modules/notification/application/port/driven/for-drawing-jitter/jitter-source.port';
+import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/lease-token-generator.port';
+import { MessageSenderPort } from '@/modules/notification/application/port/driven/for-sending-messages/message-sender.port';
+import { SendOutcome } from '@/modules/notification/application/port/driven/for-sending-messages/message-sender.type';
+import { SendPermitPort } from '@/modules/notification/application/port/driven/for-permitting-sends/send-permit.port';
+import { SendPermit } from '@/modules/notification/application/port/driven/for-permitting-sends/send-permit.type';
+import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
+import { TransactionRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import { SendAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/send-next-delivery.type';
 import { SendNextDeliveryUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/send-next-delivery.use-case';
 

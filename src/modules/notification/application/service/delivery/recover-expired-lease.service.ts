@@ -4,14 +4,14 @@ import {
   DeliveryTransition,
   LeaseToken,
 } from '@/modules/notification/domain/delivery/delivery.type';
-import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
+import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
 import {
   DeliveryCandidate,
   LeasedSave,
-} from '@/modules/notification/application/port/out/delivery-repository.type';
-import { LeaseRecoverySettingsPort } from '@/modules/notification/application/port/out/lease-recovery-settings.port';
-import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
+} from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.type';
+import { LeaseRecoverySettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/lease-recovery-settings.port';
+import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
+import { TransactionRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import { RecoveryAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/recover-expired-lease.type';
 import { RecoverExpiredLeaseUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/recover-expired-lease.use-case';
 

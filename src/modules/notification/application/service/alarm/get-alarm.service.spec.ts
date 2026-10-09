@@ -13,7 +13,7 @@ import {
   DeliveryId,
   DeliveryTransition,
 } from '@/modules/notification/domain/delivery/delivery.type';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
+import { TransactionRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import {
   AlarmFoundResult,
   AlarmResult,
@@ -21,10 +21,10 @@ import {
 import { DeliveryProgressView } from '@/modules/notification/application/port/driving/for-managing-alarms/delivery-progress-view.type';
 import { AlarmViewMapper } from '@/modules/notification/application/service/alarm/view/alarm-view.mapper';
 import { GetAlarmService } from '@/modules/notification/application/service/alarm/get-alarm.service';
-import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-alarm-repository.adapter';
-import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-delivery-repository.adapter';
-import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-expansion-job-repository.adapter';
-import { InMemoryTransactionAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-transaction.adapter';
+import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-alarm-repository.adapter';
+import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-delivery-repository.adapter';
+import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-expansion-job-repository.adapter';
+import { InMemoryTransactionAdapter } from '@/modules/notification/testing/in-memory/in-memory-transaction.adapter';
 import { SnapshotOnlyTransaction } from '@/modules/notification/testing/snapshot-only-transaction';
 import { UnusedTransaction } from '@/modules/notification/testing/unused-transaction';
 

@@ -10,22 +10,22 @@ import {
 import { Delivery } from '@/modules/notification/domain/delivery/delivery.entity';
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
 import { DeliveryId, DeliverySnapshot } from '@/modules/notification/domain/delivery/delivery.type';
-import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
-import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/out/delivery-id-generator.port';
-import { ExpansionProgress } from '@/modules/notification/application/port/out/expansion-job-repository.type';
-import { ExpansionSettingsPort } from '@/modules/notification/application/port/out/expansion-settings.port';
-import { RecipientDirectoryPort } from '@/modules/notification/application/port/out/recipient-directory.port';
+import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
+import { DeliveryIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/delivery-id-generator.port';
+import { ExpansionProgress } from '@/modules/notification/application/port/driven/for-storing-expansion-jobs/expansion-job-repository.type';
+import { ExpansionSettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/expansion-settings.port';
+import { RecipientDirectoryPort } from '@/modules/notification/application/port/driven/for-fetching-recipients/recipient-directory.port';
 import {
   PageCursor,
   RecipientPage,
-} from '@/modules/notification/application/port/out/recipient-directory.type';
+} from '@/modules/notification/application/port/driven/for-fetching-recipients/recipient-directory.type';
 import { ExpansionPageAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/expand-next-page.type';
 import { CancelAlarmService } from '@/modules/notification/application/service/alarm/cancel-alarm.service';
 import { ExpandNextPageService } from '@/modules/notification/application/service/expansion/expand-next-page.service';
-import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-alarm-repository.adapter';
-import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-delivery-repository.adapter';
-import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-expansion-job-repository.adapter';
-import { InMemoryTransactionAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-transaction.adapter';
+import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-alarm-repository.adapter';
+import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-delivery-repository.adapter';
+import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-expansion-job-repository.adapter';
+import { InMemoryTransactionAdapter } from '@/modules/notification/testing/in-memory/in-memory-transaction.adapter';
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
 

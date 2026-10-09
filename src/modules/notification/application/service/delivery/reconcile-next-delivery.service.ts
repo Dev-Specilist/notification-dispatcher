@@ -6,19 +6,19 @@ import {
 import {
   AlarmFound,
   AlarmLookup,
-} from '@/modules/notification/application/port/out/alarm-repository.type';
-import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
+} from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
+import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
 import {
   CandidateFound,
   DeliveryCandidate,
   ReconciledSave,
-} from '@/modules/notification/application/port/out/delivery-repository.type';
-import { JitterSourcePort } from '@/modules/notification/application/port/out/jitter-source.port';
-import { MessageLookupPort } from '@/modules/notification/application/port/out/message-lookup.port';
-import { MessageLookupResult } from '@/modules/notification/application/port/out/message-lookup.type';
-import { ReconcileSettingsPort } from '@/modules/notification/application/port/out/reconcile-settings.port';
-import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
-import { TransactionRepositories } from '@/modules/notification/application/port/out/transaction.type';
+} from '@/modules/notification/application/port/driven/for-storing-deliveries/delivery-repository.type';
+import { JitterSourcePort } from '@/modules/notification/application/port/driven/for-drawing-jitter/jitter-source.port';
+import { MessageLookupPort } from '@/modules/notification/application/port/driven/for-looking-up-messages/message-lookup.port';
+import { MessageLookupResult } from '@/modules/notification/application/port/driven/for-looking-up-messages/message-lookup.type';
+import { ReconcileSettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/reconcile-settings.port';
+import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
+import { TransactionRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import { ReconcileAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/reconcile-next-delivery.type';
 import { ReconcileNextDeliveryUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/reconcile-next-delivery.use-case';
 

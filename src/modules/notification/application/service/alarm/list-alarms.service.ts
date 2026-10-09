@@ -1,14 +1,14 @@
 import { Alarm } from '@/modules/notification/domain/alarm/alarm.entity';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
-import { AlarmRepositoryPredicates } from '@/modules/notification/application/port/out/alarm-repository.predicate';
+import { AlarmRepositoryPredicates } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.predicate';
 import {
   AlarmPage,
   AlarmPageNext,
   AlarmPageStart,
   AlarmPosition,
-} from '@/modules/notification/application/port/out/alarm-repository.type';
-import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
-import { SnapshotRepositories } from '@/modules/notification/application/port/out/transaction.type';
+} from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
+import { TransactionPort } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.port';
+import { SnapshotRepositories } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 import { AlarmView } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-view.type';
 import {
   ListAlarmsQuery,

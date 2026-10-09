@@ -21,28 +21,28 @@ import { RetryPolicy } from '@/modules/notification/domain/delivery/retry-policy
 import { RetryPolicyCreation } from '@/modules/notification/domain/delivery/retry-policy.type';
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
-import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
-import { DispatchSettingsPort } from '@/modules/notification/application/port/out/dispatch-settings.port';
-import { JitterSourcePort } from '@/modules/notification/application/port/out/jitter-source.port';
-import { LeaseRecoverySettingsPort } from '@/modules/notification/application/port/out/lease-recovery-settings.port';
-import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/out/lease-token-generator.port';
-import { MessageLookupPort } from '@/modules/notification/application/port/out/message-lookup.port';
-import { MessageLookupResult } from '@/modules/notification/application/port/out/message-lookup.type';
-import { MessageSenderPort } from '@/modules/notification/application/port/out/message-sender.port';
+import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
+import { DispatchSettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/dispatch-settings.port';
+import { JitterSourcePort } from '@/modules/notification/application/port/driven/for-drawing-jitter/jitter-source.port';
+import { LeaseRecoverySettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/lease-recovery-settings.port';
+import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/lease-token-generator.port';
+import { MessageLookupPort } from '@/modules/notification/application/port/driven/for-looking-up-messages/message-lookup.port';
+import { MessageLookupResult } from '@/modules/notification/application/port/driven/for-looking-up-messages/message-lookup.type';
+import { MessageSenderPort } from '@/modules/notification/application/port/driven/for-sending-messages/message-sender.port';
 import {
   OutgoingMessage,
   SendOutcome,
-} from '@/modules/notification/application/port/out/message-sender.type';
-import { ReconcileSettingsPort } from '@/modules/notification/application/port/out/reconcile-settings.port';
-import { SendPermitPort } from '@/modules/notification/application/port/out/send-permit.port';
-import { SendPermit } from '@/modules/notification/application/port/out/send-permit.type';
+} from '@/modules/notification/application/port/driven/for-sending-messages/message-sender.type';
+import { ReconcileSettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/reconcile-settings.port';
+import { SendPermitPort } from '@/modules/notification/application/port/driven/for-permitting-sends/send-permit.port';
+import { SendPermit } from '@/modules/notification/application/port/driven/for-permitting-sends/send-permit.type';
 import { ReconcileNextDeliveryService } from '@/modules/notification/application/service/delivery/reconcile-next-delivery.service';
 import { RecoverExpiredLeaseService } from '@/modules/notification/application/service/delivery/recover-expired-lease.service';
 import { SendNextDeliveryService } from '@/modules/notification/application/service/delivery/send-next-delivery.service';
-import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-alarm-repository.adapter';
-import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-delivery-repository.adapter';
-import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-expansion-job-repository.adapter';
-import { InMemoryTransactionAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-transaction.adapter';
+import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-alarm-repository.adapter';
+import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-delivery-repository.adapter';
+import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-expansion-job-repository.adapter';
+import { InMemoryTransactionAdapter } from '@/modules/notification/testing/in-memory/in-memory-transaction.adapter';
 
 interface Fixture {
   readonly deliveryRepository: InMemoryDeliveryRepositoryAdapter;

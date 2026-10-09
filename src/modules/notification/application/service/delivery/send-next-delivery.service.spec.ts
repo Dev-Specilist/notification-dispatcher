@@ -24,27 +24,27 @@ import {
 } from '@/modules/notification/domain/delivery/delivery.type';
 import { DurationPredicates } from '@/shared/domain/duration.predicate';
 import { DurationMs } from '@/shared/domain/duration.type';
-import { AlarmLookup } from '@/modules/notification/application/port/out/alarm-repository.type';
-import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
-import { DispatchSettingsPort } from '@/modules/notification/application/port/out/dispatch-settings.port';
-import { JitterSourcePort } from '@/modules/notification/application/port/out/jitter-source.port';
-import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/out/lease-token-generator.port';
-import { MessageSenderPort } from '@/modules/notification/application/port/out/message-sender.port';
+import { AlarmLookup } from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
+import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
+import { DispatchSettingsPort } from '@/modules/notification/application/port/driven/for-reading-settings/dispatch-settings.port';
+import { JitterSourcePort } from '@/modules/notification/application/port/driven/for-drawing-jitter/jitter-source.port';
+import { LeaseTokenGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/lease-token-generator.port';
+import { MessageSenderPort } from '@/modules/notification/application/port/driven/for-sending-messages/message-sender.port';
 import {
   OutgoingMessage,
   SendOutcome,
-} from '@/modules/notification/application/port/out/message-sender.type';
-import { SendPermitPort } from '@/modules/notification/application/port/out/send-permit.port';
-import { SendPermit } from '@/modules/notification/application/port/out/send-permit.type';
+} from '@/modules/notification/application/port/driven/for-sending-messages/message-sender.type';
+import { SendPermitPort } from '@/modules/notification/application/port/driven/for-permitting-sends/send-permit.port';
+import { SendPermit } from '@/modules/notification/application/port/driven/for-permitting-sends/send-permit.type';
 import { CancelAlarmService } from '@/modules/notification/application/service/alarm/cancel-alarm.service';
 import { SendAttempt } from '@/modules/notification/application/port/driving/for-dispatching-alarms/send-next-delivery.type';
 import { SendNextDeliveryService } from '@/modules/notification/application/service/delivery/send-next-delivery.service';
-import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-alarm-repository.adapter';
-import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-delivery-repository.adapter';
-import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-expansion-job-repository.adapter';
-import { InMemoryTransactionAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-transaction.adapter';
-import { InMemoryRepositories } from '@/modules/notification/adapter/out/in-memory/in-memory-transaction.type';
-import { TransactionWork } from '@/modules/notification/application/port/out/transaction.type';
+import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-alarm-repository.adapter';
+import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-delivery-repository.adapter';
+import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-expansion-job-repository.adapter';
+import { InMemoryTransactionAdapter } from '@/modules/notification/testing/in-memory/in-memory-transaction.adapter';
+import { InMemoryRepositories } from '@/modules/notification/testing/in-memory/in-memory-transaction.type';
+import { TransactionWork } from '@/modules/notification/application/port/driven/for-running-transactions/transaction.type';
 
 type RecipientStatus = Readonly<[string, string]>;
 

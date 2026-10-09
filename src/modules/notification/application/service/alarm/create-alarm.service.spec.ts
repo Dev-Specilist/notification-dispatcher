@@ -5,20 +5,20 @@ import { AlarmDraft, AlarmId } from '@/modules/notification/domain/alarm/alarm.t
 import {
   AlarmFound,
   AlarmLookup,
-} from '@/modules/notification/application/port/out/alarm-repository.type';
+} from '@/modules/notification/application/port/driven/for-storing-alarms/alarm-repository.type';
 import {
   AlarmCreatedResult,
   CreateAlarmResult,
 } from '@/modules/notification/application/port/driving/for-managing-alarms/create-alarm.type';
 import { AlarmView } from '@/modules/notification/application/port/driving/for-managing-alarms/alarm-view.type';
 import { AlarmViewMapper } from '@/modules/notification/application/service/alarm/view/alarm-view.mapper';
-import { ClockPort } from '@/modules/notification/application/port/out/clock.port';
-import { AlarmIdGeneratorPort } from '@/modules/notification/application/port/out/alarm-id-generator.port';
+import { ClockPort } from '@/modules/notification/application/port/driven/for-telling-time/clock.port';
+import { AlarmIdGeneratorPort } from '@/modules/notification/application/port/driven/for-generating-ids/alarm-id-generator.port';
 import { CreateAlarmService } from '@/modules/notification/application/service/alarm/create-alarm.service';
-import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-alarm-repository.adapter';
-import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-delivery-repository.adapter';
-import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-expansion-job-repository.adapter';
-import { InMemoryTransactionAdapter } from '@/modules/notification/adapter/out/in-memory/in-memory-transaction.adapter';
+import { InMemoryAlarmRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-alarm-repository.adapter';
+import { InMemoryDeliveryRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-delivery-repository.adapter';
+import { InMemoryExpansionJobRepositoryAdapter } from '@/modules/notification/testing/in-memory/in-memory-expansion-job-repository.adapter';
+import { InMemoryTransactionAdapter } from '@/modules/notification/testing/in-memory/in-memory-transaction.adapter';
 
 const NOW_ISO: string = '2026-10-07T09:00:00.000Z';
 

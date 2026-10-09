@@ -1,4 +1,4 @@
-import { SendOutcomeKind } from '@/modules/notification/application/port/out/message-sender.type';
+import { SendOutcomeKind } from '@/modules/notification/application/port/driven/for-sending-messages/message-sender.type';
 
 export interface NoPermit {
   readonly kind: 'no-permit';

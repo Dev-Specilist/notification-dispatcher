@@ -10,7 +10,7 @@ import { ExpandNextPageService } from '@/modules/notification/application/servic
 import { ReconcileNextDeliveryService } from '@/modules/notification/application/service/delivery/reconcile-next-delivery.service';
 import { RecoverExpiredLeaseService } from '@/modules/notification/application/service/delivery/recover-expired-lease.service';
 import { SendNextDeliveryService } from '@/modules/notification/application/service/delivery/send-next-delivery.service';
-import { DispatchWorker } from '@/modules/notification/adapter/in/worker/dispatch.worker';
+import { DispatchWorker } from '@/modules/notification/adapter/driving/worker/dispatch.worker';
 import { NotificationWorkerModule } from '@/modules/notification/notification-worker.module';
 import { createEnvSchema } from '@/shared/config/env.schema';
 import { portSchema } from '@/shared/config/primitive.schema';
