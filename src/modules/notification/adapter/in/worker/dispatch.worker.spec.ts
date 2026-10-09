@@ -59,6 +59,7 @@ interface PhaseObservation {
 
 const DISPATCH_CONCURRENCY: number = 3;
 const SHUTDOWN_DRAIN_MS: number = 30;
+const SHUTDOWN_TIMEOUT_MS: number = 100;
 const POLL_INTERVAL_MS: number = 5;
 const COMPLETION_CHECK_INTERVAL_MS: number = 20;
 
@@ -66,6 +67,8 @@ const FIRST_PAGE_END: ListPosition = {
   createdAt: new Date('2026-10-09T09:00:00.000Z'),
   alarmId: '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10',
 };
+
+class ExitCalled extends Error {}
 
 const UNCONNECTED_DATABASE_URL: string = 'postgres://app:secret@localhost:5432/notification';
 
@@ -228,6 +231,7 @@ describe('DispatchWorker', () => {
   beforeEach(async (): Promise<void> => {
     vi.stubEnv('DATABASE_URL', UNCONNECTED_DATABASE_URL);
     vi.stubEnv('SHUTDOWN_DRAIN_MS', String(SHUTDOWN_DRAIN_MS));
+    vi.stubEnv('SHUTDOWN_TIMEOUT_MS', String(SHUTDOWN_TIMEOUT_MS));
     vi.stubEnv('DISPATCH_CONCURRENCY', String(DISPATCH_CONCURRENCY));
     vi.stubEnv('WORKER_POLL_INTERVAL_MS', String(POLL_INTERVAL_MS));
     vi.stubEnv('COMPLETION_CHECK_INTERVAL_MS', String(COMPLETION_CHECK_INTERVAL_MS));
@@ -241,8 +245,10 @@ describe('DispatchWorker', () => {
   });
 
   afterEach(async (): Promise<void> => {
+    vi.useRealTimers();
     sender.release.open();
     await moduleRef.close();
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
 
@@ -293,9 +299,30 @@ describe('DispatchWorker', () => {
     ]);
   });
 
-  it.todo(
-    'WRK-04 제한 시간 안에 끝나지 않는 요청 / 종료 절차가 진행된다 → 요청을 중단하고 lease를 남겨 둔 채 종료하며, 남은 건은 lease 만료 후 다른 워커가 reconcile한다',
-  );
+  it('WRK-04 제한 시간 안에 끝나지 않는 요청 / 종료 절차가 진행된다 → 요청을 중단하고 lease를 남겨 둔 채 종료하며, 남은 건은 lease 만료 후 다른 워커가 reconcile한다 (결과를 저장하지 않은 채 exit(1), 복구·reconcile은 UC-15)', async (): Promise<void> => {
+    const exit: MockInstance<typeof process.exit> = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((): never => {
+        throw new ExitCalled();
+      });
+    vi.spyOn(Logger.prototype, 'error').mockImplementation((): void => {});
+    await moduleRef.init();
+    await vi.waitFor((): void => {
+      expect(sender.inFlight).toBe(DISPATCH_CONCURRENCY);
+    });
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    moduleRef.get(ShutdownService).handleSignal('SIGTERM');
+    const closing: Promise<void> = moduleRef.close();
+
+    expect(() => vi.advanceTimersByTime(SHUTDOWN_DRAIN_MS + SHUTDOWN_TIMEOUT_MS)).toThrow(
+      ExitCalled,
+    );
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(sender.completed).toBe(0);
+    sender.release.open();
+    await closing;
+  });
 
   it('부트스트랩 전에는 어떤 루프도 실행하지 않는다', async (): Promise<void> => {
     await setTimeout(POLL_INTERVAL_MS * 4);
@@ -384,6 +411,5 @@ describe('DispatchWorker', () => {
     expect(warnLog).toHaveBeenCalledWith(
       'completion check failed for alarm 0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10: database connection reset',
     );
-    warnLog.mockRestore();
   });
 });
