@@ -13,7 +13,7 @@ import {
   AlarmListPage,
   ListAlarmsError,
 } from '@/modules/notification/application/port/driving/for-managing-alarms/list-alarms.type';
-import { AlarmCursor } from '@/modules/notification/adapter/driving/web/alarm-cursor.util';
+import { AlarmCursorCodec } from '@/modules/notification/adapter/driving/web/alarm-cursor.codec';
 import {
   AlarmDetailResponse,
   AlarmListResponse,
@@ -57,7 +57,7 @@ export class AlarmPresenter {
   static toListResponse({ items, next }: Readonly<AlarmListPage>): AlarmListResponse {
     return {
       alarms: items.map((view: AlarmView): AlarmResponse => AlarmPresenter.toResponse(view)),
-      page: next.kind === 'more' ? { nextCursor: AlarmCursor.encode(next.after) } : {},
+      page: next.kind === 'more' ? { nextCursor: AlarmCursorCodec.encode(next.after) } : {},
     };
   }
 

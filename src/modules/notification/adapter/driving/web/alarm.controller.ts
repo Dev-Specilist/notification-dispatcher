@@ -14,7 +14,6 @@ import {
 import { ListAlarmsUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/list-alarms.use-case';
 import { StartDispatchResult } from '@/modules/notification/application/port/driving/for-managing-alarms/start-dispatch.type';
 import { StartDispatchUseCase } from '@/modules/notification/application/port/driving/for-managing-alarms/start-dispatch.use-case';
-import { alarmIdParamSchema } from '@/modules/notification/adapter/driving/web/alarm-id-param.schema';
 import {
   AlarmDetailResponse,
   AlarmListResponse,
@@ -26,8 +25,11 @@ import {
   alarmListResponseSchema,
   alarmResponseSchema,
 } from '@/modules/notification/adapter/driving/web/alarm-response.schema';
-import { createAlarmSchema } from '@/modules/notification/adapter/driving/web/create-alarm.schema';
-import { listAlarmsQuerySchema } from '@/modules/notification/adapter/driving/web/list-alarms.schema';
+import {
+  alarmIdParamSchema,
+  createAlarmSchema,
+  listAlarmsQuerySchema,
+} from '@/modules/notification/adapter/driving/web/alarm-request.schema';
 import { ApiProblemResponse } from '@/shared/http/api-problem-response.decorator';
 import { RequestValidationException } from '@/shared/http/request-validation.exception';
 

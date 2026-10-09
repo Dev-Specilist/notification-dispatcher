@@ -1,19 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { CursorDecoding } from '@/modules/notification/adapter/driving/web/alarm-cursor.type';
-import { AlarmCursor } from '@/modules/notification/adapter/driving/web/alarm-cursor.util';
+import { AlarmCursorCodec } from '@/modules/notification/adapter/driving/web/alarm-cursor.codec';
 
 type MalformedCursorCase = Readonly<[label: string, cursor: string]>;
 
 const CREATED_ISO: string = '2026-10-08T09:00:00.000Z';
 const ALARM_ID: string = '0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10';
-const ISSUED_CURSOR: string = AlarmCursor.encode({
+const ISSUED_CURSOR: string = AlarmCursorCodec.encode({
   createdAt: new Date(CREATED_ISO),
   alarmId: ALARM_ID,
 });
 
-describe('AlarmCursor', () => {
+describe('AlarmCursorCodec', () => {
   it('발급한 cursor를 해석하면 같은 생성 시각과 알림 id가 나온다', (): void => {
-    const cursorDecoding: CursorDecoding = AlarmCursor.decode(ISSUED_CURSOR);
+    const cursorDecoding: CursorDecoding = AlarmCursorCodec.decode(ISSUED_CURSOR);
 
     expect(cursorDecoding).toEqual({
       kind: 'decoded',
@@ -31,7 +31,7 @@ describe('AlarmCursor', () => {
   ])(
     '%s cursor는 원래 cursor와 같게 해석하지 않고 거절한다',
     (_label: string, cursor: string): void => {
-      expect(AlarmCursor.decode(cursor)).toEqual({ kind: 'invalid' });
+      expect(AlarmCursorCodec.decode(cursor)).toEqual({ kind: 'invalid' });
     },
   );
 });
