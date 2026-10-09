@@ -16,7 +16,7 @@ import { request, spec } from 'pactum';
 import { Pool } from 'pg';
 import { ApiModule } from '@/bootstrap/api.module';
 import { WorkerModule } from '@/bootstrap/worker.module';
-import { ReadinessPort } from '@/modules/health/application/port/out/readiness.port';
+import { ReadinessPort } from '@/modules/health/application/port/driven/for-tracking-readiness/readiness.port';
 import { ProcessRole } from '@/shared/config/primitive.schema';
 import { TestDatabase } from '@/shared/database/testing/test-database';
 
