@@ -9,6 +9,8 @@ import {
   timerDelayOrZeroMsSchema,
 } from '@/shared/config/primitive.schema';
 
+type TimerDelayCase = Readonly<[raw: string, delayMs: number]>;
+
 describe('primitive 스키마', () => {
   it.each(['', '  ', '0', '65536', '1.5', 'abc'])('잘못된 포트 "%s"는 거부한다', (raw: string) => {
     expect(portSchema.safeParse(raw).success).toBe(false);
@@ -41,7 +43,7 @@ describe('primitive 스키마', () => {
     },
   );
 
-  it.each([
+  it.each<TimerDelayCase>([
     ['1', 1],
     ['2147483647', 2_147_483_647],
   ])(
@@ -58,7 +60,7 @@ describe('primitive 스키마', () => {
     },
   );
 
-  it.each([
+  it.each<TimerDelayCase>([
     ['0', 0],
     ['2147483647', 2_147_483_647],
   ])(
