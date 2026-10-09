@@ -18,7 +18,7 @@ import { DatabaseShutdown } from '@/shared/database/database-shutdown.service';
 export class DatabaseModule {
   private static readonly CONNECTION_TIMEOUT_MS: number = 5_000;
 
-  private static readonly logger: Logger = new Logger('Database');
+  private static readonly logger: Logger = new Logger(DatabaseModule.name);
 
   private static createPool(config: TypedConfigService): Pool {
     const pool: Pool = new Pool({

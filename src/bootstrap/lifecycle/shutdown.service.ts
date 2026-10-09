@@ -23,7 +23,7 @@ export class ShutdownService
 {
   static readonly SIGNALS: ReadonlyArray<NodeJS.Signals> = ['SIGTERM', 'SIGINT'];
 
-  private readonly logger: Logger = new Logger('Shutdown');
+  private readonly logger: Logger = new Logger(ShutdownService.name);
   private readonly onSignal: SignalListener = (signal: NodeJS.Signals): void =>
     this.handleSignal(signal);
   private readonly watchdogs: Set<NodeJS.Timeout> = new Set<NodeJS.Timeout>();

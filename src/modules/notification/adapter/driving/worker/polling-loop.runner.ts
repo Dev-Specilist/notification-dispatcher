@@ -7,7 +7,7 @@ import {
 import { ThrownValues } from '@/shared/error/thrown-value.util';
 
 export class PollingLoopRunner {
-  private readonly logger: Logger = new Logger('PollingLoop');
+  private readonly logger: Logger = new Logger(PollingLoopRunner.name);
   private readonly stopRequest: AbortController = new AbortController();
   private running: Promise<void> = Promise.resolve();
   private started: boolean = false;

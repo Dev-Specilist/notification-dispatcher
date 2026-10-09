@@ -34,7 +34,7 @@ export class DatabaseHealthIndicator {
     query_timeout: DatabaseHealthIndicator.PING_TIMEOUT_MS,
   };
 
-  private readonly logger: Logger = new Logger('DatabaseHealth');
+  private readonly logger: Logger = new Logger(DatabaseHealthIndicator.name);
 
   constructor(
     private readonly indicator: HealthIndicatorService,

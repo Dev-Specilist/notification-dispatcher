@@ -23,7 +23,7 @@ export class ProblemDetailsFilter implements ExceptionFilter<ThrownValue> {
   private static readonly SERVER_ERROR_FLOOR: number = 500;
   private static readonly SERVER_ERROR_DETAIL: string = '서버 내부 오류가 발생했습니다';
 
-  private readonly logger: Logger = new Logger('ProblemDetails');
+  private readonly logger: Logger = new Logger(ProblemDetailsFilter.name);
 
   constructor(private readonly adapterHost: HttpAdapterHost) {}
 

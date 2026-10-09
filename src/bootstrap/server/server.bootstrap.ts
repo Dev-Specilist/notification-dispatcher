@@ -8,13 +8,15 @@ import { ThrownValues } from '@/shared/error/thrown-value.util';
 import { AppLogger } from '@/shared/logging/app.logger';
 
 export class ServerBootstrap {
+  private static readonly logger: Logger = new Logger(ServerBootstrap.name);
+
   static async run(main: () => Promise<void>): Promise<void> {
     try {
       await main();
     } catch (error) {
       const { message, stack }: Error = ThrownValues.toError(error);
       Logger.flush();
-      new Logger('Bootstrap').fatal(`failed to start: ${message}`, stack);
+      ServerBootstrap.logger.fatal(`failed to start: ${message}`, stack);
       process.exit(1);
     }
   }
@@ -28,10 +30,9 @@ export class ServerBootstrap {
     const port: Port = config.get('PORT');
     await app.listen(port, host);
 
-    const logger: Logger = new Logger('Server');
-    logger.log(`pid=${process.pid} listening on ${host}:${port}`);
+    ServerBootstrap.logger.log(`pid=${process.pid} listening on ${host}:${port}`);
     ListenAddressResolver.resolve(host, port, ListenAddressResolver.currentInterfaces()).forEach(
-      ({ label, url }: ListenAddress): void => logger.log(`${label}: ${url}`),
+      ({ label, url }: ListenAddress): void => ServerBootstrap.logger.log(`${label}: ${url}`),
     );
   }
 }

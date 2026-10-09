@@ -25,7 +25,7 @@ import { TypedConfigService } from '@/shared/config/typed-config.service';
 export class DispatchWorker implements OnApplicationBootstrap, OnModuleDestroy {
   private static readonly SHUTDOWN_TIMEOUT_SHARE_BEFORE_REQUEST_ABORT: number = 0.5;
 
-  private readonly logger: Logger = new Logger('DispatchWorker');
+  private readonly logger: Logger = new Logger(DispatchWorker.name);
   private readonly loops: ReadonlyArray<PollingLoopRunner>;
   private readonly requestAbortDelayMs: number;
   private completionStart: CompletionScanStart = { kind: 'newest' };

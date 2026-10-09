@@ -8,7 +8,7 @@ import { Pool } from 'pg';
 export class DatabaseMigrator {
   private static readonly MIGRATIONS_FOLDER: string = 'drizzle';
 
-  private readonly logger: Logger = new Logger('Migration');
+  private readonly logger: Logger = new Logger(DatabaseMigrator.name);
 
   constructor(private readonly pool: Pool) {}
 
