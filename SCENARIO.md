@@ -194,7 +194,7 @@ Delivery
 | --- | --- | --- | --- |
 | API-01 | 유효한 본문 | `POST /alarms` | 201과 알림 리소스 |
 | API-02 | 잘못된 본문 | `POST /alarms` | 400 Problem Details (`VALIDATION_FAILED`, 필드별 errors) |
-| API-03 | 알림 여러 개 | `GET /alarms?status=&kind=&cursor=&limit=` | 200 `{ items, page: { nextCursor } }` (마지막 페이지는 `nextCursor` 필드 없음) |
+| API-03 | 알림 여러 개 | `GET /alarms?status=&kind=&cursor=&limit=` | 200 `{ alarms, page: { nextCursor } }` (마지막 페이지는 `nextCursor` 필드 없음) |
 | API-04 | 있는 알림 | `GET /alarms/:id` | 200과 Delivery 상태별 집계 |
 | API-05 | 없는 알림 | `GET /alarms/:id` | 404 Problem Details (`ALARM_NOT_FOUND`) |
 | API-06 | uuid가 아닌 id | `GET /alarms/:id` | 400 Problem Details |
@@ -203,6 +203,7 @@ Delivery
 | API-09 | `DRAFT`·`DISPATCHING` 알림 | `POST /alarms/:id/cancel` | 200과 `CANCELLED` 알림 |
 | API-10 | 종결된 알림 | `POST /alarms/:id/cancel` | 409 Problem Details (`ALARM_STATE_CONFLICT`) |
 | API-11 | 실행 중인 api | `GET /docs-json` | OpenAPI 3 문서가 나온다 |
+| API-12 | 실행 중인 api | `GET /docs-json` | 다섯 작업의 성공 응답은 `application/json` 스키마를, 400·404·409 오류 응답은 필수 필드(`type` · `title` · `status` · `detail` · `instance` · `code` · `errors`)를 갖춘 `application/problem+json` 스키마를 문서화하고, 목록 응답은 `alarms` · `page.nextCursor`를 담는다 |
 
 ## E2E · 전체 흐름 (api + worker + mock + PostgreSQL)
 

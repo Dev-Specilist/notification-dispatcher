@@ -219,7 +219,7 @@ describe('AlarmPresenter', () => {
     });
 
     expect(response).toEqual({
-      items: [AlarmPresenter.toResponse(view)],
+      alarms: [AlarmPresenter.toResponse(view)],
       page: {
         nextCursor: Buffer.from(
           `${CREATED_ISO}|0b6c1b4e-9a37-4c2a-8d6a-2f6b2d7f1a10`,
@@ -236,7 +236,7 @@ describe('AlarmPresenter', () => {
       next: { kind: 'last' },
     });
 
-    expect(response).toEqual({ items: [], page: {} });
+    expect(response).toEqual({ alarms: [], page: {} });
   });
 
   it.each<ListViolationCase>([

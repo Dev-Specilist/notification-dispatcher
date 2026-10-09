@@ -61,6 +61,6 @@ export type LastPageResponse = Readonly<Record<string, never>>;
 export type ListPageResponse = NextPageResponse | LastPageResponse;
 
 export interface AlarmListResponse {
-  readonly items: ReadonlyArray<AlarmResponse>;
+  readonly alarms: ReadonlyArray<AlarmResponse>;
   readonly page: ListPageResponse;
 }

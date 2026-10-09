@@ -56,7 +56,7 @@ export class AlarmPresenter {
 
   static toListResponse({ items, next }: Readonly<AlarmListPage>): AlarmListResponse {
     return {
-      items: items.map((view: AlarmView): AlarmResponse => AlarmPresenter.toResponse(view)),
+      alarms: items.map((view: AlarmView): AlarmResponse => AlarmPresenter.toResponse(view)),
       page: next.kind === 'more' ? { nextCursor: AlarmCursor.encode(next.after) } : {},
     };
   }

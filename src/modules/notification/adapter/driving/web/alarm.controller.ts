@@ -1,12 +1,5 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
-import {
-  ApiAcceptedResponse,
-  ApiBadRequestResponse,
-  ApiConflictResponse,
-  ApiCreatedResponse,
-  ApiNotFoundResponse,
-  ApiOkResponse,
-} from '@nestjs/swagger';
+import { ApiAcceptedResponse, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import {
   AlarmResult,
@@ -30,14 +23,21 @@ import {
   AlarmResponse,
 } from '@/modules/notification/adapter/driving/web/alarm-response.type';
 import { AlarmPresenter } from '@/modules/notification/adapter/driving/web/alarm.presenter';
+import {
+  alarmDetailResponseSchema,
+  alarmListResponseSchema,
+  alarmResponseSchema,
+} from '@/modules/notification/adapter/driving/web/alarm-response.schema';
 import { createAlarmSchema } from '@/modules/notification/adapter/driving/web/create-alarm.schema';
 import { listAlarmsQuerySchema } from '@/modules/notification/adapter/driving/web/list-alarms.schema';
+import { ApiProblemResponse } from '@/shared/http/api-problem-response.decorator';
 import { RequestValidationException } from '@/shared/http/request-validation.exception';
 
 type CreateAlarmBody = z.output<typeof createAlarmSchema>;
 
 type AlarmIdParam = z.output<typeof alarmIdParamSchema>;
 
+@ApiTags('alarms')
 @Controller('alarms')
 export class AlarmController {
   constructor(
@@ -49,8 +49,11 @@ export class AlarmController {
   ) {}
 
   @Post()
-  @ApiCreatedResponse({ description: '만든 DRAFT 알림' })
-  @ApiBadRequestResponse({ description: 'VALIDATION_FAILED: 요청 본문 검증 또는 도메인 규칙 위반' })
+  @ApiCreatedResponse({ description: '만든 DRAFT 알림', standardSchema: alarmResponseSchema })
+  @ApiProblemResponse.of(
+    HttpStatus.BAD_REQUEST,
+    'VALIDATION_FAILED: 요청 본문 검증 또는 도메인 규칙 위반',
+  )
   async create(@Body({ schema: createAlarmSchema }) body: CreateAlarmBody): Promise<AlarmResponse> {
     const result: CreateAlarmResult = await this.createAlarm.execute(body);
     if (result.kind === 'rejected') {
@@ -60,8 +63,11 @@ export class AlarmController {
   }
 
   @Get()
-  @ApiOkResponse({ description: '생성 역순 알림 목록과 다음 페이지 cursor' })
-  @ApiBadRequestResponse({ description: 'VALIDATION_FAILED: 잘못된 필터·cursor·limit' })
+  @ApiOkResponse({
+    description: '생성 역순 알림 목록과 다음 페이지 cursor',
+    standardSchema: alarmListResponseSchema,
+  })
+  @ApiProblemResponse.of(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED: 잘못된 필터·cursor·limit')
   async list(
     @Query({ schema: listAlarmsQuerySchema }) query: ListAlarmsQuery,
   ): Promise<AlarmListResponse> {
@@ -73,9 +79,12 @@ export class AlarmController {
   }
 
   @Get(':id')
-  @ApiOkResponse({ description: '알림과 Delivery 상태별 집계' })
-  @ApiBadRequestResponse({ description: 'VALIDATION_FAILED: uuid가 아닌 id' })
-  @ApiNotFoundResponse({ description: 'ALARM_NOT_FOUND' })
+  @ApiOkResponse({
+    description: '알림과 발송 건(Delivery) 상태별 집계',
+    standardSchema: alarmDetailResponseSchema,
+  })
+  @ApiProblemResponse.of(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED: uuid가 아닌 id')
+  @ApiProblemResponse.of(HttpStatus.NOT_FOUND, 'ALARM_NOT_FOUND')
   async findOne(
     @Param({ schema: alarmIdParamSchema }) { id: alarmId }: AlarmIdParam,
   ): Promise<AlarmDetailResponse> {
@@ -88,10 +97,13 @@ export class AlarmController {
 
   @Post(':id/dispatch')
   @HttpCode(HttpStatus.ACCEPTED)
-  @ApiAcceptedResponse({ description: '발송을 시작한 DISPATCHING 알림' })
-  @ApiBadRequestResponse({ description: 'VALIDATION_FAILED: uuid가 아닌 id' })
-  @ApiNotFoundResponse({ description: 'ALARM_NOT_FOUND' })
-  @ApiConflictResponse({ description: 'ALARM_STATE_CONFLICT: DRAFT가 아닌 알림' })
+  @ApiAcceptedResponse({
+    description: '발송을 시작한 DISPATCHING 알림',
+    standardSchema: alarmResponseSchema,
+  })
+  @ApiProblemResponse.of(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED: uuid가 아닌 id')
+  @ApiProblemResponse.of(HttpStatus.NOT_FOUND, 'ALARM_NOT_FOUND')
+  @ApiProblemResponse.of(HttpStatus.CONFLICT, 'ALARM_STATE_CONFLICT: DRAFT가 아닌 알림')
   async dispatch(
     @Param({ schema: alarmIdParamSchema }) { id: alarmId }: AlarmIdParam,
   ): Promise<AlarmResponse> {
@@ -104,10 +116,10 @@ export class AlarmController {
 
   @Post(':id/cancel')
   @HttpCode(HttpStatus.OK)
-  @ApiOkResponse({ description: '취소한 CANCELLED 알림' })
-  @ApiBadRequestResponse({ description: 'VALIDATION_FAILED: uuid가 아닌 id' })
-  @ApiNotFoundResponse({ description: 'ALARM_NOT_FOUND' })
-  @ApiConflictResponse({ description: 'ALARM_STATE_CONFLICT: 이미 종결된 알림' })
+  @ApiOkResponse({ description: '취소한 CANCELLED 알림', standardSchema: alarmResponseSchema })
+  @ApiProblemResponse.of(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED: uuid가 아닌 id')
+  @ApiProblemResponse.of(HttpStatus.NOT_FOUND, 'ALARM_NOT_FOUND')
+  @ApiProblemResponse.of(HttpStatus.CONFLICT, 'ALARM_STATE_CONFLICT: 이미 종결된 알림')
   async cancel(
     @Param({ schema: alarmIdParamSchema }) { id: alarmId }: AlarmIdParam,
   ): Promise<AlarmResponse> {

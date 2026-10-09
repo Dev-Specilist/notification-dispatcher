@@ -53,14 +53,14 @@ const alarmDetailSchema = createdAlarmSchema.extend({
 type AlarmDetail = z.infer<typeof alarmDetailSchema>;
 
 const morePagesSchema = z.object({
-  items: z.array(createdAlarmSchema),
+  alarms: z.array(createdAlarmSchema),
   page: z.object({ nextCursor: z.string() }).strict(),
 });
 
 type MorePages = z.infer<typeof morePagesSchema>;
 
 const lastPageSchema = z.object({
-  items: z.array(createdAlarmSchema),
+  alarms: z.array(createdAlarmSchema),
   page: z.object({}).strict(),
 });
 
@@ -94,6 +94,50 @@ const dispatchOperationSchema = z.object({
 });
 
 type DispatchOperation = z.infer<typeof dispatchOperationSchema>;
+
+const documentedResponseSchema = z.object({
+  content: z.record(z.string(), z.object({ schema: z.json() })),
+});
+
+type DocumentedResponse = z.infer<typeof documentedResponseSchema>;
+
+const documentedPathsSchema = z.record(
+  z.string(),
+  z.record(z.string(), z.object({ responses: z.record(z.string(), z.looseObject({})) })),
+);
+
+type DocumentedPaths = z.infer<typeof documentedPathsSchema>;
+
+type DocumentedOperationCase = Readonly<
+  [path: string, method: string, successStatus: string, errorStatuses: ReadonlyArray<string>]
+>;
+
+const PROBLEM_FIELDS: ReadonlyArray<string> = [
+  'type',
+  'title',
+  'status',
+  'detail',
+  'instance',
+  'code',
+  'errors',
+];
+
+const DOCUMENTED_OPERATIONS: ReadonlyArray<DocumentedOperationCase> = [
+  ['/alarms', 'post', '201', ['400']],
+  ['/alarms', 'get', '200', ['400']],
+  ['/alarms/{id}', 'get', '200', ['400', '404']],
+  ['/alarms/{id}/dispatch', 'post', '202', ['400', '404', '409']],
+  ['/alarms/{id}/cancel', 'post', '200', ['400', '404', '409']],
+];
+
+const documentedResponse = (
+  paths: DocumentedPaths,
+  [path, method]: DocumentedOperationCase,
+  status: string,
+): DocumentedResponse => documentedResponseSchema.parse(paths[path][method].responses[status]);
+
+const schemaTextOf = (response: DocumentedResponse, mediaType: string): string =>
+  JSON.stringify(response.content[mediaType].schema);
 
 const problemSchema = z.object({
   status: z.number(),
@@ -267,7 +311,7 @@ describe('알림 REST API', () => {
     },
   );
 
-  it('API-03 알림 여러 개 / GET /alarms?status=&kind=&cursor=&limit= → 200 { items, page: { nextCursor } } (마지막 페이지는 nextCursor 필드 없음)', async (): Promise<void> => {
+  it('API-03 알림 여러 개 / GET /alarms?status=&kind=&cursor=&limit= → 200 { alarms, page: { nextCursor } } (마지막 페이지는 nextCursor 필드 없음)', async (): Promise<void> => {
     const oldestAlarm: CreatedAlarm = await createBulkAlarm('목록 1');
     const middleAlarm: CreatedAlarm = await createBulkAlarm('목록 2');
     await createUrgentAlarm(['u_000001']);
@@ -295,8 +339,8 @@ describe('알림 REST API', () => {
         .returns('res.body'),
     );
 
-    expect(firstPage.items).toEqual([newestAlarm, middleAlarm]);
-    expect(secondPage.items[0]).toEqual(oldestAlarm);
+    expect(firstPage.alarms).toEqual([newestAlarm, middleAlarm]);
+    expect(secondPage.alarms[0]).toEqual(oldestAlarm);
   });
 
   it('API-03 조건에 맞는 알림이 더 없으면 마지막 페이지로 nextCursor 필드 없이 응답한다', async (): Promise<void> => {
@@ -311,7 +355,7 @@ describe('알림 REST API', () => {
         .returns('res.body'),
     );
 
-    expect(lastPage.items.map(({ id: alarmId }: CreatedAlarm): string => alarmId)).toContain(
+    expect(lastPage.alarms.map(({ id: alarmId }: CreatedAlarm): string => alarmId)).toContain(
       cancelledBulkAlarm.id,
     );
     expect(lastPage.page).toEqual({});
@@ -628,6 +672,47 @@ describe('알림 REST API', () => {
     expect(Object.keys(dispatchOperation.post.responses)).toEqual(
       expect.arrayContaining(['202', '400', '404', '409']),
     );
+  });
+
+  it.each<DocumentedOperationCase>(DOCUMENTED_OPERATIONS)(
+    'API-12 %s %s / GET /docs-json → 성공 응답(%s)은 application/json 스키마를, 오류 응답은 필수 필드를 갖춘 application/problem+json 스키마를 문서화한다',
+    async (...operation: DocumentedOperationCase): Promise<void> => {
+      const paths: DocumentedPaths = documentedPathsSchema.parse(
+        openApiDocumentSchema.parse(
+          await spec().get('/docs-json').expectStatus(200).returns('res.body'),
+        ).paths,
+      );
+      const [_path, _method, successStatus, errorStatuses]: DocumentedOperationCase = operation;
+
+      expect(
+        schemaTextOf(documentedResponse(paths, operation, successStatus), 'application/json'),
+      ).toContain('"status"');
+      errorStatuses.forEach((errorStatus: string): void => {
+        const problemSchemaText: string = schemaTextOf(
+          documentedResponse(paths, operation, errorStatus),
+          'application/problem+json',
+        );
+        PROBLEM_FIELDS.forEach((field: string): void => {
+          expect(problemSchemaText).toContain(`"${field}"`);
+        });
+      });
+    },
+  );
+
+  it('API-12 목록 응답 스키마는 알림 배열을 alarms 키로, 다음 위치를 page.nextCursor로 문서화한다', async (): Promise<void> => {
+    const paths: DocumentedPaths = documentedPathsSchema.parse(
+      openApiDocumentSchema.parse(
+        await spec().get('/docs-json').expectStatus(200).returns('res.body'),
+      ).paths,
+    );
+
+    const listSchemaText: string = schemaTextOf(
+      documentedResponse(paths, ['/alarms', 'get', '200', []], '200'),
+      'application/json',
+    );
+
+    expect(listSchemaText).toContain('"alarms"');
+    expect(listSchemaText).toContain('"nextCursor"');
   });
 
   it('API-11 제공하는 /docs-json 문서는 OpenAPI 3.0 명세 검증을 통과한다', async (): Promise<void> => {
