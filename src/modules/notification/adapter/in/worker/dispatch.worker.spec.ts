@@ -1,6 +1,16 @@
 import { setTimeout } from 'node:timers/promises';
+import {
+  BeforeApplicationShutdown,
+  DynamicModule,
+  Module,
+  OnApplicationShutdown,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Pool } from 'pg';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ShutdownService } from '@/bootstrap/lifecycle/shutdown.service';
+import { ReadinessPort } from '@/modules/health/application/port/out/readiness.port';
+import { InMemoryReadinessAdapter } from '@/modules/health/adapter/out/in-memory/in-memory-readiness.adapter';
 import { CompleteSettledAlarmsUseCase } from '@/modules/notification/application/port/in/complete-settled-alarms.use-case';
 import { SettledAlarmsSwept } from '@/modules/notification/application/port/in/complete-settled-alarms.type';
 import { ExpandNextPageUseCase } from '@/modules/notification/application/port/in/expand-next-page.use-case';
@@ -29,9 +39,21 @@ interface ExecutionCounts {
   readonly completionChecks: number;
 }
 
+type ShutdownPhase = 'drain-start' | 'drain-end' | 'database-close';
+
+interface PhaseObservation {
+  readonly phase: ShutdownPhase;
+  readonly sends: number;
+  readonly inFlight: number;
+  readonly completedSends: number;
+}
+
 const DISPATCH_CONCURRENCY: number = 3;
+const SHUTDOWN_DRAIN_MS: number = 30;
 const POLL_INTERVAL_MS: number = 5;
 const COMPLETION_CHECK_INTERVAL_MS: number = 20;
+
+const UNCONNECTED_DATABASE_URL: string = 'postgres://app:secret@localhost:5432/notification';
 
 const NOT_YET_OPENED: () => void = (): void => {};
 
@@ -55,6 +77,7 @@ class IdleExpansion implements ExpandNextPageUseCase {
 class HeldSender implements SendNextDeliveryUseCase {
   executions: number = 0;
   inFlight: number = 0;
+  completed: number = 0;
   readonly release: Gate = createGate();
 
   async execute(): Promise<SendAttempt> {
@@ -62,7 +85,29 @@ class HeldSender implements SendNextDeliveryUseCase {
     this.inFlight += 1;
     await this.release.opened;
     this.inFlight -= 1;
+    this.completed += 1;
     return { kind: 'idle' };
+  }
+}
+
+class ShutdownPhaseProbe implements BeforeApplicationShutdown, OnApplicationShutdown {
+  readonly observations: Array<PhaseObservation> = [];
+
+  constructor(private readonly sender: HeldSender) {}
+
+  async beforeApplicationShutdown(): Promise<void> {
+    this.observe('drain-start');
+    await setTimeout(POLL_INTERVAL_MS * 4);
+    this.observe('drain-end');
+  }
+
+  onApplicationShutdown(): void {
+    this.observe('database-close');
+  }
+
+  private observe(phase: ShutdownPhase): void {
+    const { executions, inFlight, completed }: HeldSender = this.sender;
+    this.observations.push({ phase, sends: executions, inFlight, completedSends: completed });
   }
 }
 
@@ -102,6 +147,12 @@ class CompletingCheck implements CompleteSettledAlarmsUseCase {
   }
 }
 
+@Module({})
+class ShutdownUnderTestModule {}
+
+@Module({})
+class LoopsUnderTestModule {}
+
 describe('DispatchWorker', () => {
   let moduleRef: TestingModule;
   let expansion: IdleExpansion;
@@ -109,6 +160,7 @@ describe('DispatchWorker', () => {
   let reconcile: IdleReconcile;
   let recovery: IdleRecovery;
   let completionCheck: CompletingCheck;
+  let probe: ShutdownPhaseProbe;
 
   const executionCounts = (): ExecutionCounts => ({
     expansions: expansion.executions,
@@ -118,21 +170,40 @@ describe('DispatchWorker', () => {
     completionChecks: completionCheck.executions,
   });
 
+  const shutdownModule = (): DynamicModule => ({
+    module: ShutdownUnderTestModule,
+    providers: [
+      { provide: ShutdownPhaseProbe, useFactory: (): ShutdownPhaseProbe => probe },
+      { provide: ReadinessPort, useClass: InMemoryReadinessAdapter },
+      { provide: Pool, useValue: new Pool({ connectionString: UNCONNECTED_DATABASE_URL }) },
+      ShutdownService,
+    ],
+  });
+
+  const loopsModule = (sendUseCase: SendNextDeliveryUseCase): DynamicModule => ({
+    module: LoopsUnderTestModule,
+    providers: [
+      { provide: ExpandNextPageUseCase, useValue: expansion },
+      { provide: SendNextDeliveryUseCase, useValue: sendUseCase },
+      { provide: ReconcileNextDeliveryUseCase, useValue: reconcile },
+      { provide: RecoverExpiredLeaseUseCase, useValue: recovery },
+      { provide: CompleteSettledAlarmsUseCase, useValue: completionCheck },
+      DispatchWorker,
+    ],
+  });
+
   const compile = (sendUseCase: SendNextDeliveryUseCase): Promise<TestingModule> =>
     Test.createTestingModule({
-      imports: [TypedConfigModule.forRoot(createEnvSchema(portSchema.parse(3001)))],
-      providers: [
-        { provide: ExpandNextPageUseCase, useValue: expansion },
-        { provide: SendNextDeliveryUseCase, useValue: sendUseCase },
-        { provide: ReconcileNextDeliveryUseCase, useValue: reconcile },
-        { provide: RecoverExpiredLeaseUseCase, useValue: recovery },
-        { provide: CompleteSettledAlarmsUseCase, useValue: completionCheck },
-        DispatchWorker,
+      imports: [
+        TypedConfigModule.forRoot(createEnvSchema(portSchema.parse(3001))),
+        loopsModule(sendUseCase),
+        shutdownModule(),
       ],
     }).compile();
 
   beforeEach(async (): Promise<void> => {
-    vi.stubEnv('DATABASE_URL', 'postgres://app:secret@localhost:5432/notification');
+    vi.stubEnv('DATABASE_URL', UNCONNECTED_DATABASE_URL);
+    vi.stubEnv('SHUTDOWN_DRAIN_MS', String(SHUTDOWN_DRAIN_MS));
     vi.stubEnv('DISPATCH_CONCURRENCY', String(DISPATCH_CONCURRENCY));
     vi.stubEnv('WORKER_POLL_INTERVAL_MS', String(POLL_INTERVAL_MS));
     vi.stubEnv('COMPLETION_CHECK_INTERVAL_MS', String(COMPLETION_CHECK_INTERVAL_MS));
@@ -141,6 +212,7 @@ describe('DispatchWorker', () => {
     reconcile = new IdleReconcile();
     recovery = new IdleRecovery();
     completionCheck = new CompletingCheck();
+    probe = new ShutdownPhaseProbe(sender);
     moduleRef = await compile(sender);
   });
 
@@ -162,10 +234,41 @@ describe('DispatchWorker', () => {
     });
   });
 
-  it.todo('WRK-02 실행 중인 워커 / 종료 신호를 받는다 → 새 claim을 즉시 멈추고 readiness를 내린다');
-  it.todo(
-    'WRK-03 진행 중인 요청이 있는 워커 / 종료 절차가 진행된다 → 진행 중 요청의 결과를 제한 시간 안에 저장한 뒤 DB 연결을 닫는다',
-  );
+  it('WRK-02 실행 중인 워커 / 종료 신호를 받는다 → 새 claim을 즉시 멈추고 readiness를 내린다 (워커 모듈이 종료 모듈보다 먼저 import돼도 drain 대기 전에 멈춘다)', async (): Promise<void> => {
+    const readiness: ReadinessPort = moduleRef.get(ReadinessPort);
+    await moduleRef.init();
+    await vi.waitFor((): void => {
+      expect(sender.inFlight).toBe(DISPATCH_CONCURRENCY);
+    });
+
+    moduleRef.get(ShutdownService).handleSignal('SIGTERM');
+    const acceptingTrafficAfterSignal: boolean = readiness.isAcceptingTraffic();
+    const closing: Promise<void> = moduleRef.close();
+    await setTimeout(POLL_INTERVAL_MS * 4);
+    sender.release.open();
+    await closing;
+
+    expect(acceptingTrafficAfterSignal).toBe(false);
+    expect(
+      probe.observations.filter(
+        ({ phase }: PhaseObservation): boolean => phase !== 'database-close',
+      ),
+    ).toEqual([
+      {
+        phase: 'drain-start',
+        sends: DISPATCH_CONCURRENCY,
+        inFlight: 0,
+        completedSends: DISPATCH_CONCURRENCY,
+      },
+      {
+        phase: 'drain-end',
+        sends: DISPATCH_CONCURRENCY,
+        inFlight: 0,
+        completedSends: DISPATCH_CONCURRENCY,
+      },
+    ]);
+  });
+
   it.todo(
     'WRK-04 제한 시간 안에 끝나지 않는 요청 / 종료 절차가 진행된다 → 요청을 중단하고 lease를 남겨 둔 채 종료하며, 남은 건은 lease 만료 후 다른 워커가 reconcile한다',
   );
@@ -182,7 +285,7 @@ describe('DispatchWorker', () => {
     });
   });
 
-  it('모듈이 닫히면 진행 중인 발송이 끝난 뒤 모든 루프를 멈추고 더 실행하지 않는다', async (): Promise<void> => {
+  it('WRK-03 진행 중인 요청이 있는 워커 / 종료 절차가 진행된다 → 진행 중 요청의 결과를 제한 시간 안에 저장한 뒤 DB 연결을 닫는다', async (): Promise<void> => {
     await moduleRef.init();
     await vi.waitFor((): void => {
       expect(sender.inFlight).toBe(DISPATCH_CONCURRENCY);
@@ -194,7 +297,14 @@ describe('DispatchWorker', () => {
     const countsAtClose: ExecutionCounts = executionCounts();
     await setTimeout(POLL_INTERVAL_MS * 4);
 
-    expect(sender.inFlight).toBe(0);
+    expect(
+      probe.observations.find(({ phase }: PhaseObservation): boolean => phase === 'database-close'),
+    ).toEqual({
+      phase: 'database-close',
+      sends: DISPATCH_CONCURRENCY,
+      inFlight: 0,
+      completedSends: DISPATCH_CONCURRENCY,
+    });
     expect(executionCounts()).toEqual(countsAtClose);
   });
 

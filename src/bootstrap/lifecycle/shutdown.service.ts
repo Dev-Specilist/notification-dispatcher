@@ -4,6 +4,7 @@ import {
   Logger,
   OnApplicationBootstrap,
   OnApplicationShutdown,
+  OnModuleDestroy,
 } from '@nestjs/common';
 import { Pool } from 'pg';
 import { ReadinessPort } from '@/modules/health/application/port/out/readiness.port';
@@ -14,7 +15,11 @@ type SignalListener = (signal: NodeJS.Signals) => void;
 
 @Injectable()
 export class ShutdownService
-  implements OnApplicationBootstrap, BeforeApplicationShutdown, OnApplicationShutdown
+  implements
+    OnApplicationBootstrap,
+    OnModuleDestroy,
+    BeforeApplicationShutdown,
+    OnApplicationShutdown
 {
   static readonly SIGNALS: ReadonlyArray<NodeJS.Signals> = ['SIGTERM', 'SIGINT'];
 
@@ -39,6 +44,10 @@ export class ShutdownService
   handleSignal(signal: NodeJS.Signals): void {
     this.stopAcceptingTraffic(signal);
     this.startWatchdog();
+  }
+
+  onModuleDestroy(): void {
+    this.stopAcceptingTraffic('close');
   }
 
   async beforeApplicationShutdown(signal: string = 'close'): Promise<void> {

@@ -1,4 +1,4 @@
-import { BeforeApplicationShutdown, Injectable, OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { CompleteSettledAlarmsUseCase } from '@/modules/notification/application/port/in/complete-settled-alarms.use-case';
 import { ExpandNextPageUseCase } from '@/modules/notification/application/port/in/expand-next-page.use-case';
 import { ExpansionPageAttempt } from '@/modules/notification/application/port/in/expand-next-page.type';
@@ -16,7 +16,7 @@ import {
 import { TypedConfigService } from '@/shared/config/typed-config.service';
 
 @Injectable()
-export class DispatchWorker implements OnApplicationBootstrap, BeforeApplicationShutdown {
+export class DispatchWorker implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly loops: ReadonlyArray<PollingLoopRunner>;
 
   constructor(
@@ -66,7 +66,7 @@ export class DispatchWorker implements OnApplicationBootstrap, BeforeApplication
     this.loops.forEach((loop: PollingLoopRunner): void => loop.start());
   }
 
-  async beforeApplicationShutdown(): Promise<void> {
+  async onModuleDestroy(): Promise<void> {
     await Promise.all(this.loops.map((loop: PollingLoopRunner): Promise<void> => loop.stop()));
   }
 

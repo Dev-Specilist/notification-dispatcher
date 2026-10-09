@@ -70,6 +70,12 @@ describe('ShutdownService', () => {
     expect(drained).toBe(true);
   });
 
+  it('신호 없이 close가 시작되면 첫 종료 단계(onModuleDestroy)에서 readiness를 내린다', (): void => {
+    shutdown.onModuleDestroy();
+
+    expect(readiness.isAcceptingTraffic()).toBe(false);
+  });
+
   it('종료 신호를 받으면 다른 종료 훅을 기다리지 않고 readiness를 내린다', () => {
     shutdown.handleSignal('SIGTERM');
 
