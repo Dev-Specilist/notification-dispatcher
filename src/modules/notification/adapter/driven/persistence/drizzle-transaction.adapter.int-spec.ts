@@ -63,6 +63,8 @@ import { DrizzleDeliveryRepositoryAdapter } from '@/modules/notification/adapter
 import { DrizzleTransactionAdapter } from '@/modules/notification/adapter/driven/persistence/drizzle-transaction.adapter';
 import { NotificationDatabaseFactory } from '@/modules/notification/adapter/driven/persistence/notification-database.factory';
 import { QueryResult } from 'pg';
+import { createGate, Gate } from '@/shared/testing/gate.factory';
+import { KindAssertion, KindMember } from '@/shared/testing/kind.assertion';
 import { TestDatabase } from '@/shared/database/testing/test-database';
 
 type OutcomePair = Readonly<[string, string]>;
@@ -77,22 +79,7 @@ interface LockWaitRow {
   readonly waiting: number;
 }
 
-interface Gate {
-  readonly opened: Promise<void>;
-  readonly open: () => void;
-}
-
 const NOW_ISO: string = '2026-10-08T09:00:00.000Z';
-
-const NOT_YET_OPENED: () => void = (): void => {};
-
-const createGate = (): Gate => {
-  let release: () => void = NOT_YET_OPENED;
-  const opened: Promise<void> = new Promise<void>((resolve: () => void): void => {
-    release = resolve;
-  });
-  return { opened, open: (): void => release() };
-};
 
 const newAlarmId = (): AlarmId => {
   const rawAlarmId: string = randomUUID();
@@ -120,10 +107,9 @@ const durationMs = (value: number): DurationMs => {
 
 const draftAlarm = (draft: Readonly<AlarmDraft>): Alarm => {
   const creation: AlarmCreation = Alarm.create(newAlarmId(), draft, new Date(NOW_ISO));
-  if (creation.kind !== 'created') {
-    throw new Error(`test fixture alarm is invalid: ${creation.error.code}`);
-  }
-  return creation.alarm;
+  KindAssertion.assertKind(creation, 'created');
+  const { alarm }: KindMember<AlarmCreation, 'created'> = creation;
+  return alarm;
 };
 
 const urgentDraft = (): Alarm =>
@@ -218,10 +204,9 @@ class FixedDispatchSettings implements DispatchSettings {
       baseDelayMs: durationMs(1_000),
       maxDelayMs: durationMs(8_000),
     });
-    if (creation.kind !== 'created') {
-      throw new Error(`test fixture retry policy is invalid: ${creation.error.code}`);
-    }
-    this.retryPolicy = creation.policy;
+    KindAssertion.assertKind(creation, 'created');
+    const { policy }: KindMember<RetryPolicyCreation, 'created'> = creation;
+    this.retryPolicy = policy;
   }
 }
 
@@ -333,10 +318,10 @@ describe('DrizzleTransactionAdapter', () => {
   const dispatchedBulkAlarm = async (): Promise<AlarmId> => {
     const alarm: Alarm = bulkDraft();
     const dispatchedTransition: AlarmTransition = alarm.startDispatch(new Date(NOW_ISO));
-    if (dispatchedTransition.kind !== 'transitioned') {
-      throw new Error('test fixture alarm cannot be dispatched');
-    }
-    await save(dispatchedTransition.alarm);
+    KindAssertion.assertKind(dispatchedTransition, 'transitioned');
+    const { alarm: dispatchedAlarm }: KindMember<AlarmTransition, 'transitioned'> =
+      dispatchedTransition;
+    await save(dispatchedAlarm);
     const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
     return alarmId;
   };
@@ -399,15 +384,15 @@ describe('DrizzleTransactionAdapter', () => {
     const alarm: Alarm = urgentDraft();
     await save(alarm);
     const dispatchedTransition: AlarmTransition = alarm.startDispatch(new Date(NOW_ISO));
-    if (dispatchedTransition.kind !== 'transitioned') {
-      throw new Error('test fixture alarm cannot be dispatched');
-    }
+    KindAssertion.assertKind(dispatchedTransition, 'transitioned');
+    const { alarm: dispatchedAlarm }: KindMember<AlarmTransition, 'transitioned'> =
+      dispatchedTransition;
     const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
 
     await expect(
       transaction.run(
         async ({ alarmRepository, deliveryRepository }: TransactionRepositories): Promise<void> => {
-          await alarmRepository.save(dispatchedTransition.alarm);
+          await alarmRepository.save(dispatchedAlarm);
           await deliveryRepository.insertMissing(
             recipientIds(2).map((recipientId: RecipientId): Delivery =>
               Delivery.create(
@@ -433,9 +418,9 @@ describe('DrizzleTransactionAdapter', () => {
     const alarm: Alarm = bulkDraft();
     await save(alarm);
     const dispatchedTransition: AlarmTransition = alarm.startDispatch(new Date(NOW_ISO));
-    if (dispatchedTransition.kind !== 'transitioned') {
-      throw new Error('test fixture alarm cannot be dispatched');
-    }
+    KindAssertion.assertKind(dispatchedTransition, 'transitioned');
+    const { alarm: dispatchedAlarm }: KindMember<AlarmTransition, 'transitioned'> =
+      dispatchedTransition;
     const { id: alarmId }: ReturnType<Alarm['snapshot']> = alarm.snapshot();
 
     await expect(
@@ -444,7 +429,7 @@ describe('DrizzleTransactionAdapter', () => {
           alarmRepository,
           expansionJobRepository,
         }: TransactionRepositories): Promise<void> => {
-          await alarmRepository.save(dispatchedTransition.alarm);
+          await alarmRepository.save(dispatchedAlarm);
           await expansionJobRepository.enqueue(alarmId, new Date(NOW_ISO));
           throw new Error('failure in the middle of the transaction');
         },
@@ -636,10 +621,9 @@ describe('DrizzleTransactionAdapter', () => {
         locked.open();
         await release.opened;
         const cancelled: AlarmTransition = alarm.cancel(new Date(NOW_ISO));
-        if (cancelled.kind !== 'transitioned') {
-          throw new Error(`test fixture alarm cannot be cancelled: ${cancelled.kind}`);
-        }
-        await alarmRepository.save(cancelled.alarm);
+        KindAssertion.assertKind(cancelled, 'transitioned');
+        const { alarm: cancelledAlarm }: KindMember<AlarmTransition, 'transitioned'> = cancelled;
+        await alarmRepository.save(cancelledAlarm);
       },
     );
     await locked.opened;
