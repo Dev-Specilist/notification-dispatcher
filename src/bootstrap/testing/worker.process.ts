@@ -71,9 +71,9 @@ export class WorkerProcess {
     const worker: WorkerProcess = new WorkerProcess(child, `http://${WorkerProcess.HOST}:${port}`);
     try {
       await worker.waitUntilReady();
-    } catch (failure) {
+    } catch (error) {
       await worker.kill();
-      throw failure;
+      throw error;
     }
     return worker;
   }
@@ -131,10 +131,10 @@ export class WorkerProcess {
 
   private static async freePort(): Promise<number> {
     const probe: Server = createServer();
-    await new Promise<void>((resolve: () => void, reject: (failure: Error) => void): void => {
-      probe.once('error', (failure: Error): void => {
+    await new Promise<void>((resolve: () => void, reject: (error: Error) => void): void => {
+      probe.once('error', (error: Error): void => {
         probe.close();
-        reject(failure);
+        reject(error);
       });
       probe.listen(0, WorkerProcess.HOST, resolve);
     });

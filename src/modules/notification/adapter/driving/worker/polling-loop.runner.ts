@@ -4,6 +4,7 @@ import {
   PollingOutcome,
   PollingWork,
 } from '@/modules/notification/adapter/driving/worker/polling-loop.type';
+import { ThrownValues } from '@/shared/error/thrown-value.util';
 
 export class PollingLoopRunner {
   private readonly logger: Logger = new Logger('PollingLoop');
@@ -41,9 +42,9 @@ export class PollingLoopRunner {
     try {
       const outcome: PollingOutcome = await this.work();
       return outcome === 'idle' ? this.delays.idleDelayMs : 0;
-    } catch (reason) {
-      const error: Error = reason instanceof Error ? reason : new Error(String(reason));
-      this.logger.error(`${this.name} pass failed: ${error.message}`, error.stack);
+    } catch (error) {
+      const { message, stack }: Error = ThrownValues.toError(error);
+      this.logger.error(`${this.name} pass failed: ${message}`, stack);
       return this.delays.errorDelayMs;
     }
   }

@@ -22,6 +22,7 @@ import {
   SettledAlarmsPageChecked,
 } from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-settled-alarms.type';
 import { CompleteSettledAlarmsUseCase } from '@/modules/notification/application/port/driving/for-dispatching-alarms/complete-settled-alarms.use-case';
+import { ThrownValues } from '@/shared/error/thrown-value.util';
 
 interface AlarmCompletionChecked {
   readonly kind: 'checked';
@@ -84,8 +85,8 @@ export class CompleteSettledAlarmsService implements CompleteSettledAlarmsUseCas
     const { id: alarmId }: AlarmSnapshot = alarm.snapshot();
     try {
       return { kind: 'checked', result: await this.completionChecker.completeIfSettled(alarmId) };
-    } catch (thrown) {
-      const reason: string = thrown instanceof Error ? thrown.message : String(thrown);
+    } catch (error) {
+      const { message: reason }: Error = ThrownValues.toError(error);
       return { kind: 'failed', failure: { alarmId, reason } };
     }
   }

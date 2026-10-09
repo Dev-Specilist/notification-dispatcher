@@ -4,16 +4,17 @@ import { ListenAddress } from '@/bootstrap/server/listen-address.type';
 import { ListenAddressResolver } from '@/bootstrap/server/listen-address.util';
 import { Host, Port } from '@/shared/config/primitive.type';
 import { TypedConfigService } from '@/shared/config/typed-config.service';
+import { ThrownValues } from '@/shared/error/thrown-value.util';
 import { AppLogger } from '@/shared/logging/app.logger';
 
 export class ServerBootstrap {
   static async run(main: () => Promise<void>): Promise<void> {
     try {
       await main();
-    } catch (reason) {
-      const error: Error = reason instanceof Error ? reason : new Error(String(reason));
+    } catch (error) {
+      const { message, stack }: Error = ThrownValues.toError(error);
       Logger.flush();
-      new Logger('Bootstrap').fatal(`failed to start: ${error.message}`, error.stack);
+      new Logger('Bootstrap').fatal(`failed to start: ${message}`, stack);
       process.exit(1);
     }
   }

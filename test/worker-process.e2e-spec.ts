@@ -57,10 +57,10 @@ const startStubMockApi = async (): Promise<StubMockApi> => {
       });
     },
   );
-  await new Promise<void>((resolve: () => void, reject: (failure: Error) => void): void => {
-    server.once('error', (failure: Error): void => {
+  await new Promise<void>((resolve: () => void, reject: (error: Error) => void): void => {
+    server.once('error', (error: Error): void => {
       server.close();
-      reject(failure);
+      reject(error);
     });
     server.listen(0, '127.0.0.1', resolve);
   });

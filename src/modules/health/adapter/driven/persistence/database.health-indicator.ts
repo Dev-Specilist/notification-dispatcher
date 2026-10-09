@@ -2,6 +2,7 @@ import { setTimeout } from 'node:timers/promises';
 import { Injectable, Logger } from '@nestjs/common';
 import { HealthIndicatorResult, HealthIndicatorService } from '@nestjs/terminus';
 import { Pool, QueryConfig } from 'pg';
+import { ThrownValues } from '@/shared/error/thrown-value.util';
 
 type DatabaseIndicatorKey = 'database';
 
@@ -55,10 +56,8 @@ export class DatabaseHealthIndicator {
       await this.pool.query(DatabaseHealthIndicator.PING);
       return { kind: 'reachable' };
     } catch (error) {
-      return {
-        kind: 'unreachable',
-        cause: error instanceof Error ? error.message : 'non-error rejection',
-      };
+      const { message: cause }: Error = ThrownValues.toError(error);
+      return { kind: 'unreachable', cause };
     }
   }
 
