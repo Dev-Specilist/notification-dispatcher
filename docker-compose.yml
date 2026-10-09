@@ -1,3 +1,17 @@
+x-app-hardening: &app-hardening
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: '3'
+
 services:
   postgres:
     image: postgres:18-alpine
@@ -27,11 +41,14 @@ services:
       postgres:
         condition: service_healthy
     restart: 'no'
+    <<: *app-hardening
 
   api:
     build:
       context: .
       target: api
+    restart: unless-stopped
+    <<: *app-hardening
     environment:
       LOG_FORMAT: json
       DATABASE_URL: postgres://notification:notification@postgres:5432/notification
@@ -48,6 +65,8 @@ services:
     build:
       context: .
       target: worker
+    restart: unless-stopped
+    <<: *app-hardening
     environment:
       LOG_FORMAT: json
       DATABASE_URL: postgres://notification:notification@postgres:5432/notification

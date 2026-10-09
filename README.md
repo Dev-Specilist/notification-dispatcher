@@ -49,6 +49,9 @@ docker compose up --build --scale worker=3   # 워커 3대
 - 호스트에는 `api`의 3000번 포트만 공개합니다. PostgreSQL과 mock은 compose 내부 네트워크에서만 접근합니다.
 - API 문서는 http://localhost:3000/docs (Swagger UI)와 `/docs-json`(OpenAPI 3.0)에 있습니다.
 - 데이터는 볼륨 `postgres_data`에 남습니다. 처음 상태로 되돌리려면 `docker compose down -v`를 실행합니다.
+- **`api` · `worker`는 비정상 종료되면 다시 뜹니다(`restart: unless-stopped`).** 종료 제한 시간 초과나 기동 시 DB 미준비로 exit 1이 나도 자동으로 복구되고, 워커가 쥐고 있던 발송 건은 lease 만료 뒤 다른 워커(또는 다시 뜬 자신)가 이어받습니다.
+- **healthcheck는 readiness(`/readyz`)를 씁니다.** Docker healthcheck는 하나만 둘 수 있고 실패해도 재시작하지 않으므로, `depends_on: service_healthy`가 "트래픽을 받아도 되는 상태"를 기다리도록 readiness를 씁니다. liveness(`/livez`)는 k8s `livenessProbe`처럼 재시작을 결정하는 오케스트레이터용입니다.
+- **앱 컨테이너는 최소 권한으로 실행합니다.** `node` 사용자, 읽기 전용 파일시스템(`/tmp`만 tmpfs), 모든 capability 제거, `no-new-privileges`를 적용하고, 대량 발송 중 로그가 디스크를 채우지 않게 json-file 로그를 10MB × 3개로 제한합니다. 공통 설정은 compose의 `x-app-hardening` 하나로 모았습니다.
 
 ### 1-2. 로컬 개발
 
