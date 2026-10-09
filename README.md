@@ -191,7 +191,7 @@ Delivery   PENDING ─claim(leaseToken)─▶ IN_FLIGHT ─202──────
                    ─(after confirm window)─────▶ UNCONFIRMED (terminal, needs review)
 ```
 
-알림 완료 판정은 Alarm이 Delivery를 직접 읽지 않고, application의 완료 판정 유스케이스가 "확장 완료 여부"와 "미종결 Delivery 수"를 조회해 Alarm에 넘깁니다. 이 유스케이스는 발송 결과 확정, reconcile 확정, 확장 완료(수신자 0명 포함) 때마다 호출됩니다.
+알림 완료 판정은 Alarm이 Delivery를 직접 읽지 않고, application의 완료 판정 유스케이스가 "확장 완료 여부"와 "미종결 Delivery 수"를 조회해 Alarm에 넘깁니다. 워커는 이 판정을 결과가 확정될 때마다 호출하지 않고, `COMPLETION_CHECK_INTERVAL_MS`(기본 1초)마다 발송 중인 알림을 훑으며 호출합니다. 결과마다 호출하면 수신자 10만 명인 알림 하나에서 미종결 건수 집계가 10만 번 실행되기 때문입니다. 대신 마지막 결과가 확정된 뒤 `COMPLETED`가 되기까지 최대 한 주기만큼 늦어집니다.
 
 ### 중복과 누락을 막는 방법
 

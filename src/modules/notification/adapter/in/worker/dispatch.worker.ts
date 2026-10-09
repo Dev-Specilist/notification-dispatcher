@@ -1,4 +1,5 @@
 import { BeforeApplicationShutdown, Injectable, OnApplicationBootstrap } from '@nestjs/common';
+import { CompleteSettledAlarmsUseCase } from '@/modules/notification/application/port/in/complete-settled-alarms.use-case';
 import { ExpandNextPageUseCase } from '@/modules/notification/application/port/in/expand-next-page.use-case';
 import { ExpansionPageAttempt } from '@/modules/notification/application/port/in/expand-next-page.type';
 import { ReconcileNextDeliveryUseCase } from '@/modules/notification/application/port/in/reconcile-next-delivery.use-case';
@@ -23,10 +24,15 @@ export class DispatchWorker implements OnApplicationBootstrap, BeforeApplication
     private readonly sendNextDelivery: SendNextDeliveryUseCase,
     private readonly reconcileNextDelivery: ReconcileNextDeliveryUseCase,
     private readonly recoverExpiredLease: RecoverExpiredLeaseUseCase,
+    private readonly completeSettledAlarms: CompleteSettledAlarmsUseCase,
     config: TypedConfigService,
   ) {
     const delays: PollingDelays = {
       idleDelayMs: config.get('WORKER_POLL_INTERVAL_MS'),
+      errorDelayMs: config.get('WORKER_ERROR_DELAY_MS'),
+    };
+    const completionCheckDelays: PollingDelays = {
+      idleDelayMs: config.get('COMPLETION_CHECK_INTERVAL_MS'),
       errorDelayMs: config.get('WORKER_ERROR_DELAY_MS'),
     };
     const dispatchLoops: Array<PollingLoopRunner> = [];
@@ -47,6 +53,11 @@ export class DispatchWorker implements OnApplicationBootstrap, BeforeApplication
         'lease-recovery',
         (): Promise<PollingOutcome> => this.recoverLease(),
         delays,
+      ),
+      new PollingLoopRunner(
+        'completion-check',
+        (): Promise<PollingOutcome> => this.checkCompletion(),
+        completionCheckDelays,
       ),
     ];
   }
@@ -77,5 +88,10 @@ export class DispatchWorker implements OnApplicationBootstrap, BeforeApplication
   private async recoverLease(): Promise<PollingOutcome> {
     const { kind }: RecoveryAttempt = await this.recoverExpiredLease.execute();
     return kind === 'idle' ? 'idle' : 'worked';
+  }
+
+  private async checkCompletion(): Promise<PollingOutcome> {
+    await this.completeSettledAlarms.execute();
+    return 'idle';
   }
 }

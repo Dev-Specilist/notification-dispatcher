@@ -13,10 +13,14 @@ import { RecipientDirectoryPort } from '@/modules/notification/application/port/
 import { ReconcileSettingsPort } from '@/modules/notification/application/port/out/reconcile-settings.port';
 import { SendPermitPort } from '@/modules/notification/application/port/out/send-permit.port';
 import { TransactionPort } from '@/modules/notification/application/port/out/transaction.port';
+import { CompleteAlarmIfSettledUseCase } from '@/modules/notification/application/port/in/complete-alarm-if-settled.use-case';
+import { CompleteSettledAlarmsUseCase } from '@/modules/notification/application/port/in/complete-settled-alarms.use-case';
 import { ExpandNextPageUseCase } from '@/modules/notification/application/port/in/expand-next-page.use-case';
 import { ReconcileNextDeliveryUseCase } from '@/modules/notification/application/port/in/reconcile-next-delivery.use-case';
 import { RecoverExpiredLeaseUseCase } from '@/modules/notification/application/port/in/recover-expired-lease.use-case';
 import { SendNextDeliveryUseCase } from '@/modules/notification/application/port/in/send-next-delivery.use-case';
+import { CompleteAlarmIfSettledService } from '@/modules/notification/application/service/complete-alarm-if-settled.service';
+import { CompleteSettledAlarmsService } from '@/modules/notification/application/service/complete-settled-alarms.service';
 import { ExpandNextPageService } from '@/modules/notification/application/service/expand-next-page.service';
 import { ReconcileNextDeliveryService } from '@/modules/notification/application/service/reconcile-next-delivery.service';
 import { RecoverExpiredLeaseService } from '@/modules/notification/application/service/recover-expired-lease.service';
@@ -181,6 +185,21 @@ const WORKER_SETTINGS: string = 'WorkerSettings';
         leaseRecoverySettings: LeaseRecoverySettingsPort,
       ): RecoverExpiredLeaseUseCase =>
         new RecoverExpiredLeaseService(transaction, clock, leaseRecoverySettings),
+    },
+    {
+      provide: CompleteAlarmIfSettledUseCase,
+      inject: [TransactionPort, ClockPort],
+      useFactory: (transaction: TransactionPort, clock: ClockPort): CompleteAlarmIfSettledUseCase =>
+        new CompleteAlarmIfSettledService(transaction, clock),
+    },
+    {
+      provide: CompleteSettledAlarmsUseCase,
+      inject: [TransactionPort, CompleteAlarmIfSettledUseCase],
+      useFactory: (
+        transaction: TransactionPort,
+        completeAlarmIfSettled: CompleteAlarmIfSettledUseCase,
+      ): CompleteSettledAlarmsUseCase =>
+        new CompleteSettledAlarmsService(transaction, completeAlarmIfSettled),
     },
     DispatchWorker,
   ],

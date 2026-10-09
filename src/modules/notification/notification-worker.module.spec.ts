@@ -1,9 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { CompleteSettledAlarmsUseCase } from '@/modules/notification/application/port/in/complete-settled-alarms.use-case';
 import { ExpandNextPageUseCase } from '@/modules/notification/application/port/in/expand-next-page.use-case';
 import { ReconcileNextDeliveryUseCase } from '@/modules/notification/application/port/in/reconcile-next-delivery.use-case';
 import { RecoverExpiredLeaseUseCase } from '@/modules/notification/application/port/in/recover-expired-lease.use-case';
 import { SendNextDeliveryUseCase } from '@/modules/notification/application/port/in/send-next-delivery.use-case';
+import { CompleteSettledAlarmsService } from '@/modules/notification/application/service/complete-settled-alarms.service';
 import { ExpandNextPageService } from '@/modules/notification/application/service/expand-next-page.service';
 import { ReconcileNextDeliveryService } from '@/modules/notification/application/service/reconcile-next-delivery.service';
 import { RecoverExpiredLeaseService } from '@/modules/notification/application/service/recover-expired-lease.service';
@@ -39,6 +41,9 @@ describe('NotificationWorkerModule', () => {
       ReconcileNextDeliveryService,
     );
     expect(moduleRef.get(RecoverExpiredLeaseUseCase)).toBeInstanceOf(RecoverExpiredLeaseService);
+    expect(moduleRef.get(CompleteSettledAlarmsUseCase)).toBeInstanceOf(
+      CompleteSettledAlarmsService,
+    );
     expect(moduleRef.get(DispatchWorker)).toBeInstanceOf(DispatchWorker);
     await moduleRef.close();
   });

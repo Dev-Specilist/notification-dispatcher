@@ -1,6 +1,8 @@
 import { setTimeout } from 'node:timers/promises';
 import { Test, TestingModule } from '@nestjs/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CompleteSettledAlarmsUseCase } from '@/modules/notification/application/port/in/complete-settled-alarms.use-case';
+import { SettledAlarmsSwept } from '@/modules/notification/application/port/in/complete-settled-alarms.type';
 import { ExpandNextPageUseCase } from '@/modules/notification/application/port/in/expand-next-page.use-case';
 import { ExpansionPageAttempt } from '@/modules/notification/application/port/in/expand-next-page.type';
 import { ReconcileNextDeliveryUseCase } from '@/modules/notification/application/port/in/reconcile-next-delivery.use-case';
@@ -24,10 +26,12 @@ interface ExecutionCounts {
   readonly sends: number;
   readonly reconciles: number;
   readonly recoveries: number;
+  readonly completionChecks: number;
 }
 
 const DISPATCH_CONCURRENCY: number = 3;
 const POLL_INTERVAL_MS: number = 5;
+const COMPLETION_CHECK_INTERVAL_MS: number = 20;
 
 const NOT_YET_OPENED: () => void = (): void => {};
 
@@ -89,18 +93,29 @@ class IdleRecovery implements RecoverExpiredLeaseUseCase {
   }
 }
 
+class CompletingCheck implements CompleteSettledAlarmsUseCase {
+  executions: number = 0;
+
+  execute(): Promise<SettledAlarmsSwept> {
+    this.executions += 1;
+    return Promise.resolve({ kind: 'swept', checkedAlarmCount: 3, completedAlarmCount: 3 });
+  }
+}
+
 describe('DispatchWorker', () => {
   let moduleRef: TestingModule;
   let expansion: IdleExpansion;
   let sender: HeldSender;
   let reconcile: IdleReconcile;
   let recovery: IdleRecovery;
+  let completionCheck: CompletingCheck;
 
   const executionCounts = (): ExecutionCounts => ({
     expansions: expansion.executions,
     sends: sender.executions,
     reconciles: reconcile.executions,
     recoveries: recovery.executions,
+    completionChecks: completionCheck.executions,
   });
 
   const compile = (sendUseCase: SendNextDeliveryUseCase): Promise<TestingModule> =>
@@ -111,6 +126,7 @@ describe('DispatchWorker', () => {
         { provide: SendNextDeliveryUseCase, useValue: sendUseCase },
         { provide: ReconcileNextDeliveryUseCase, useValue: reconcile },
         { provide: RecoverExpiredLeaseUseCase, useValue: recovery },
+        { provide: CompleteSettledAlarmsUseCase, useValue: completionCheck },
         DispatchWorker,
       ],
     }).compile();
@@ -119,10 +135,12 @@ describe('DispatchWorker', () => {
     vi.stubEnv('DATABASE_URL', 'postgres://app:secret@localhost:5432/notification');
     vi.stubEnv('DISPATCH_CONCURRENCY', String(DISPATCH_CONCURRENCY));
     vi.stubEnv('WORKER_POLL_INTERVAL_MS', String(POLL_INTERVAL_MS));
+    vi.stubEnv('COMPLETION_CHECK_INTERVAL_MS', String(COMPLETION_CHECK_INTERVAL_MS));
     expansion = new IdleExpansion();
     sender = new HeldSender();
     reconcile = new IdleReconcile();
     recovery = new IdleRecovery();
+    completionCheck = new CompletingCheck();
     moduleRef = await compile(sender);
   });
 
@@ -132,13 +150,14 @@ describe('DispatchWorker', () => {
     vi.unstubAllEnvs();
   });
 
-  it('WRK-01 워커 모듈 / 애플리케이션 부트스트랩이 끝난다 → 확장 · 발송 · reconcile · lease 복구 루프가 시작된다', async (): Promise<void> => {
+  it('WRK-01 워커 모듈 / 애플리케이션 부트스트랩이 끝난다 → 확장 · 발송 · reconcile · lease 복구 · 완료 확인 루프가 시작된다', async (): Promise<void> => {
     await moduleRef.init();
 
     await vi.waitFor((): void => {
       expect(expansion.executions).toBeGreaterThanOrEqual(2);
       expect(reconcile.executions).toBeGreaterThanOrEqual(2);
       expect(recovery.executions).toBeGreaterThanOrEqual(2);
+      expect(completionCheck.executions).toBeGreaterThanOrEqual(1);
       expect(sender.inFlight).toBe(DISPATCH_CONCURRENCY);
     });
   });
@@ -154,7 +173,13 @@ describe('DispatchWorker', () => {
   it('부트스트랩 전에는 어떤 루프도 실행하지 않는다', async (): Promise<void> => {
     await setTimeout(POLL_INTERVAL_MS * 4);
 
-    expect(executionCounts()).toEqual({ expansions: 0, sends: 0, reconciles: 0, recoveries: 0 });
+    expect(executionCounts()).toEqual({
+      expansions: 0,
+      sends: 0,
+      reconciles: 0,
+      recoveries: 0,
+      completionChecks: 0,
+    });
   });
 
   it('모듈이 닫히면 진행 중인 발송이 끝난 뒤 모든 루프를 멈추고 더 실행하지 않는다', async (): Promise<void> => {
@@ -185,6 +210,20 @@ describe('DispatchWorker', () => {
     expect(noPermitSender.executions).toBeGreaterThanOrEqual(DISPATCH_CONCURRENCY);
     expect(noPermitSender.executions).toBeLessThanOrEqual(
       DISPATCH_CONCURRENCY * (observedMs / POLL_INTERVAL_MS + 1),
+    );
+  });
+
+  it('완료 확인은 알림을 완료했더라도 완료 확인 간격마다 한 번씩만 실행한다', async (): Promise<void> => {
+    const observedMs: number = COMPLETION_CHECK_INTERVAL_MS * 5;
+
+    await moduleRef.init();
+    await setTimeout(observedMs);
+    sender.release.open();
+    await moduleRef.close();
+
+    expect(completionCheck.executions).toBeGreaterThanOrEqual(1);
+    expect(completionCheck.executions).toBeLessThanOrEqual(
+      observedMs / COMPLETION_CHECK_INTERVAL_MS + 1,
     );
   });
 });
