@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { scheduler } from 'node:timers/promises';
+import { setTimeout } from 'node:timers/promises';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
@@ -168,7 +168,7 @@ describe('MockMessageSenderAdapter', () => {
         const outcome: SendOutcome = await senderAt(stub.baseUrl).send(messageTo('u_000001'));
         const connection: ConnectionState = await Promise.race([
           stub.responseClosed.then((): ConnectionState => 'released'),
-          scheduler.wait(RELEASE_WAIT_MS).then((): ConnectionState => 'held'),
+          setTimeout<ConnectionState>(RELEASE_WAIT_MS, 'held'),
         ]);
 
         expect(outcome.kind).toBe(expectedKind);

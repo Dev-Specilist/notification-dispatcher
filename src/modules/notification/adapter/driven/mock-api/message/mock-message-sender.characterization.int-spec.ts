@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { scheduler } from 'node:timers/promises';
+import { setTimeout } from 'node:timers/promises';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AlarmPredicates } from '@/modules/notification/domain/alarm/alarm.predicate';
 import { DeliveryPredicates } from '@/modules/notification/domain/delivery/delivery.predicate';
@@ -116,7 +116,7 @@ describe('MockMessageSenderAdapter', () => {
         await sender.send(messageWith(newClientRef()));
       }),
     );
-    await scheduler.wait(BUCKET_REFILL_MS);
+    await setTimeout(BUCKET_REFILL_MS);
     const limiter: PostgresRateLimiterAdapter = limiterNamed(`characterization-${randomUUID()}`);
     const deadline: number = performance.now() + RUN_MS;
     const runWorker = async (
@@ -127,7 +127,7 @@ describe('MockMessageSenderAdapter', () => {
       }
       const permit: SendPermit = await limiter.acquire();
       if (permit.kind === 'denied') {
-        await scheduler.wait(DENIED_BACKOFF_MS);
+        await setTimeout(DENIED_BACKOFF_MS);
         return runWorker(sent);
       }
       return runWorker([...sent, await sender.send(messageWith(newClientRef()))]);
@@ -171,7 +171,7 @@ describe('MockMessageSenderAdapter', () => {
         sendSettled = true;
         return settled;
       });
-    await scheduler.wait(LOOKUP_DELAY_MS);
+    await setTimeout(LOOKUP_DELAY_MS);
     const duringPendingResponse: MessageLookupResult = await lookup.findByClientRef(clientRef);
     const sendSettledBeforeLookupFinished: boolean = sendSettled;
     const outcome: SendOutcome = await pendingSend;

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createServer, IncomingMessage, Server, ServerResponse } from 'node:http';
+import { setTimeout } from 'node:timers/promises';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { request, spec } from 'pactum';
@@ -144,9 +145,7 @@ describe('worker 프로세스', () => {
         );
         stubMockApi.releaseSends.open();
         await worker.exited;
-        await new Promise<void>((resolve: () => void): void => {
-          setTimeout(resolve, QUIET_PERIOD_MS);
-        });
+        await setTimeout(QUIET_PERIOD_MS);
 
         expect(worker.exitCode).toBe(0);
         expect(stubMockApi.sendRequests).toHaveLength(1);

@@ -1,5 +1,5 @@
 import { connect, createServer, Server, Socket } from 'node:net';
-import { scheduler } from 'node:timers/promises';
+import { setTimeout } from 'node:timers/promises';
 import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { HealthIndicatorResult, TerminusModule } from '@nestjs/terminus';
@@ -155,7 +155,7 @@ const waitUntilReleased = async (pool: Pool): Promise<boolean> => {
     if (pool.totalCount === 0 && pool.waitingCount === 0) {
       return true;
     }
-    await scheduler.wait(50);
+    await setTimeout(50);
   }
   return false;
 };
