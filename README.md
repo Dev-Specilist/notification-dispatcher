@@ -55,20 +55,65 @@ docker compose up --build --scale worker=3   # 워커 3대
 
 ### 1-2. 로컬 개발
 
-도구 버전은 `mise.toml`에 고정되어 있습니다. compose는 PostgreSQL과 mock의 포트를 호스트에 공개하지 않으므로 로컬 개발용으로 따로 띄웁니다.
+compose와 달리 앱을 호스트에서 직접 띄워 코드 변경을 바로 반영합니다. PostgreSQL과 mock만 컨테이너로 띄웁니다.
+
+**1. 도구 준비** — Node.js 24.21.0과 pnpm 10.34.5가 필요합니다(`mise.toml`에 고정). mise를 쓰면 한 번에 맞춰집니다.
 
 ```sh
-mise install && pnpm install
+mise install
+```
+
+**2. 의존성 설치**
+
+```sh
+pnpm install --frozen-lockfile
+```
+
+**3. PostgreSQL과 mock 실행** — compose는 이 둘의 포트를 호스트에 공개하지 않으므로 로컬 개발용으로 따로 띄웁니다.
+
+```sh
 docker run -d --name notification-postgres -p 5432:5432 \
   -e POSTGRES_USER=notification -e POSTGRES_PASSWORD=notification -e POSTGRES_DB=notification \
   postgres:18-alpine
 docker run -d --name notification-mock -p 4000:4000 ghcr.io/us-all/backend-assignment-api:1.2
-export DATABASE_URL=postgres://notification:notification@localhost:5432/notification
-pnpm db:migrate   # 스키마 적용 (일회성 프로세스)
-pnpm dev          # api + worker, SWC watch로 변경 시 재시작
 ```
 
-하나만 띄울 때는 `pnpm dev:api` 또는 `pnpm dev:worker`를 씁니다(각자 `dist/`를 다시 빌드하므로 동시에 띄우지 않습니다). `.env` 파일은 읽지 않으므로 env는 셸에서 지정합니다. env는 기동 시 zod로 검증하고, 값이 잘못되거나 서로 맞지 않는 조합(예: lease ≤ 요청 타임아웃, 허가 간격 < 20ms)이면 기동하지 않습니다.
+**4. 환경 변수 지정** — `.env` 파일은 읽지 않으므로 셸에서 지정합니다. 필수는 `DATABASE_URL` 하나이고, 나머지는 아래 표의 기본값으로 동작합니다(`MOCK_API_URL` 기본값이 3번의 mock 주소).
+
+```sh
+export DATABASE_URL=postgres://notification:notification@localhost:5432/notification
+```
+
+**5. 스키마 적용** — 마이그레이션은 앱 기동과 분리된 일회성 프로세스입니다.
+
+```sh
+pnpm db:migrate
+```
+
+**6. 실행** — SWC watch로 빌드하고, 코드가 바뀌면 프로세스를 다시 시작합니다.
+
+```sh
+pnpm dev          # api(3000) + worker(3001)
+pnpm dev:api      # api만
+pnpm dev:worker   # worker만
+```
+
+`dev:api`와 `dev:worker`는 각자 `dist/`를 다시 빌드하므로 동시에 띄우지 말고, 둘 다 필요하면 `pnpm dev`를 씁니다.
+
+**7. 확인**
+
+```sh
+curl localhost:3000/readyz        # 200이면 DB 연결까지 준비됨
+open http://localhost:3000/docs   # Swagger UI
+```
+
+**8. 정리**
+
+```sh
+docker rm -f notification-postgres notification-mock
+```
+
+env는 기동 시 zod로 검증하고, 값이 잘못되거나 서로 맞지 않는 조합(예: lease ≤ 요청 타임아웃, 허가 간격 < 20ms)이면 기동하지 않습니다.
 
 | 환경 변수                                                                            | 기본값                                                       | 설명                                                                      |
 | ------------------------------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------- |
